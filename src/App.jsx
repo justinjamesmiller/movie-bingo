@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { GameClient } from './net/mesh.js';
+import { GameClient } from './net/relay.js';
 import { CENTER_INDEX } from './data/tropes.js';
 import ThemeToggle from './components/ThemeToggle.jsx';
 import Landing from './components/Landing.jsx';

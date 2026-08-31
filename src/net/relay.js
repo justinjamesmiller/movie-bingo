@@ -96,6 +96,10 @@ export class GameClient {
     this._dispatch({ t: 'vote', claimId, agree });
   }
 
+  cancelClaim(claimId) {
+    this._dispatch({ t: 'cancelClaim', claimId });
+  }
+
   isHost() {
     return !!this.state && this._currentHostId() === this.myId;
   }
@@ -248,9 +252,9 @@ export class GameClient {
     if (action.t === 'claim') {
       if (!state.started || state.pendingClaim) return;
       const index = action.index;
-      if (!Number.isInteger(index) || index < 0 || index >= 25) return;
-      if (player.marked.includes(index)) return;
-      this._startClaim(fromId, index);
+      if (!Number.isInteger(index) || index < 0 || index >= 25 || index === CENTER_INDEX) return;
+      const kind = player.marked.includes(index) ? 'unmark' : 'mark';
+      this._startClaim(fromId, index, kind);
       return;
     }
 
@@ -263,13 +267,24 @@ export class GameClient {
       this._maybeAutoResolve();
       return;
     }
+
+    if (action.t === 'cancelClaim') {
+      const pc = state.pendingClaim;
+      if (!pc || pc.claimId !== action.claimId || fromId !== pc.byId) return;
+      clearTimeout(this.claimTimeout);
+      state.pendingClaim = null;
+      this._emitState();
+      this._send({ t: 'state', state: this.state });
+      this.onEvent({ type: 'claimCancelled', text: pc.text });
+      return;
+    }
   }
 
   _connectedCount() {
     return Object.values(this.state.players).filter((p) => p.connected).length;
   }
 
-  _startClaim(fromId, index) {
+  _startClaim(fromId, index, kind) {
     const state = this.state;
     const claimant = state.players[fromId];
     const text = claimant.board[index];
@@ -278,6 +293,7 @@ export class GameClient {
       claimId,
       byId: fromId,
       text,
+      kind,
       votes: { [fromId]: true },
       totalPlayers: this._connectedCount(),
     };
@@ -325,12 +341,18 @@ export class GameClient {
     if (approved) {
       for (const p of Object.values(this.state.players)) {
         const idx = p.board.indexOf(pc.text);
-        if (idx !== -1 && !p.marked.includes(idx)) p.marked.push(idx);
+        if (idx === -1) continue;
+        if (pc.kind === 'unmark') {
+          const pos = p.marked.indexOf(idx);
+          if (pos !== -1) p.marked.splice(pos, 1);
+        } else if (!p.marked.includes(idx)) {
+          p.marked.push(idx);
+        }
       }
     }
 
     this.state.pendingClaim = null;
-    this.onEvent({ type: 'claimResolved', text: pc.text, approved });
+    this.onEvent({ type: 'claimResolved', text: pc.text, kind: pc.kind, approved });
     this._emitState();
     this._send({ t: 'state', state: this.state });
   }

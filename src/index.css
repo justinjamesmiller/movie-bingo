@@ -324,6 +324,7 @@ input[type="text"] {
 
 .btn.agree { background: var(--marked); color: #fff; }
 .btn.disagree { background: var(--danger); color: #fff; }
+.cancel-claim-btn { margin: 0.75rem 0; }
 
 .toast {
   position: fixed;

@@ -45,7 +45,14 @@ function App() {
       },
       onEvent: (evt) => {
         if (evt.type === 'claimResolved') {
-          showToast(evt.approved ? `✅ "${evt.text}" was confirmed and marked!` : `❌ "${evt.text}" did not reach majority agreement.`);
+          const undo = evt.kind === 'unmark';
+          if (evt.approved) {
+            showToast(undo ? `✅ "${evt.text}" was unmarked.` : `✅ "${evt.text}" was confirmed and marked!`);
+          } else {
+            showToast(`❌ "${evt.text}" did not reach majority agreement.`);
+          }
+        } else if (evt.type === 'claimCancelled') {
+          showToast(`"${evt.text}" claim was cancelled.`);
         } else if (evt.type === 'promotedToHost') {
           showToast('The host disconnected — you are now the host.');
         }
@@ -108,7 +115,6 @@ function App() {
       return;
     }
 
-    if (me.marked.includes(index)) return;
     if (gameState.pendingClaim) {
       showToast('A claim is already being voted on.');
       return;
@@ -183,6 +189,7 @@ function App() {
         players={players}
         onAgree={() => clientRef.current.vote(gameState.pendingClaim.claimId, true)}
         onDisagree={() => clientRef.current.vote(gameState.pendingClaim.claimId, false)}
+        onCancel={() => clientRef.current.cancelClaim(gameState.pendingClaim.claimId)}
       />
 
       {toast && <div className="toast">{toast}</div>}

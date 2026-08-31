@@ -211,9 +211,17 @@ input[type="text"] {
 .players-list li {
   padding: 0.35rem 0;
   border-bottom: 1px solid var(--border);
+}
+
+.player-row {
   display: flex;
   justify-content: space-between;
   gap: 0.5rem;
+}
+
+.player-stats {
+  margin-top: 0.15rem;
+  font-size: 0.75rem;
 }
 
 .tag {

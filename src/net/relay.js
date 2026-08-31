@@ -182,6 +182,9 @@ export class GameClient {
         this.state = data.state;
         this._emitState();
         break;
+      case 'resolved':
+        this.onEvent({ type: 'claimResolved', text: data.text, kind: data.kind, approved: data.approved });
+        break;
       case 'action':
         if (this.isHost()) this._applyAction(data.from, data.action);
         break;
@@ -352,7 +355,9 @@ export class GameClient {
     }
 
     this.state.pendingClaim = null;
-    this.onEvent({ type: 'claimResolved', text: pc.text, kind: pc.kind, approved });
+    const payload = { text: pc.text, kind: pc.kind, approved };
+    this.onEvent({ type: 'claimResolved', ...payload });
+    this._send({ t: 'resolved', ...payload });
     this._emitState();
     this._send({ t: 'state', state: this.state });
   }

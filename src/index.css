@@ -10,7 +10,6 @@
   --wagered: #d8a900;
   --marked: #2f7a3f;
   --marked-text: #ffffff;
-  --center: #3a2540;
   --danger: #b13636;
   --shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 }
@@ -27,7 +26,6 @@ body.dark {
   --wagered: #e8bf3a;
   --marked: #3f9a52;
   --marked-text: #0d1a0f;
-  --center: #6b3f7a;
   --danger: #e05a5a;
   --shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
 }
@@ -266,13 +264,6 @@ input[type="text"] {
 
 .bingo-cell:hover {
   transform: translateY(-2px);
-}
-
-.bingo-cell.center {
-  background: var(--center);
-  color: #fff;
-  font-weight: bold;
-  cursor: default;
 }
 
 .bingo-cell.wagered {

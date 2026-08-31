@@ -8,8 +8,9 @@ static React site deployable for free on GitHub Pages.
 ## How it works
 
 - The first player **hosts** a game and gets a 4-character code.
-- Others **join** with that code. Everyone gets a random 5x5 board of horror tropes; the center
-  square is always "Jump Scare".
+- Others **join** with that code. Everyone gets a random 5x5 board of horror tropes, all 25 spaces
+  drawn randomly from the same trope pool (including "Jump Scare", which is just a regular trope
+  now, not forced into the center).
 - Before starting, each player picks up to 5 **wagered** spaces (tropes they think are extra likely).
   Wagers lock once the host starts the game.
 - During the game, clicking a space claims that trope happened; other players vote to confirm.

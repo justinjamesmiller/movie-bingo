@@ -15,7 +15,7 @@ export default function PlayersPanel({ players, hostId, wagerCount, maxWagers })
         ))}
       </ul>
       <p className="hint">
-        Pick 5 spaces to <strong>wager</strong> (excludes center) — you think these
+        Pick 5 spaces to <strong>wager</strong> — you think these
         tropes are extra likely to happen. Wagers lock once the game starts.
       </p>
       <p className="hint">Wagered: {wagerCount} / {maxWagers}</p>

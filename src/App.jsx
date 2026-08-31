@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { GameClient } from './net/relay.js';
-import { CENTER_INDEX } from './data/tropes.js';
 import ThemeToggle from './components/ThemeToggle.jsx';
 import Landing from './components/Landing.jsx';
 import PlayersPanel from './components/PlayersPanel.jsx';
@@ -95,7 +94,7 @@ function App() {
   }
 
   function handleCellClick(index) {
-    if (index === CENTER_INDEX || !gameState) return;
+    if (!gameState) return;
     const me = gameState.players[myId];
     const client = clientRef.current;
 

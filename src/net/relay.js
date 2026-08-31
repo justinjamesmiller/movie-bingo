@@ -8,7 +8,7 @@
 // seat -- every client can compute this independently since game state is
 // replicated to everyone via broadcast.
 import { createClient } from '@supabase/supabase-js';
-import { generateBoard, CENTER_INDEX } from '../data/tropes.js';
+import { generateBoard } from '../data/tropes.js';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -197,7 +197,7 @@ export class GameClient {
     this.state = {
       code,
       players: {
-        [this.myId]: { id: this.myId, name, seat: 0, connected: true, board, wagered: [], marked: [CENTER_INDEX] },
+        [this.myId]: { id: this.myId, name, seat: 0, connected: true, board, wagered: [], marked: [] },
       },
       seatOrder: [this.myId],
       started: false,
@@ -209,7 +209,7 @@ export class GameClient {
     if (this.state.started || this.state.players[newId]) return;
     const board = generateBoard();
     const seat = this.state.seatOrder.length;
-    this.state.players[newId] = { id: newId, name, seat, connected: true, board, wagered: [], marked: [CENTER_INDEX] };
+    this.state.players[newId] = { id: newId, name, seat, connected: true, board, wagered: [], marked: [] };
     this.state.seatOrder.push(newId);
 
     this._send({ t: 'welcome', to: newId, state: this.state });
@@ -233,7 +233,7 @@ export class GameClient {
     if (action.t === 'setWager') {
       if (state.started) return;
       const indices = Array.isArray(action.indices)
-        ? action.indices.filter((i) => Number.isInteger(i) && i >= 0 && i < 25 && i !== CENTER_INDEX)
+        ? action.indices.filter((i) => Number.isInteger(i) && i >= 0 && i < 25)
         : [];
       player.wagered = Array.from(new Set(indices)).slice(0, 5);
       this._emitState();
@@ -252,7 +252,7 @@ export class GameClient {
     if (action.t === 'claim') {
       if (!state.started || state.pendingClaim) return;
       const index = action.index;
-      if (!Number.isInteger(index) || index < 0 || index >= 25 || index === CENTER_INDEX) return;
+      if (!Number.isInteger(index) || index < 0 || index >= 25) return;
       const kind = player.marked.includes(index) ? 'unmark' : 'mark';
       this._startClaim(fromId, index, kind);
       return;

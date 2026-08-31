@@ -1,9 +1,6 @@
 // Pool of horror-movie tropes used to build bingo boards.
-// "Jump Scare" is reserved separately for the guaranteed center space.
-export const CENTER_INDEX = 12; // middle of a 5x5 grid (0-indexed)
-export const CENTER_SPACE = 'Jump Scare';
-
 export const TROPES = [
+  'Jump Scare',
   'The "Final Girl" is the last one standing',
   "Character says \"I'll be right back\" and dies",
   'Power goes out at the worst possible moment',
@@ -72,11 +69,5 @@ function shuffle(arr) {
 }
 
 export function generateBoard() {
-  const chosen = shuffle(TROPES).slice(0, 24);
-  const board = new Array(25);
-  let t = 0;
-  for (let i = 0; i < 25; i++) {
-    board[i] = i === CENTER_INDEX ? CENTER_SPACE : chosen[t++];
-  }
-  return board;
+  return shuffle(TROPES).slice(0, 25);
 }

@@ -1,0 +1,193 @@
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { GameClient } from './net/mesh.js';
+import { CENTER_INDEX } from './data/tropes.js';
+import ThemeToggle from './components/ThemeToggle.jsx';
+import Landing from './components/Landing.jsx';
+import PlayersPanel from './components/PlayersPanel.jsx';
+import BingoBoard from './components/BingoBoard.jsx';
+import ClaimModal from './components/ClaimModal.jsx';
+
+const MAX_WAGERS = 5;
+
+function App() {
+  const clientRef = useRef(null);
+  const [screen, setScreen] = useState('landing');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [gameState, setGameState] = useState(null);
+  const [myId, setMyId] = useState(null);
+  const [toast, setToast] = useState('');
+  const [theme, setTheme] = useState(
+    localStorage.getItem('bingo-theme') ||
+      (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
+  );
+
+  useEffect(() => {
+    document.body.classList.toggle('dark', theme === 'dark');
+    localStorage.setItem('bingo-theme', theme);
+  }, [theme]);
+
+  useEffect(() => {
+    return () => clientRef.current?.destroy();
+  }, []);
+
+  const showToast = useCallback((msg) => {
+    setToast(msg);
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(() => setToast(''), 3500);
+  }, []);
+
+  function makeClient() {
+    const client = new GameClient({
+      onState: (state, id) => {
+        setGameState({ ...state });
+        setMyId(id);
+      },
+      onEvent: (evt) => {
+        if (evt.type === 'claimResolved') {
+          showToast(evt.approved ? `✅ "${evt.text}" was confirmed and marked!` : `❌ "${evt.text}" did not reach majority agreement.`);
+        } else if (evt.type === 'promotedToHost') {
+          showToast('The host disconnected — you are now the host.');
+        }
+      },
+    });
+    clientRef.current = client;
+    return client;
+  }
+
+  async function handleHost(name) {
+    setError('');
+    setBusy(true);
+    try {
+      const client = makeClient();
+      await client.hostGame(name);
+      setScreen('game');
+    } catch (err) {
+      setError(err.message || 'Could not host a game.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleJoin(name, code) {
+    setError('');
+    if (code.length !== 4) {
+      setError('Enter the 4-character game code.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const client = makeClient();
+      await client.joinGame(code, name);
+      setScreen('game');
+    } catch (err) {
+      setError(err.message || 'Could not join that game.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function handleCellClick(index) {
+    if (index === CENTER_INDEX || !gameState) return;
+    const me = gameState.players[myId];
+    const client = clientRef.current;
+
+    if (!gameState.started) {
+      const pos = me.wagered.indexOf(index);
+      let next = me.wagered.slice();
+      if (pos !== -1) {
+        next.splice(pos, 1);
+      } else {
+        if (next.length >= MAX_WAGERS) {
+          showToast(`You can only wager ${MAX_WAGERS} spaces.`);
+          return;
+        }
+        next.push(index);
+      }
+      client.setWager(next);
+      return;
+    }
+
+    if (me.marked.includes(index)) return;
+    if (gameState.pendingClaim) {
+      showToast('A claim is already being voted on.');
+      return;
+    }
+    client.claim(index);
+  }
+
+  if (screen === 'landing' || !gameState) {
+    return (
+      <>
+        <header className="app-header">
+          <h1>🎬 Movie Trope Bingo <span className="subtitle">— Horror Edition</span></h1>
+          <ThemeToggle theme={theme} onToggle={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
+        </header>
+        <main id="app">
+          <Landing onHost={handleHost} onJoin={handleJoin} error={error} busy={busy} />
+        </main>
+      </>
+    );
+  }
+
+  const me = gameState.players[myId];
+  const players = Object.values(gameState.players).sort((a, b) => a.seat - b.seat);
+  const hostId = gameState.seatOrder.find((id) => gameState.players[id]?.connected);
+  const isHost = hostId === myId;
+
+  return (
+    <>
+      <header className="app-header">
+        <h1>🎬 Movie Trope Bingo <span className="subtitle">— Horror Edition</span></h1>
+        <ThemeToggle theme={theme} onToggle={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
+      </header>
+      <main id="app">
+        <section className="screen-game">
+          <div className="game-topbar">
+            <div className="code-display">Code: {gameState.code}</div>
+            <div className="game-status">
+              {gameState.started
+                ? 'Game in progress — click a space when it happens on screen!'
+                : 'Waiting for players — pick your 5 wagered spaces, then the host starts the game.'}
+            </div>
+            {!gameState.started && isHost && (
+              <button className="btn primary" onClick={() => clientRef.current.startGame()}>
+                Start Game
+              </button>
+            )}
+          </div>
+
+          <div className="game-layout">
+            <PlayersPanel
+              players={players}
+              hostId={hostId}
+              wagerCount={me.wagered.length}
+              maxWagers={MAX_WAGERS}
+            />
+            <div className="board-wrap">
+              <BingoBoard
+                board={me.board}
+                wagered={me.wagered}
+                marked={me.marked}
+                pending={!!gameState.pendingClaim}
+                onCellClick={handleCellClick}
+              />
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <ClaimModal
+        pendingClaim={gameState.pendingClaim}
+        myId={myId}
+        players={players}
+        onAgree={() => clientRef.current.vote(gameState.pendingClaim.claimId, true)}
+        onDisagree={() => clientRef.current.vote(gameState.pendingClaim.claimId, false)}
+      />
+
+      {toast && <div className="toast">{toast}</div>}
+    </>
+  );
+}
+
+export default App;

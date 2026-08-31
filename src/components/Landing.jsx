@@ -1,0 +1,61 @@
+import { useState } from 'react';
+
+export default function Landing({ onHost, onJoin, error, busy }) {
+  const [hostName, setHostName] = useState('');
+  const [joinName, setJoinName] = useState('');
+  const [joinCode, setJoinCode] = useState('');
+
+  return (
+    <section className="screen-landing">
+      <div className="card">
+        <h2>Host a New Game</h2>
+        <label htmlFor="host-name">Your name</label>
+        <input
+          id="host-name"
+          type="text"
+          maxLength={20}
+          placeholder="e.g. Ashley"
+          value={hostName}
+          onChange={(e) => setHostName(e.target.value)}
+        />
+        <button
+          className="btn primary"
+          disabled={busy}
+          onClick={() => onHost(hostName.trim() || 'Host')}
+        >
+          Host Game
+        </button>
+      </div>
+      <div className="card">
+        <h2>Join a Game</h2>
+        <label htmlFor="join-name">Your name</label>
+        <input
+          id="join-name"
+          type="text"
+          maxLength={20}
+          placeholder="e.g. Sidney"
+          value={joinName}
+          onChange={(e) => setJoinName(e.target.value)}
+        />
+        <label htmlFor="join-code">Game code</label>
+        <input
+          id="join-code"
+          type="text"
+          maxLength={4}
+          placeholder="ABCD"
+          className="code-input"
+          value={joinCode}
+          onChange={(e) => setJoinCode(e.target.value.toUpperCase().slice(0, 4))}
+        />
+        <button
+          className="btn primary"
+          disabled={busy}
+          onClick={() => onJoin(joinName.trim() || 'Player', joinCode)}
+        >
+          Join Game
+        </button>
+      </div>
+      {error && <p className="error-text">{error}</p>}
+    </section>
+  );
+}

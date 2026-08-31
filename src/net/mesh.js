@@ -13,6 +13,17 @@ const HEARTBEAT_MS = 5000;
 const HEARTBEAT_TIMEOUT_MS = 16000;
 const JOIN_TIMEOUT_MS = 20000;
 
+// STUN alone can't traverse all NATs/firewalls; fall back to a free public TURN
+// relay (Open Relay Project) when a direct peer-to-peer path isn't available.
+// Best-effort only -- no uptime guarantee, since it's a free shared service.
+const ICE_SERVERS = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+  { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+  { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+  { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
+];
+
 function randomCode() {
   return Array.from({ length: 4 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join('');
 }
@@ -139,7 +150,7 @@ export class GameClient {
 
   _openPeer(id) {
     return new Promise((resolve, reject) => {
-      const peer = new Peer(id);
+      const peer = new Peer(id, { config: { iceServers: ICE_SERVERS } });
       this.peer = peer;
       peer.once('open', () => resolve());
       peer.once('error', (err) => reject(err));

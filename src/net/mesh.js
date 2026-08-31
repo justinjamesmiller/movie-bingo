@@ -85,16 +85,30 @@ export class GameClient {
             }
           };
 
+          // 'peer-unavailable' means the broker confirmed no such host is registered
+          // (real "not found"); other peer errors usually mean a network/WebRTC issue.
+          const onPeerError = (err) => {
+            if (settled) return;
+            settled = true;
+            if (err?.type === 'peer-unavailable') {
+              reject(new Error('No game found with that code. Double-check the code with the host.'));
+            } else {
+              reject(new Error(`Could not connect to the host (${err?.type || 'network error'}). This can happen on restrictive networks or in some private-browsing modes — try a normal browser window or a different network.`));
+            }
+          };
+
           conn.on('open', () => {
             this._registerConnection(conn);
             conn.send({ t: 'join', name });
           });
           conn.on('data', onData);
-          conn.on('error', () => {
-            if (!settled) reject(new Error('Could not find a game with that code.'));
-          });
+          this.peer.on('error', onPeerError);
+          conn.on('error', onPeerError);
           setTimeout(() => {
-            if (!settled) reject(new Error('Could not find a game with that code.'));
+            if (!settled) {
+              settled = true;
+              reject(new Error('Timed out connecting to the host. This can happen on restrictive networks — try a different network or ask the host to check their connection.'));
+            }
           }, JOIN_TIMEOUT_MS);
         })
         .catch(reject);

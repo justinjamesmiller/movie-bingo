@@ -16,6 +16,21 @@ players connect directly to each other over WebRTC (via [PeerJS](https://peerjs.
 - Players connect in a full mesh (everyone to everyone). If the host disconnects, authority
   automatically passes to the next-longest-connected player — no central server required.
 
+## TURN relay setup (recommended)
+
+Direct WebRTC connections don't always work — players behind restrictive NATs/firewalls (common on
+corporate networks, some mobile carriers) may fail to connect with just STUN. To fix that, this app
+can use a free TURN relay from [Metered](https://www.metered.ca/tools/openrelay/):
+
+1. Sign up free at <https://dashboard.metered.ca/signup?tool=turnserver> (20 GB/month free).
+2. From your dashboard, note your TURN domain (looks like `yourappname.metered.live`) and API key.
+3. For local dev: copy `.env.example` to `.env` and fill in `VITE_METERED_DOMAIN` / `VITE_METERED_API_KEY`.
+4. For the GitHub Pages deploy: add two **repository secrets** (Settings → Secrets and variables →
+   Actions) named `METERED_DOMAIN` and `METERED_API_KEY` — the deploy workflow passes them through
+   as build-time env vars automatically.
+
+Without these configured, the app falls back to STUN-only, which works on many but not all networks.
+
 ## Development
 
 ```
@@ -43,6 +58,6 @@ branch (or configure a GitHub Actions workflow to build and deploy automatically
   data passes through it, and no server of ours needs to run or be paid for.
 - The original host's browser tab must stay open for new players to join; once a game has started,
   host authority migrates automatically if the current host disconnects.
-- Direct peer-to-peer connections require basic WebRTC/NAT traversal support; this works on most
-  home/mobile networks but can occasionally fail on heavily restricted corporate networks (no TURN
-  relay is configured, since a free TURN service is not guaranteed reliable).
+- TURN credentials fetched from Metered are exposed in the built client bundle since this is a
+  static site with no backend to hide them behind — this is expected/supported for their free tier,
+  but be aware the API key is technically public if someone inspects your deployed site.

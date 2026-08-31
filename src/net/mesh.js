@@ -13,16 +13,35 @@ const HEARTBEAT_MS = 5000;
 const HEARTBEAT_TIMEOUT_MS = 16000;
 const JOIN_TIMEOUT_MS = 20000;
 
-// STUN alone can't traverse all NATs/firewalls; fall back to a free public TURN
-// relay (Open Relay Project) when a direct peer-to-peer path isn't available.
-// Best-effort only -- no uptime guarantee, since it's a free shared service.
-const ICE_SERVERS = [
+// STUN alone can't traverse all NATs/firewalls; a TURN relay is needed as a
+// fallback when a direct peer-to-peer path isn't available. Metered's free
+// Open Relay tier issues short-lived TURN credentials via a REST call (their
+// old static demo credentials are retired), so we fetch them at connect time.
+// Configure VITE_METERED_DOMAIN + VITE_METERED_API_KEY (see README) to enable
+// this; without them we fall back to STUN-only, which works on many but not
+// all networks.
+const METERED_DOMAIN = import.meta.env.VITE_METERED_DOMAIN;
+const METERED_API_KEY = import.meta.env.VITE_METERED_API_KEY;
+
+const STUN_ONLY_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
-  { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
-  { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
-  { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
 ];
+
+async function fetchIceServers() {
+  if (!METERED_DOMAIN || !METERED_API_KEY) return STUN_ONLY_SERVERS;
+  try {
+    const res = await fetch(
+      `https://${METERED_DOMAIN}/api/v1/turn/credentials?apiKey=${METERED_API_KEY}`,
+    );
+    if (!res.ok) throw new Error(`status ${res.status}`);
+    const servers = await res.json();
+    return Array.isArray(servers) && servers.length ? servers : STUN_ONLY_SERVERS;
+  } catch (err) {
+    console.warn('Could not fetch TURN credentials, falling back to STUN-only:', err);
+    return STUN_ONLY_SERVERS;
+  }
+}
 
 function randomCode() {
   return Array.from({ length: 4 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join('');
@@ -148,9 +167,10 @@ export class GameClient {
 
   // ---------- Peer/connection plumbing ----------
 
-  _openPeer(id) {
+  async _openPeer(id) {
+    const iceServers = await fetchIceServers();
     return new Promise((resolve, reject) => {
-      const peer = new Peer(id, { config: { iceServers: ICE_SERVERS } });
+      const peer = new Peer(id, { config: { iceServers } });
       this.peer = peer;
       peer.once('open', () => resolve());
       peer.once('error', (err) => reject(err));

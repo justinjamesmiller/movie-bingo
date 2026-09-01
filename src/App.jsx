@@ -6,6 +6,7 @@ import Landing from './components/Landing.jsx';
 import PlayersPanel from './components/PlayersPanel.jsx';
 import BingoBoard from './components/BingoBoard.jsx';
 import ClaimModal from './components/ClaimModal.jsx';
+import ResetModal from './components/ResetModal.jsx';
 
 const MAX_WAGERS = 5;
 
@@ -17,6 +18,7 @@ function App() {
   const [gameState, setGameState] = useState(null);
   const [myId, setMyId] = useState(null);
   const [toast, setToast] = useState('');
+  const [resetModalOpen, setResetModalOpen] = useState(false);
   const [theme, setTheme] = useState(
     localStorage.getItem('bingo-theme') ||
       (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
@@ -125,10 +127,12 @@ function App() {
   }
 
   function handleResetGame() {
-    const confirmed = window.confirm(
-      'Reset the game for everyone? This deals fresh boards and clears all marks and wagers.',
-    );
-    if (confirmed) clientRef.current.resetGame();
+    setResetModalOpen(true);
+  }
+
+  function handleConfirmReset(subgenre) {
+    setResetModalOpen(false);
+    clientRef.current.resetGame(subgenre);
   }
 
   if (screen === 'landing' || !gameState) {
@@ -207,6 +211,14 @@ function App() {
         onDisagree={() => clientRef.current.vote(gameState.pendingClaim.claimId, false)}
         onCancel={() => clientRef.current.cancelClaim(gameState.pendingClaim.claimId)}
       />
+
+      {resetModalOpen && (
+        <ResetModal
+          currentSubgenre={gameState.subgenre}
+          onConfirm={handleConfirmReset}
+          onCancel={() => setResetModalOpen(false)}
+        />
+      )}
 
       {toast && <div className="toast">{toast}</div>}
     </>

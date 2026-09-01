@@ -151,7 +151,14 @@ function App() {
           <ThemeToggle theme={theme} onToggle={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
         </header>
         <main id="app">
-          <Landing onHost={handleHost} onJoin={handleJoin} error={error} busy={busy} />
+          <Landing
+            onHost={handleHost}
+            onJoin={handleJoin}
+            error={error}
+            busy={busy}
+            savedSession={savedSession}
+            onRejoin={handleRejoin}
+          />
         </main>
       </>
     );
@@ -165,46 +172,59 @@ function App() {
 
   return (
     <>
-      <header className="app-header">
-        <h1>🎬 Movie Trope Bingo <span className="subtitle">— Horror Edition</span></h1>
-        <ThemeToggle theme={theme} onToggle={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
-      </header>
-      <main id="app">
+      {!focusMode && (
+        <header className="app-header">
+          <h1>🎬 Movie Trope Bingo <span className="subtitle">— Horror Edition</span></h1>
+          <ThemeToggle theme={theme} onToggle={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
+        </header>
+      )}
+      <main id="app" className={focusMode ? 'focus-mode' : ''}>
         <section className="screen-game">
-          <div className="game-topbar">
-            <div className="code-display">Code: {gameState.code}</div>
-            <div className="code-display">Sub-genre: {subgenreLabel}</div>
-            <div className="code-display">General mix: {gameState.generalPercent}%</div>
-            <div className="game-status">
-              {gameState.started
-                ? 'Game in progress — click a space when it happens on screen!'
-                : 'Waiting for players — pick your 5 wagered spaces, then the host starts the game.'}
+          {focusMode ? (
+            <button className="btn focus-toggle-btn" onClick={() => setFocusMode(false)}>
+              ✕ Unfocus
+            </button>
+          ) : (
+            <div className="game-topbar">
+              <div className="code-display">Code: {gameState.code}</div>
+              <div className="code-display">Sub-genre: {subgenreLabel}</div>
+              <div className="code-display">General mix: {gameState.generalPercent}%</div>
+              <div className="game-status">
+                {gameState.started
+                  ? 'Game in progress — click a space when it happens on screen!'
+                  : 'Waiting for players — pick your 5 wagered spaces, then the host starts the game.'}
+              </div>
+              {!gameState.started && isHost && (
+                <button className="btn primary" onClick={() => clientRef.current.startGame()}>
+                  Start Game
+                </button>
+              )}
+              {gameState.started && (
+                <button className="btn" onClick={() => setTropesModalOpen(true)}>
+                  Accepted Tropes ({gameState.acceptedTropes.length})
+                </button>
+              )}
+              <button className="btn" onClick={() => setFocusMode(true)}>
+                🔍 Board Focus
+              </button>
+              {isHost && (
+                <button className="btn disagree" onClick={handleResetGame}>
+                  Reset Game
+                </button>
+              )}
             </div>
-            {!gameState.started && isHost && (
-              <button className="btn primary" onClick={() => clientRef.current.startGame()}>
-                Start Game
-              </button>
-            )}
-            {gameState.started && (
-              <button className="btn" onClick={() => setTropesModalOpen(true)}>
-                Accepted Tropes ({gameState.acceptedTropes.length})
-              </button>
-            )}
-            {isHost && (
-              <button className="btn disagree" onClick={handleResetGame}>
-                Reset Game
-              </button>
-            )}
-          </div>
+          )}
 
           <div className="game-layout">
-            <PlayersPanel
-              players={players}
-              hostId={hostId}
-              wagerCount={me.wagered.length}
-              maxWagers={MAX_WAGERS}
-              started={gameState.started}
-            />
+            {!focusMode && (
+              <PlayersPanel
+                players={players}
+                hostId={hostId}
+                wagerCount={me.wagered.length}
+                maxWagers={MAX_WAGERS}
+                started={gameState.started}
+              />
+            )}
             <div className="board-wrap">
               <BingoBoard
                 board={me.board}

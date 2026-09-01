@@ -19,6 +19,7 @@ const JOIN_TIMEOUT_MS = 10000;
 const VALID_SUBGENRES = new Set(SUBGENRES.map((g) => g.id));
 const VALID_GENERAL_PERCENTS = new Set(GENERAL_PERCENT_OPTIONS);
 const DEFAULT_SUBGENRE = 'general';
+const SESSION_KEY = 'movie-bingo-session';
 
 function randomCode() {
   return Array.from({ length: 4 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join('');
@@ -50,6 +51,36 @@ export class GameClient {
     if (this.channel) this.supabase.removeChannel(this.channel);
   }
 
+  // ---------- Session persistence (lets a disconnected player/host reconnect) ----------
+
+  static getSavedSession() {
+    try {
+      const raw = sessionStorage.getItem(SESSION_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed?.code || !parsed?.myId || !parsed?.name) return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+  }
+
+  static clearSavedSession() {
+    try {
+      sessionStorage.removeItem(SESSION_KEY);
+    } catch {
+      // ignore
+    }
+  }
+
+  _saveSession(code, name) {
+    try {
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify({ code, myId: this.myId, name }));
+    } catch {
+      // sessionStorage may be unavailable (e.g. private browsing); reconnect just won't be offered
+    }
+  }
+
   // ---------- Public API ----------
 
   async hostGame(name, subgenre, freeSpace, generalPercent) {
@@ -61,6 +92,7 @@ export class GameClient {
     const code = randomCode();
     await this._connectChannel(code);
     this._initHostState(code, trimmedName, safeSubgenre, useFreeSpace, safeGeneralPercent);
+    this._saveSession(code, trimmedName);
     this._emitState();
     return code;
   }
@@ -81,10 +113,48 @@ export class GameClient {
             resolve: () => {
               clearTimeout(timeout);
               this._pendingJoin = null;
+              this._saveSession(normalized, trimmedName);
               resolve();
             },
           };
           this._send({ t: 'join', from: this.myId, name: trimmedName });
+        })
+        .catch(reject);
+    });
+  }
+
+  // Reconnects using a previously-saved session (same player id), which lets a
+  // disconnected host resume host authority once they reconnect (host authority
+  // is always the lowest-seat *connected* player, so restoring `connected: true`
+  // on the original host's seat automatically hands authority back to them).
+  rejoinGame() {
+    const saved = GameClient.getSavedSession();
+    if (!saved) return Promise.reject(new Error('No previous session found to reconnect to.'));
+    this.myId = saved.myId;
+    return new Promise((resolve, reject) => {
+      this._connectChannel(saved.code)
+        .then(() => {
+          const timeout = setTimeout(() => {
+            this._pendingJoin = null;
+            GameClient.clearSavedSession();
+            reject(new Error('No response from that game. It may have ended.'));
+          }, JOIN_TIMEOUT_MS);
+
+          this._pendingJoin = {
+            resolve: () => {
+              clearTimeout(timeout);
+              this._pendingJoin = null;
+              this._saveSession(saved.code, saved.name);
+              resolve();
+            },
+            reject: (err) => {
+              clearTimeout(timeout);
+              this._pendingJoin = null;
+              GameClient.clearSavedSession();
+              reject(err);
+            },
+          };
+          this._send({ t: 'rejoin', from: this.myId, name: saved.name });
         })
         .catch(reject);
     });
@@ -189,11 +259,19 @@ export class GameClient {
       case 'join':
         if (this.isHost()) this._handleJoin(data.from, data.name);
         break;
+      case 'rejoin':
+        if (this.isHost()) this._handleRejoin(data.from, data.name);
+        break;
       case 'welcome':
         if (data.to === this.myId && this._pendingJoin) {
           this.state = data.state;
           this._pendingJoin.resolve();
           this._emitState();
+        }
+        break;
+      case 'rejoinFailed':
+        if (data.to === this.myId && this._pendingJoin) {
+          this._pendingJoin.reject?.(new Error('That session could not be found — the game may have ended.'));
         }
         break;
       case 'state':
@@ -244,6 +322,25 @@ export class GameClient {
     this.state.seatOrder.push(newId);
 
     this._send({ t: 'welcome', to: newId, state: this.state });
+    this._emitState();
+    this._send({ t: 'state', state: this.state });
+  }
+
+  // Restores an existing (already-seated) player's connected flag instead of
+  // creating a new seat -- unlike _handleJoin this is allowed even mid-game,
+  // since it's how a disconnected host/player resumes their same seat (and,
+  // for the original host, automatically regains host authority).
+  _handleRejoin(id, name) {
+    const player = this.state.players[id];
+    if (!player) {
+      this._send({ t: 'rejoinFailed', to: id });
+      return;
+    }
+    player.connected = true;
+    const trimmed = (name || '').trim();
+    if (trimmed) player.name = trimmed;
+
+    this._send({ t: 'welcome', to: id, state: this.state });
     this._emitState();
     this._send({ t: 'state', state: this.state });
   }

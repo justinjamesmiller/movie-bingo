@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { SUBGENRES, GENERAL_PERCENT_OPTIONS, DEFAULT_GENERAL_PERCENT } from '../data/tropes.js';
 
-export default function Landing({ onHost, onJoin, error, busy }) {
+export default function Landing({ onHost, onJoin, error, busy, savedSession, onRejoin }) {
   const [hostName, setHostName] = useState('');
   const [hostSubgenre, setHostSubgenre] = useState(SUBGENRES[0].id);
   const [hostFreeSpace, setHostFreeSpace] = useState(false);
@@ -32,6 +32,18 @@ export default function Landing({ onHost, onJoin, error, busy }) {
 
   return (
     <section className="screen-landing">
+      {savedSession && (
+        <div className="card rejoin-card">
+          <h2>Reconnect</h2>
+          <p className="hint">
+            You were previously in game <strong>{savedSession.code}</strong> as {savedSession.name}.
+            If you got disconnected (e.g. as the host), you can reconnect to the same seat.
+          </p>
+          <button className="btn primary" disabled={busy} onClick={onRejoin}>
+            Reconnect to {savedSession.code}
+          </button>
+        </div>
+      )}
       <div className="card">
         <h2>Host a New Game</h2>
         <label htmlFor="host-name">Your name</label>

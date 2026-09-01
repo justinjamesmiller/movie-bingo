@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { GameClient } from './net/relay.js';
+import { SUBGENRES } from './data/tropes.js';
 import ThemeToggle from './components/ThemeToggle.jsx';
 import Landing from './components/Landing.jsx';
 import PlayersPanel from './components/PlayersPanel.jsx';
@@ -63,12 +64,12 @@ function App() {
     return client;
   }
 
-  async function handleHost(name) {
+  async function handleHost(name, subgenre) {
     setError('');
     setBusy(true);
     try {
       const client = makeClient();
-      await client.hostGame(name);
+      await client.hostGame(name, subgenre);
       setScreen('game');
     } catch (err) {
       setError(err.message || 'Could not host a game.');
@@ -148,6 +149,7 @@ function App() {
   const players = Object.values(gameState.players).sort((a, b) => a.seat - b.seat);
   const hostId = gameState.seatOrder.find((id) => gameState.players[id]?.connected);
   const isHost = hostId === myId;
+  const subgenreLabel = SUBGENRES.find((g) => g.id === gameState.subgenre)?.label || 'Classic / Mixed Horror';
 
   return (
     <>
@@ -159,6 +161,7 @@ function App() {
         <section className="screen-game">
           <div className="game-topbar">
             <div className="code-display">Code: {gameState.code}</div>
+            <div className="code-display">Sub-genre: {subgenreLabel}</div>
             <div className="game-status">
               {gameState.started
                 ? 'Game in progress — click a space when it happens on screen!'

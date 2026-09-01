@@ -1,7 +1,9 @@
 import { useState } from 'react';
+import { SUBGENRES } from '../data/tropes.js';
 
 export default function Landing({ onHost, onJoin, error, busy }) {
   const [hostName, setHostName] = useState('');
+  const [hostSubgenre, setHostSubgenre] = useState(SUBGENRES[0].id);
   const [joinName, setJoinName] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const [localError, setLocalError] = useState('');
@@ -13,7 +15,7 @@ export default function Landing({ onHost, onJoin, error, busy }) {
       return;
     }
     setLocalError('');
-    onHost(name);
+    onHost(name, hostSubgenre);
   }
 
   function handleJoinClick() {
@@ -39,6 +41,16 @@ export default function Landing({ onHost, onJoin, error, busy }) {
           value={hostName}
           onChange={(e) => setHostName(e.target.value)}
         />
+        <label htmlFor="host-subgenre">Sub-genre</label>
+        <select
+          id="host-subgenre"
+          value={hostSubgenre}
+          onChange={(e) => setHostSubgenre(e.target.value)}
+        >
+          {SUBGENRES.map((g) => (
+            <option key={g.id} value={g.id}>{g.label}</option>
+          ))}
+        </select>
         <button className="btn primary" disabled={busy} onClick={handleHostClick}>
           Host Game
         </button>

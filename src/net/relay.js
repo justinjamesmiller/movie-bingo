@@ -8,7 +8,7 @@
 // seat -- every client can compute this independently since game state is
 // replicated to everyone via broadcast.
 import { createClient } from '@supabase/supabase-js';
-import { generateBoard } from '../data/tropes.js';
+import { generateBoard, SUBGENRES } from '../data/tropes.js';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -16,6 +16,8 @@ const CHANNEL_PREFIX = 'bingo-';
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I
 const CLAIM_TIMEOUT_MS = 20000;
 const JOIN_TIMEOUT_MS = 10000;
+const VALID_SUBGENRES = new Set(SUBGENRES.map((g) => g.id));
+const DEFAULT_SUBGENRE = 'general';
 
 function randomCode() {
   return Array.from({ length: 4 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join('');
@@ -49,12 +51,13 @@ export class GameClient {
 
   // ---------- Public API ----------
 
-  async hostGame(name) {
+  async hostGame(name, subgenre) {
     const trimmedName = (name || '').trim();
     if (!trimmedName) throw new Error('Please enter your name.');
+    const safeSubgenre = VALID_SUBGENRES.has(subgenre) ? subgenre : DEFAULT_SUBGENRE;
     const code = randomCode();
     await this._connectChannel(code);
-    this._initHostState(code, trimmedName);
+    this._initHostState(code, trimmedName, safeSubgenre);
     this._emitState();
     return code;
   }
@@ -104,8 +107,8 @@ export class GameClient {
     this._dispatch({ t: 'cancelClaim', claimId });
   }
 
-  resetGame() {
-    this._dispatch({ t: 'reset' });
+  resetGame(subgenre) {
+    this._dispatch({ t: 'reset', subgenre });
   }
 
   isHost() {
@@ -206,10 +209,11 @@ export class GameClient {
 
   // ---------- Host-side game state management ----------
 
-  _initHostState(code, name) {
-    const board = generateBoard();
+  _initHostState(code, name, subgenre) {
+    const board = generateBoard(subgenre);
     this.state = {
       code,
+      subgenre,
       players: {
         [this.myId]: { id: this.myId, name, seat: 0, connected: true, board, wagered: [], marked: [] },
       },
@@ -222,7 +226,7 @@ export class GameClient {
   _handleJoin(newId, name) {
     if (this.state.started || this.state.players[newId]) return;
     const safeName = (name || '').trim() || 'Player';
-    const board = generateBoard();
+    const board = generateBoard(this.state.subgenre);
     const seat = this.state.seatOrder.length;
     this.state.players[newId] = { id: newId, name: safeName, seat, connected: true, board, wagered: [], marked: [] };
     this.state.seatOrder.push(newId);
@@ -297,8 +301,9 @@ export class GameClient {
     if (action.t === 'reset') {
       if (fromId !== this._currentHostId()) return;
       clearTimeout(this.claimTimeout);
+      if (VALID_SUBGENRES.has(action.subgenre)) state.subgenre = action.subgenre;
       for (const p of Object.values(state.players)) {
-        p.board = generateBoard();
+        p.board = generateBoard(state.subgenre);
         p.wagered = [];
         p.marked = [];
       }

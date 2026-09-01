@@ -4,6 +4,27 @@ export default function Landing({ onHost, onJoin, error, busy }) {
   const [hostName, setHostName] = useState('');
   const [joinName, setJoinName] = useState('');
   const [joinCode, setJoinCode] = useState('');
+  const [localError, setLocalError] = useState('');
+
+  function handleHostClick() {
+    const name = hostName.trim();
+    if (!name) {
+      setLocalError('Please enter your name.');
+      return;
+    }
+    setLocalError('');
+    onHost(name);
+  }
+
+  function handleJoinClick() {
+    const name = joinName.trim();
+    if (!name) {
+      setLocalError('Please enter your name.');
+      return;
+    }
+    setLocalError('');
+    onJoin(name, joinCode);
+  }
 
   return (
     <section className="screen-landing">
@@ -18,11 +39,7 @@ export default function Landing({ onHost, onJoin, error, busy }) {
           value={hostName}
           onChange={(e) => setHostName(e.target.value)}
         />
-        <button
-          className="btn primary"
-          disabled={busy}
-          onClick={() => onHost(hostName.trim() || 'Host')}
-        >
+        <button className="btn primary" disabled={busy} onClick={handleHostClick}>
           Host Game
         </button>
       </div>
@@ -47,15 +64,11 @@ export default function Landing({ onHost, onJoin, error, busy }) {
           value={joinCode}
           onChange={(e) => setJoinCode(e.target.value.toUpperCase().slice(0, 4))}
         />
-        <button
-          className="btn primary"
-          disabled={busy}
-          onClick={() => onJoin(joinName.trim() || 'Player', joinCode)}
-        >
+        <button className="btn primary" disabled={busy} onClick={handleJoinClick}>
           Join Game
         </button>
       </div>
-      {error && <p className="error-text">{error}</p>}
+      {(localError || error) && <p className="error-text">{localError || error}</p>}
     </section>
   );
 }

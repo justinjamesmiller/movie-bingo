@@ -50,14 +50,18 @@ export class GameClient {
   // ---------- Public API ----------
 
   async hostGame(name) {
+    const trimmedName = (name || '').trim();
+    if (!trimmedName) throw new Error('Please enter your name.');
     const code = randomCode();
     await this._connectChannel(code);
-    this._initHostState(code, name);
+    this._initHostState(code, trimmedName);
     this._emitState();
     return code;
   }
 
   joinGame(code, name) {
+    const trimmedName = (name || '').trim();
+    if (!trimmedName) return Promise.reject(new Error('Please enter your name.'));
     const normalized = code.trim().toUpperCase();
     return new Promise((resolve, reject) => {
       this._connectChannel(normalized)
@@ -74,7 +78,7 @@ export class GameClient {
               resolve();
             },
           };
-          this._send({ t: 'join', from: this.myId, name });
+          this._send({ t: 'join', from: this.myId, name: trimmedName });
         })
         .catch(reject);
     });
@@ -217,9 +221,10 @@ export class GameClient {
 
   _handleJoin(newId, name) {
     if (this.state.started || this.state.players[newId]) return;
+    const safeName = (name || '').trim() || 'Player';
     const board = generateBoard();
     const seat = this.state.seatOrder.length;
-    this.state.players[newId] = { id: newId, name, seat, connected: true, board, wagered: [], marked: [] };
+    this.state.players[newId] = { id: newId, name: safeName, seat, connected: true, board, wagered: [], marked: [] };
     this.state.seatOrder.push(newId);
 
     this._send({ t: 'welcome', to: newId, state: this.state });

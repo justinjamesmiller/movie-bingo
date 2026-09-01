@@ -1,4 +1,4 @@
-export default function PlayersPanel({ players, hostId, wagerCount, maxWagers, started }) {
+export default function PlayersPanel({ players, hostId, myId, isHost, wagerCount, maxWagers, started, onKick }) {
   return (
     <aside className="players-panel">
       <h3>Players</h3>
@@ -14,6 +14,11 @@ export default function PlayersPanel({ players, hostId, wagerCount, maxWagers, s
                   {p.id === hostId && <span className="tag">HOST</span>}
                   {' '}
                   {wagerLocked && <span className="tag">READY</span>}
+                  {isHost && p.id !== myId && (
+                    <button className="btn disagree kick-btn" onClick={() => onKick(p.id, p.name)}>
+                      Remove
+                    </button>
+                  )}
                 </span>
               </div>
               <div className="hint player-stats">

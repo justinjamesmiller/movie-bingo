@@ -1,6 +1,19 @@
 import { useState } from 'react';
+import { useLongPress } from '../hooks/useLongPress.js';
 
-export default function AcceptedTropesModal({ acceptedTropes, onChallenge, onClose }) {
+function TropeItem({ text, onShortPress, onLongPress }) {
+  const longPress = useLongPress(
+    () => onLongPress(text),
+    () => onShortPress(text),
+  );
+  return (
+    <button className="btn challenge-item" {...longPress}>
+      {text}
+    </button>
+  );
+}
+
+export default function AcceptedTropesModal({ acceptedTropes, onChallenge, onRequestReplace, onClose }) {
   const [pendingText, setPendingText] = useState(null);
 
   if (pendingText) {
@@ -27,13 +40,17 @@ export default function AcceptedTropesModal({ acceptedTropes, onChallenge, onClo
           <p className="hint">No tropes have been accepted yet.</p>
         ) : (
           <>
-            <p className="hint">Click a trope to challenge it (asks the group to vote on undoing it).</p>
+            <p className="hint">
+              Click a trope to challenge it (vote to undo it), or long-press to propose replacing it.
+            </p>
             <ul className="challenge-list">
               {acceptedTropes.map((text) => (
                 <li key={text}>
-                  <button className="btn challenge-item" onClick={() => setPendingText(text)}>
-                    {text}
-                  </button>
+                  <TropeItem
+                    text={text}
+                    onShortPress={setPendingText}
+                    onLongPress={onRequestReplace}
+                  />
                 </li>
               ))}
             </ul>

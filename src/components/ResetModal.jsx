@@ -1,10 +1,36 @@
 import { useState } from 'react';
-import { SUBGENRES, GENERAL_PERCENT_OPTIONS, DEFAULT_GENERAL_PERCENT } from '../data/tropes.js';
+import { GENRES, DEFAULT_GENERAL_PERCENT, TOTAL_TROPES_OPTIONS, DEFAULT_TOTAL_TROPES } from '../data/tropes.js';
+import MovieLookup from './MovieLookup.jsx';
+import GenreSubgenrePicker from './GenreSubgenrePicker.jsx';
+import GeneralPercentSliders from './GeneralPercentSliders.jsx';
 
-export default function ResetModal({ currentSubgenre, currentFreeSpace, currentGeneralPercent, onConfirm, onCancel }) {
-  const [subgenre, setSubgenre] = useState(currentSubgenre || SUBGENRES[0].id);
+export default function ResetModal({ currentGenres, currentSubgenreSelections, currentFreeSpace, currentGeneralPercents, currentTotalTropes, onConfirm, onCancel }) {
+  const [genres, setGenres] = useState(currentGenres?.length ? currentGenres : [GENRES[0].id]);
+  const [subgenreSelections, setSubgenreSelections] = useState(currentSubgenreSelections || []);
   const [freeSpace, setFreeSpace] = useState(!!currentFreeSpace);
-  const [generalPercent, setGeneralPercent] = useState(currentGeneralPercent ?? DEFAULT_GENERAL_PERCENT);
+  const [generalPercents, setGeneralPercents] = useState(currentGeneralPercents || { [GENRES[0].id]: DEFAULT_GENERAL_PERCENT });
+  const [totalTropes, setTotalTropes] = useState(currentTotalTropes ?? DEFAULT_TOTAL_TROPES);
+
+  function ensurePercentsFor(nextGenres) {
+    setGeneralPercents((prev) => {
+      const next = { ...prev };
+      for (const g of nextGenres) if (!(g in next)) next[g] = DEFAULT_GENERAL_PERCENT;
+      return next;
+    });
+  }
+
+  function handleMovieFound(foundGenres) {
+    const safeGenres = foundGenres.length ? foundGenres : [GENRES[0].id];
+    setGenres(safeGenres);
+    setSubgenreSelections([]);
+    ensurePercentsFor(safeGenres);
+  }
+
+  function handleGenreSubgenreChange(nextGenres, nextSelections) {
+    setGenres(nextGenres);
+    setSubgenreSelections(nextSelections);
+    ensurePercentsFor(nextGenres);
+  }
 
   return (
     <div className="modal">
@@ -13,12 +39,12 @@ export default function ResetModal({ currentSubgenre, currentFreeSpace, currentG
         <p className="hint">
           This deals fresh boards and clears all marks and wagers for every player.
         </p>
-        <label htmlFor="reset-subgenre">Sub-genre</label>
-        <select id="reset-subgenre" value={subgenre} onChange={(e) => setSubgenre(e.target.value)}>
-          {SUBGENRES.map((g) => (
-            <option key={g.id} value={g.id}>{g.label}</option>
-          ))}
-        </select>
+        <MovieLookup onFound={handleMovieFound} />
+        <GenreSubgenrePicker
+          genres={genres}
+          subgenreSelections={subgenreSelections}
+          onChange={handleGenreSubgenreChange}
+        />
         <label className="checkbox-label">
           <input
             type="checkbox"
@@ -27,24 +53,23 @@ export default function ResetModal({ currentSubgenre, currentFreeSpace, currentG
           />
           Free center space
         </label>
-        <label htmlFor="reset-general-percent">General tropes: {generalPercent}%</label>
-        <input
-          id="reset-general-percent"
-          type="range"
-          min={0}
-          max={100}
-          step={10}
-          list="reset-general-percent-ticks"
-          value={generalPercent}
-          onChange={(e) => setGeneralPercent(Number(e.target.value))}
+        <GeneralPercentSliders
+          genres={genres}
+          generalPercents={generalPercents}
+          onChange={(genreId, value) => setGeneralPercents((prev) => ({ ...prev, [genreId]: value }))}
         />
-        <datalist id="reset-general-percent-ticks">
-          {GENERAL_PERCENT_OPTIONS.map((p) => (
-            <option key={p} value={p} />
+        <label htmlFor="reset-total-tropes">Total unique tropes in play</label>
+        <select
+          id="reset-total-tropes"
+          value={totalTropes}
+          onChange={(e) => setTotalTropes(Number(e.target.value))}
+        >
+          {TOTAL_TROPES_OPTIONS.map((n) => (
+            <option key={n} value={n}>{n}</option>
           ))}
-        </datalist>
+        </select>
         <div className="claim-vote-buttons cancel-claim-btn">
-          <button className="btn disagree" onClick={() => onConfirm(subgenre, freeSpace, generalPercent)}>Reset Game</button>
+          <button className="btn disagree" onClick={() => onConfirm(genres, subgenreSelections, freeSpace, generalPercents, totalTropes)}>Reset Game</button>
           <button className="btn" onClick={onCancel}>Cancel</button>
         </div>
       </div>

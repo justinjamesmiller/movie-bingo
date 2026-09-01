@@ -1,14 +1,40 @@
 import { useState } from 'react';
-import { SUBGENRES, GENERAL_PERCENT_OPTIONS, DEFAULT_GENERAL_PERCENT } from '../data/tropes.js';
+import { GENRES, DEFAULT_GENERAL_PERCENT, TOTAL_TROPES_OPTIONS, DEFAULT_TOTAL_TROPES } from '../data/tropes.js';
+import MovieLookup from './MovieLookup.jsx';
+import GenreSubgenrePicker from './GenreSubgenrePicker.jsx';
+import GeneralPercentSliders from './GeneralPercentSliders.jsx';
 
 export default function Landing({ onHost, onJoin, error, busy, savedSession, onRejoin }) {
   const [hostName, setHostName] = useState('');
-  const [hostSubgenre, setHostSubgenre] = useState(SUBGENRES[0].id);
+  const [hostGenres, setHostGenres] = useState([GENRES[0].id]);
+  const [hostSubgenreSelections, setHostSubgenreSelections] = useState([]);
   const [hostFreeSpace, setHostFreeSpace] = useState(false);
-  const [hostGeneralPercent, setHostGeneralPercent] = useState(DEFAULT_GENERAL_PERCENT);
+  const [hostGeneralPercents, setHostGeneralPercents] = useState({ [GENRES[0].id]: DEFAULT_GENERAL_PERCENT });
+  const [hostTotalTropes, setHostTotalTropes] = useState(DEFAULT_TOTAL_TROPES);
   const [joinName, setJoinName] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const [localError, setLocalError] = useState('');
+
+  function ensurePercentsFor(genres) {
+    setHostGeneralPercents((prev) => {
+      const next = { ...prev };
+      for (const g of genres) if (!(g in next)) next[g] = DEFAULT_GENERAL_PERCENT;
+      return next;
+    });
+  }
+
+  function handleMovieFound(genres) {
+    const safeGenres = genres.length ? genres : [GENRES[0].id];
+    setHostGenres(safeGenres);
+    setHostSubgenreSelections([]);
+    ensurePercentsFor(safeGenres);
+  }
+
+  function handleGenreSubgenreChange(genres, selections) {
+    setHostGenres(genres);
+    setHostSubgenreSelections(selections);
+    ensurePercentsFor(genres);
+  }
 
   function handleHostClick() {
     const name = hostName.trim();
@@ -17,7 +43,7 @@ export default function Landing({ onHost, onJoin, error, busy, savedSession, onR
       return;
     }
     setLocalError('');
-    onHost(name, hostSubgenre, hostFreeSpace, hostGeneralPercent);
+    onHost(name, hostGenres, hostSubgenreSelections, hostFreeSpace, hostGeneralPercents, hostTotalTropes);
   }
 
   function handleJoinClick() {
@@ -55,16 +81,12 @@ export default function Landing({ onHost, onJoin, error, busy, savedSession, onR
           value={hostName}
           onChange={(e) => setHostName(e.target.value)}
         />
-        <label htmlFor="host-subgenre">Sub-genre</label>
-        <select
-          id="host-subgenre"
-          value={hostSubgenre}
-          onChange={(e) => setHostSubgenre(e.target.value)}
-        >
-          {SUBGENRES.map((g) => (
-            <option key={g.id} value={g.id}>{g.label}</option>
-          ))}
-        </select>
+        <MovieLookup onFound={handleMovieFound} />
+        <GenreSubgenrePicker
+          genres={hostGenres}
+          subgenreSelections={hostSubgenreSelections}
+          onChange={handleGenreSubgenreChange}
+        />
         <label className="checkbox-label">
           <input
             type="checkbox"
@@ -73,22 +95,21 @@ export default function Landing({ onHost, onJoin, error, busy, savedSession, onR
           />
           Free center space
         </label>
-        <label htmlFor="host-general-percent">General tropes: {hostGeneralPercent}%</label>
-        <input
-          id="host-general-percent"
-          type="range"
-          min={0}
-          max={100}
-          step={10}
-          list="general-percent-ticks"
-          value={hostGeneralPercent}
-          onChange={(e) => setHostGeneralPercent(Number(e.target.value))}
+        <GeneralPercentSliders
+          genres={hostGenres}
+          generalPercents={hostGeneralPercents}
+          onChange={(genreId, value) => setHostGeneralPercents((prev) => ({ ...prev, [genreId]: value }))}
         />
-        <datalist id="general-percent-ticks">
-          {GENERAL_PERCENT_OPTIONS.map((p) => (
-            <option key={p} value={p} />
+        <label htmlFor="host-total-tropes">Total unique tropes in play</label>
+        <select
+          id="host-total-tropes"
+          value={hostTotalTropes}
+          onChange={(e) => setHostTotalTropes(Number(e.target.value))}
+        >
+          {TOTAL_TROPES_OPTIONS.map((n) => (
+            <option key={n} value={n}>{n}</option>
           ))}
-        </datalist>
+        </select>
         <button className="btn primary" disabled={busy} onClick={handleHostClick}>
           Host Game
         </button>

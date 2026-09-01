@@ -8,7 +8,19 @@
 // seat -- every client can compute this independently since game state is
 // replicated to everyone via broadcast.
 import { createClient } from '@supabase/supabase-js';
-import { generateBoard, SUBGENRES, CENTER_INDEX, GENERAL_PERCENT_OPTIONS, DEFAULT_GENERAL_PERCENT } from '../data/tropes.js';
+import {
+  pickTropePool,
+  buildPlayerBoard,
+  getEligibleTropeTexts,
+  GENRES,
+  SUBGENRES_BY_GENRE,
+  CENTER_INDEX,
+  FREE_SPACE_TEXT,
+  GENERAL_PERCENT_OPTIONS,
+  DEFAULT_GENERAL_PERCENT,
+  TOTAL_TROPES_OPTIONS,
+  DEFAULT_TOTAL_TROPES,
+} from '../data/tropes.js';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -16,10 +28,50 @@ const CHANNEL_PREFIX = 'bingo-';
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I
 const CLAIM_TIMEOUT_MS = 20000;
 const JOIN_TIMEOUT_MS = 10000;
-const VALID_SUBGENRES = new Set(SUBGENRES.map((g) => g.id));
+const VALID_GENRES = new Set(GENRES.map((g) => g.id));
 const VALID_GENERAL_PERCENTS = new Set(GENERAL_PERCENT_OPTIONS);
-const DEFAULT_SUBGENRE = 'general';
+const VALID_TOTAL_TROPES = new Set(TOTAL_TROPES_OPTIONS);
+const DEFAULT_GENRE = 'horror';
 const SESSION_KEY = 'movie-bingo-session';
+
+function isValidSubgenre(genre, subgenre) {
+  return (SUBGENRES_BY_GENRE[genre] || []).some((s) => s.id === subgenre);
+}
+
+// Sanitizes a host/reset genre + sub-genre selection: `genres` is an array of
+// genre ids (at least one, deduped, falls back to the default genre if none
+// are valid); `subgenreSelections` is an array of `{genre, subgenre}` pairs
+// layered on top of each selected genre's implicit "general" pool (dropped if
+// they don't reference a selected genre, aren't a real sub-genre, or are
+// 'general' itself, and deduped).
+function sanitizeGenreSelection(genres, subgenreSelections) {
+  const safeGenres = Array.from(new Set((Array.isArray(genres) ? genres : []).filter((g) => VALID_GENRES.has(g))));
+  if (safeGenres.length === 0) safeGenres.push(DEFAULT_GENRE);
+
+  const seen = new Set();
+  const safeSelections = (Array.isArray(subgenreSelections) ? subgenreSelections : []).filter((s) => {
+    if (!s || typeof s.genre !== 'string' || typeof s.subgenre !== 'string') return false;
+    if (s.subgenre === 'general' || !safeGenres.includes(s.genre) || !isValidSubgenre(s.genre, s.subgenre)) return false;
+    const key = `${s.genre}::${s.subgenre}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  return { genres: safeGenres, subgenreSelections: safeSelections };
+}
+
+// Sanitizes a `{[genre]: percent}` map -- every selected genre gets its own
+// independent general/specific mix slider, defaulting to the standard
+// default percent if missing or invalid for that genre.
+function sanitizeGeneralPercents(genres, generalPercents) {
+  const safe = {};
+  for (const genre of genres) {
+    const val = generalPercents?.[genre];
+    safe[genre] = VALID_GENERAL_PERCENTS.has(val) ? val : DEFAULT_GENERAL_PERCENT;
+  }
+  return safe;
+}
 
 function randomCode() {
   return Array.from({ length: 4 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join('');
@@ -83,20 +135,25 @@ export class GameClient {
 
   // ---------- Public API ----------
 
-  async hostGame(name, subgenre, freeSpace, generalPercent) {
+  async hostGame(name, genres, subgenreSelections, freeSpace, generalPercents, totalTropes) {
     const trimmedName = (name || '').trim();
     if (!trimmedName) throw new Error('Please enter your name.');
-    const safeSubgenre = VALID_SUBGENRES.has(subgenre) ? subgenre : DEFAULT_SUBGENRE;
+    const safe = sanitizeGenreSelection(genres, subgenreSelections);
     const useFreeSpace = !!freeSpace;
-    const safeGeneralPercent = VALID_GENERAL_PERCENTS.has(generalPercent) ? generalPercent : DEFAULT_GENERAL_PERCENT;
+    const safeGeneralPercents = sanitizeGeneralPercents(safe.genres, generalPercents);
+    const safeTotalTropes = VALID_TOTAL_TROPES.has(totalTropes) ? totalTropes : DEFAULT_TOTAL_TROPES;
     const code = randomCode();
     await this._connectChannel(code);
-    this._initHostState(code, trimmedName, safeSubgenre, useFreeSpace, safeGeneralPercent);
+    this._initHostState(code, trimmedName, safe.genres, safe.subgenreSelections, useFreeSpace, safeGeneralPercents, safeTotalTropes);
     this._saveSession(code, trimmedName);
     this._emitState();
     return code;
   }
 
+  // Resolves to `{ needsChoice: false }` once fully joined, or, if the host
+  // finds disconnected seats on that code, to `{ needsChoice: true, options,
+  // allowNew, name }` so the UI can offer picking one up (see claimDisconnectedSeat)
+  // instead of always creating a brand-new seat.
   joinGame(code, name) {
     const trimmedName = (name || '').trim();
     if (!trimmedName) return Promise.reject(new Error('Please enter your name.'));
@@ -114,10 +171,83 @@ export class GameClient {
               clearTimeout(timeout);
               this._pendingJoin = null;
               this._saveSession(normalized, trimmedName);
-              resolve();
+              resolve({ needsChoice: false });
+            },
+            reject: (err) => {
+              clearTimeout(timeout);
+              this._pendingJoin = null;
+              reject(err);
+            },
+            choice: (options, allowNew) => {
+              clearTimeout(timeout);
+              resolve({ needsChoice: true, options, allowNew, name: trimmedName });
             },
           };
           this._send({ t: 'join', from: this.myId, name: trimmedName });
+        })
+        .catch(reject);
+    });
+  }
+
+  // Re-sends the join request on the same (already-connected) temp channel,
+  // telling the host to skip the claim-offer and create a brand-new seat.
+  // Used when the player picks "Join as a new player" from the choice modal.
+  confirmNewJoin(name) {
+    const trimmedName = (name || '').trim();
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this._pendingJoin = null;
+        reject(new Error('No response from the host.'));
+      }, JOIN_TIMEOUT_MS);
+      this._pendingJoin = {
+        resolve: () => {
+          clearTimeout(timeout);
+          this._pendingJoin = null;
+          this._saveSession(this.code, trimmedName);
+          resolve();
+        },
+        reject: (err) => {
+          clearTimeout(timeout);
+          this._pendingJoin = null;
+          reject(err);
+        },
+      };
+      this._send({ t: 'join', from: this.myId, name: trimmedName, forceNew: true });
+    });
+  }
+
+  // Takes over an existing (disconnected) seat picked from the choice modal --
+  // reconnects using that seat's id (same mechanism as rejoinGame) so its
+  // board/wagers/marks are preserved, but with the freshly-entered name.
+  claimDisconnectedSeat(seatId, name) {
+    const trimmedName = (name || '').trim();
+    const code = this.code;
+    if (this.channel) {
+      this.supabase.removeChannel(this.channel);
+      this.channel = null;
+    }
+    this.myId = seatId;
+    return new Promise((resolve, reject) => {
+      this._connectChannel(code)
+        .then(() => {
+          const timeout = setTimeout(() => {
+            this._pendingJoin = null;
+            reject(new Error('No response from that game. It may have ended.'));
+          }, JOIN_TIMEOUT_MS);
+          this._pendingJoin = {
+            resolve: () => {
+              clearTimeout(timeout);
+              this._pendingJoin = null;
+              this._saveSession(code, trimmedName);
+              resolve();
+            },
+            reject: (err) => {
+              clearTimeout(timeout);
+              this._pendingJoin = null;
+              reject(err);
+            },
+          };
+          this._send({ t: 'rejoin', from: seatId, name: trimmedName });
         })
         .catch(reject);
     });
@@ -184,8 +314,38 @@ export class GameClient {
     this._dispatch({ t: 'cancelClaim', claimId });
   }
 
-  resetGame(subgenre, freeSpace, generalPercent) {
-    this._dispatch({ t: 'reset', subgenre, freeSpace, generalPercent });
+  resetGame(genres, subgenreSelections, freeSpace, generalPercents, totalTropes) {
+    this._dispatch({ t: 'reset', genres, subgenreSelections, freeSpace, generalPercents, totalTropes });
+  }
+
+  // `genre`/`subgenre` here can be ANY genre/sub-genre in the whole registry,
+  // independent of the game's own configured genres -- swapping a trope out
+  // for something from a totally different genre is intentional.
+  proposeReplace(text, genre, subgenre) {
+    this._dispatch({ t: 'proposeReplace', text, genre, subgenre });
+  }
+
+  proposeAccept(text) {
+    this._dispatch({ t: 'proposeAccept', text });
+  }
+
+  changeName(newName) {
+    const trimmed = (newName || '').trim().slice(0, 20);
+    if (!trimmed) return;
+    this._dispatch({ t: 'changeName', name: trimmed });
+    this._saveSession(this.code, trimmed);
+  }
+
+  // Host-only: removes a player and rotates the game code as a security
+  // measure (in case the old code leaked), then transparently migrates every
+  // still-connected client (including the host) to the new code's channel.
+  kickPlayer(targetId) {
+    this._dispatch({ t: 'kick', targetId });
+  }
+
+  leaveGame() {
+    GameClient.clearSavedSession();
+    this.destroy();
   }
 
   isHost() {
@@ -218,6 +378,17 @@ export class GameClient {
 
   _send(msg) {
     this.channel?.send({ type: 'broadcast', event: 'msg', payload: msg });
+  }
+
+  // Transparently swaps the transport channel to a new code (used after a
+  // kick rotates the code) without disrupting the caller's in-memory state --
+  // no re-entered name/code, no visible screen change.
+  async _migrateToCode(newCode) {
+    const oldChannel = this.channel;
+    await this._connectChannel(newCode);
+    if (oldChannel) this.supabase.removeChannel(oldChannel);
+    const me = this.state?.players?.[this.myId];
+    this._saveSession(newCode, me?.name || '');
   }
 
   _dispatch(action) {
@@ -257,7 +428,7 @@ export class GameClient {
   _onMessage(data) {
     switch (data.t) {
       case 'join':
-        if (this.isHost()) this._handleJoin(data.from, data.name);
+        if (this.isHost()) this._handleJoin(data.from, data.name, data.forceNew);
         break;
       case 'rejoin':
         if (this.isHost()) this._handleRejoin(data.from, data.name);
@@ -267,6 +438,17 @@ export class GameClient {
           this.state = data.state;
           this._pendingJoin.resolve();
           this._emitState();
+        }
+        break;
+      case 'claimOffer':
+        if (data.to === this.myId && this._pendingJoin?.choice) {
+          this._pendingJoin.choice(data.options, data.allowNew);
+        }
+        break;
+      case 'joinRejected':
+        if (data.to === this.myId && this._pendingJoin) {
+          const reason = data.reason === 'started' ? 'That game has already started.' : 'Could not join that game.';
+          this._pendingJoin.reject?.(new Error(reason));
         }
         break;
       case 'rejoinFailed':
@@ -284,6 +466,20 @@ export class GameClient {
       case 'gameReset':
         this.onEvent({ type: 'gameReset' });
         break;
+      case 'migrate':
+        if (!this.state) break;
+        if (!data.state.players[this.myId]) {
+          GameClient.clearSavedSession();
+          this.onEvent({ type: 'kicked' });
+          this.destroy();
+          this.state = null;
+          break;
+        }
+        this.state = data.state;
+        this._emitState();
+        this.onEvent({ type: 'codeChanged', code: data.newCode });
+        this._migrateToCode(data.newCode).catch(() => {});
+        break;
       case 'action':
         if (this.isHost()) this._applyAction(data.from, data.action);
         break;
@@ -294,14 +490,18 @@ export class GameClient {
 
   // ---------- Host-side game state management ----------
 
-  _initHostState(code, name, subgenre, freeSpace, generalPercent) {
-    const board = generateBoard(subgenre, freeSpace, generalPercent);
+  _initHostState(code, name, genres, subgenreSelections, freeSpace, generalPercents, totalTropes) {
+    const tropePool = pickTropePool(genres, subgenreSelections, generalPercents, totalTropes);
+    const board = buildPlayerBoard(tropePool, freeSpace);
     const marked = freeSpace ? [CENTER_INDEX] : [];
     this.state = {
       code,
-      subgenre,
+      genres,
+      subgenreSelections,
       freeSpace,
-      generalPercent,
+      generalPercents,
+      totalTropes,
+      tropePool,
       players: {
         [this.myId]: { id: this.myId, name, seat: 0, connected: true, board, wagered: [], marked },
       },
@@ -312,10 +512,24 @@ export class GameClient {
     };
   }
 
-  _handleJoin(newId, name) {
-    if (this.state.started || this.state.players[newId]) return;
+  _handleJoin(newId, name, forceNew) {
+    if (this.state.players[newId]) return;
+    const disconnected = Object.values(this.state.players).filter((p) => !p.connected);
+    if (!forceNew && disconnected.length > 0) {
+      this._send({
+        t: 'claimOffer',
+        to: newId,
+        options: disconnected.map((p) => ({ id: p.id, name: p.name, seat: p.seat })),
+        allowNew: !this.state.started,
+      });
+      return;
+    }
+    if (this.state.started) {
+      this._send({ t: 'joinRejected', to: newId, reason: 'started' });
+      return;
+    }
     const safeName = (name || '').trim() || 'Player';
-    const board = generateBoard(this.state.subgenre, this.state.freeSpace, this.state.generalPercent);
+    const board = buildPlayerBoard(this.state.tropePool, this.state.freeSpace);
     const marked = this.state.freeSpace ? [CENTER_INDEX] : [];
     const seat = this.state.seatOrder.length;
     this.state.players[newId] = { id: newId, name: safeName, seat, connected: true, board, wagered: [], marked };
@@ -418,11 +632,15 @@ export class GameClient {
     if (action.t === 'reset') {
       if (fromId !== this._currentHostId()) return;
       clearTimeout(this.claimTimeout);
-      if (VALID_SUBGENRES.has(action.subgenre)) state.subgenre = action.subgenre;
+      const safe = sanitizeGenreSelection(action.genres, action.subgenreSelections);
+      state.genres = safe.genres;
+      state.subgenreSelections = safe.subgenreSelections;
       if (typeof action.freeSpace === 'boolean') state.freeSpace = action.freeSpace;
-      if (VALID_GENERAL_PERCENTS.has(action.generalPercent)) state.generalPercent = action.generalPercent;
+      state.generalPercents = sanitizeGeneralPercents(state.genres, action.generalPercents);
+      if (VALID_TOTAL_TROPES.has(action.totalTropes)) state.totalTropes = action.totalTropes;
+      state.tropePool = pickTropePool(state.genres, state.subgenreSelections, state.generalPercents, state.totalTropes);
       for (const p of Object.values(state.players)) {
-        p.board = generateBoard(state.subgenre, state.freeSpace, state.generalPercent);
+        p.board = buildPlayerBoard(state.tropePool, state.freeSpace);
         p.wagered = [];
         p.marked = state.freeSpace ? [CENTER_INDEX] : [];
       }
@@ -435,13 +653,58 @@ export class GameClient {
       this._send({ t: 'state', state: this.state });
       return;
     }
+
+    if (action.t === 'changeName') {
+      const trimmed = (action.name || '').trim().slice(0, 20);
+      if (!trimmed) return;
+      player.name = trimmed;
+      this._emitState();
+      this._send({ t: 'state', state: this.state });
+      return;
+    }
+
+    if (action.t === 'proposeReplace') {
+      if (state.pendingClaim) return;
+      if (typeof action.text !== 'string' || action.text === FREE_SPACE_TEXT || !state.tropePool.includes(action.text)) return;
+      const safeGenre = VALID_GENRES.has(action.genre) ? action.genre : state.genres[0];
+      const safeSubgenre = isValidSubgenre(safeGenre, action.subgenre) ? action.subgenre : 'general';
+      this._startClaim(fromId, action.text, 'replace', { genre: safeGenre, subgenre: safeSubgenre });
+      return;
+    }
+
+    if (action.t === 'proposeAccept') {
+      if (state.pendingClaim) return;
+      if (typeof action.text !== 'string' || !state.tropePool.includes(action.text)) return;
+      if (state.acceptedTropes.includes(action.text)) return;
+      this._startClaim(fromId, action.text, 'mark');
+      return;
+    }
+
+    if (action.t === 'kick') {
+      if (fromId !== this._currentHostId()) return;
+      const targetId = action.targetId;
+      if (targetId === fromId || !state.players[targetId]) return;
+      delete state.players[targetId];
+      state.seatOrder = state.seatOrder.filter((id) => id !== targetId);
+      if (state.pendingClaim && state.pendingClaim.byId === targetId) {
+        clearTimeout(this.claimTimeout);
+        state.pendingClaim = null;
+      }
+      const newCode = randomCode();
+      state.code = newCode;
+      this._send({ t: 'migrate', newCode, state });
+      this._emitState();
+      this.onEvent({ type: 'codeChanged', code: newCode });
+      this._migrateToCode(newCode).catch(() => {});
+      return;
+    }
   }
 
   _connectedCount() {
     return Object.values(this.state.players).filter((p) => p.connected).length;
   }
 
-  _startClaim(fromId, text, kind) {
+  _startClaim(fromId, text, kind, meta = {}) {
     const state = this.state;
     const claimId = `${state.code}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     state.pendingClaim = {
@@ -449,6 +712,7 @@ export class GameClient {
       byId: fromId,
       text,
       kind,
+      ...meta,
       votes: { [fromId]: true },
       totalPlayers: this._connectedCount(),
     };
@@ -494,20 +758,39 @@ export class GameClient {
     const approved = agree >= needed;
 
     if (approved) {
-      for (const p of Object.values(this.state.players)) {
-        const idx = p.board.indexOf(pc.text);
-        if (idx === -1) continue;
-        if (pc.kind === 'unmark') {
-          const pos = p.marked.indexOf(idx);
-          if (pos !== -1) p.marked.splice(pos, 1);
-        } else if (!p.marked.includes(idx)) {
-          p.marked.push(idx);
+      if (pc.kind === 'replace') {
+        const affected = Object.values(this.state.players).filter((p) => p.board.includes(pc.text));
+        const eligible = getEligibleTropeTexts(pc.genre, pc.subgenre);
+        const candidates = eligible.filter(
+          (text) => text !== pc.text && text !== FREE_SPACE_TEXT && !affected.some((p) => p.board.includes(text)),
+        );
+        if (candidates.length > 0) {
+          const newText = candidates[Math.floor(Math.random() * candidates.length)];
+          for (const p of affected) {
+            const idx = p.board.indexOf(pc.text);
+            p.board[idx] = newText;
+            p.wagered = p.wagered.filter((i) => i !== idx);
+            p.marked = p.marked.filter((i) => i !== idx);
+          }
+          if (!this.state.tropePool.includes(newText)) this.state.tropePool.push(newText);
         }
-      }
-      if (pc.kind === 'unmark') {
         this.state.acceptedTropes = this.state.acceptedTropes.filter((t) => t !== pc.text);
-      } else if (!this.state.acceptedTropes.includes(pc.text)) {
-        this.state.acceptedTropes.push(pc.text);
+      } else {
+        for (const p of Object.values(this.state.players)) {
+          const idx = p.board.indexOf(pc.text);
+          if (idx === -1) continue;
+          if (pc.kind === 'unmark') {
+            const pos = p.marked.indexOf(idx);
+            if (pos !== -1) p.marked.splice(pos, 1);
+          } else if (!p.marked.includes(idx)) {
+            p.marked.push(idx);
+          }
+        }
+        if (pc.kind === 'unmark') {
+          this.state.acceptedTropes = this.state.acceptedTropes.filter((t) => t !== pc.text);
+        } else if (!this.state.acceptedTropes.includes(pc.text)) {
+          this.state.acceptedTropes.push(pc.text);
+        }
       }
     }
 

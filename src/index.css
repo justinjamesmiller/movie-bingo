@@ -111,6 +111,56 @@ body {
   max-width: 100%;
 }
 
+.movie-lookup {
+  margin: 0.75rem 0;
+  padding: 0.6rem;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+}
+
+.movie-lookup-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.movie-lookup-row input {
+  flex: 1 1 auto;
+}
+
+.movie-lookup-row .btn {
+  flex: 0 0 auto;
+}
+
+.genre-checkboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.9rem;
+  margin-bottom: 0.5rem;
+}
+
+.checkbox-label.inline {
+  margin: 0;
+}
+
+.subgenre-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.subgenre-group {
+  border-left: 3px solid var(--border);
+  padding-left: 0.6rem;
+}
+
+.subgenre-group-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 0.2rem;
+}
+
 label {
   display: block;
   margin: 0.75rem 0 0.25rem;
@@ -146,7 +196,11 @@ input[type="text"], select {
 }
 
 .checkbox-label input {
-  width: auto;
+  width: 1.4rem;
+  height: 1.4rem;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
 }
 
 .btn {
@@ -277,6 +331,12 @@ input[type="text"], select {
   background: var(--bg);
   color: var(--muted);
   border: 1px solid var(--border);
+}
+
+.kick-btn {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.5rem;
+  margin-left: 0.4rem;
 }
 
 .hint {

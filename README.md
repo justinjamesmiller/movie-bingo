@@ -1,9 +1,11 @@
-# Movie Trope Bingo — Horror Edition
+# Movie Trope Bingo
 
-Jackbox-style multiplayer bingo for horror movie tropes. No database and no custom backend to
-maintain — players connect using a 4-character game code, and [Supabase Realtime](https://supabase.com/docs/guides/realtime)
-is used purely as an ephemeral broadcast relay (no tables, nothing persisted). The whole app is a
-static React site deployable for free on GitHub Pages.
+Jackbox-style multiplayer bingo for movie tropes, spanning Horror, Comedy, Action, Sci-Fi, Fantasy,
+Thriller/Crime, and Romance (a game can mix multiple genres/sub-genres at once). No database and no
+custom backend to maintain — players connect using a 4-character game code, and
+[Supabase Realtime](https://supabase.com/docs/guides/realtime) is used purely as an ephemeral
+broadcast relay (no tables, nothing persisted). The whole app is a static React site deployable for
+free on GitHub Pages.
 
 ## How it works
 
@@ -31,6 +33,19 @@ static React site deployable for free on GitHub Pages.
 
 Realtime is enabled by default on new Supabase projects and needs no database tables for this app
 (only ephemeral broadcast + presence are used).
+
+## Movie lookup (optional)
+
+Hosting a game lets you search for a movie by title and auto-select its genres, using the
+[OMDb API](https://www.omdbapi.com/) (which sources its data from IMDb). This is entirely optional —
+without it, genres/sub-genres are just picked manually via checkboxes.
+
+1. Get a free API key at <https://www.omdbapi.com/apikey.aspx>.
+2. Add it to `.env` as `VITE_OMDB_API_KEY` (local dev) and as a `OMDB_API_KEY` repository secret for
+   the GitHub Pages deploy workflow. If unset, the movie-lookup UI simply doesn't appear.
+
+Note: OMDb only reports broad genres (e.g. "Horror, Comedy"), not this app's finer sub-genres, so a
+matched genre defaults to its "general" pool — pick specific sub-genres manually if you want.
 
 ## Development
 

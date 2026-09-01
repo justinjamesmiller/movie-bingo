@@ -17,127 +17,131 @@ const DEFAULT_SUBGENRE = 'general';
 export const TROPES = [
   // ---------- General (eligible in every sub-genre) ----------
   { text: 'Jump Scare', genres: ['general'] },
-  { text: "Character says \"I'll be right back\" and dies", genres: ['general'] },
-  { text: 'Power goes out at the worst possible moment', genres: ['general'] },
-  { text: 'Cell phone has no signal', genres: ['general'] },
-  { text: "Car won't start during the chase", genres: ['general'] },
-  { text: 'Someone investigates a strange noise alone', genres: ['general'] },
-  { text: "A stranger's warning is completely ignored", genres: ['general'] },
-  { text: 'The dog barks at nothing... or something', genres: ['general'] },
-  { text: 'Basement or attic explored despite obvious danger', genres: ['general'] },
-  { text: 'The group splits up to search the house', genres: ['general'] },
-  { text: 'The lights flicker right before something happens', genres: ['general'] },
-  { text: 'A character trips and falls while running away', genres: ['general', 'slasher'] },
-  { text: 'Someone breaks the one rule they were told never to break', genres: ['general'] },
-  { text: 'A thunderstorm perfectly times the mood', genres: ['general'] },
-  { text: "Nobody believes the survivor's warning", genres: ['general'] },
-  { text: 'A character hides in a closet while being hunted', genres: ['general', 'slasher'] },
-  { text: 'Fake-out jump scare caused by a cat', genres: ['general'] },
-  { text: 'A locked door fails to keep the evil out', genres: ['general'] },
-  { text: 'An old family secret is uncovered', genres: ['general', 'supernatural'] },
-  { text: 'A character explores an abandoned asylum or hospital', genres: ['general', 'psychological'] },
-  { text: 'A warning label or omen is read and then ignored', genres: ['general'] },
-  { text: "Security footage catches something that shouldn't be possible", genres: ['general', 'found-footage'] },
-  { text: 'The car breaks down in the middle of nowhere', genres: ['general'] },
-  { text: 'Someone lets a suspicious stranger inside', genres: ['general'] },
-  { text: 'An obvious warning sign is ignored by the whole group', genres: ['general'] },
-  { text: 'A scream draws characters toward danger instead of away', genres: ['general'] },
-  { text: 'The power of teamwork saves the day at the last second', genres: ['general'] },
-  { text: 'The "safe" daylight scene turns out not to be so safe', genres: ['general'] },
+  { text: '"I\'ll be right back."', genres: ['general'] },
+  { text: 'Power goes out', genres: ['general'] },
+  { text: 'No cell signal', genres: ['general'] },
+  { text: "Car won't start", genres: ['general'] },
+  { text: 'A strange noise', genres: ['general'] },
+  { text: 'A warning is ignored', genres: ['general'] },
+  { text: 'Dog barks at nothing', genres: ['general'] },
+  { text: 'A dark basement', genres: ['general'] },
+  { text: 'The group splits up', genres: ['general'] },
+  { text: 'Lights flicker', genres: ['general'] },
+  { text: 'Someone trips while running', genres: ['general', 'slasher'] },
+  { text: 'Breaking the one rule', genres: ['general'] },
+  { text: 'A thunderstorm', genres: ['general'] },
+  { text: 'Babysitter left alone', genres: ['general'] },
+  { text: 'No one believes the victim', genres: ['general'] },
+  { text: 'Hiding in a closet', genres: ['general', 'slasher'] },
+  { text: 'A fake scare', genres: ['general'] },
+  { text: 'A locked door fails', genres: ['general'] },
+  { text: 'A family secret', genres: ['general', 'supernatural'] },
+  { text: 'An abandoned building', genres: ['general', 'psychological'] },
+  { text: 'An omen is ignored', genres: ['general'] },
+  { text: 'Odd security footage', genres: ['general', 'found-footage'] },
+  { text: 'The car breaks down', genres: ['general'] },
+  { text: 'Letting a stranger in', genres: ['general'] },
+  { text: 'Odd townspeople', genres: ['general'] },
+  { text: 'A scream lures them in', genres: ['general'] },
+  { text: 'Teamwork saves the day', genres: ['general'] },
+  { text: 'A "safe" scene isn\'t', genres: ['general'] },
 
   // ---------- Slasher ----------
-  { text: 'The "Final Girl" is the last one standing', genres: ['slasher'] },
-  { text: "The killer is presumed dead but isn't", genres: ['slasher'] },
-  { text: '"The call is coming from inside the house"', genres: ['slasher'] },
-  { text: 'The babysitter is left alone with the kids', genres: ['slasher'] },
-  { text: "The killer wears a mask hiding their true identity", genres: ['slasher'] },
-  { text: 'A threatening text message from the killer', genres: ['slasher'] },
-  { text: 'The killer turns out to be someone the group trusted', genres: ['slasher'] },
-  { text: 'A phone call warns "get out of the house"', genres: ['slasher'] },
-  { text: "The killer is hiding in the back seat of the car", genres: ['slasher'] },
-  { text: "The killer's motive is revealed in a monologue", genres: ['slasher'] },
-  { text: 'The killer picks off the group one by one', genres: ['slasher'] },
-  { text: 'A final confrontation happens back where it all started', genres: ['slasher'] },
-  { text: 'The killer shows up at a party or reunion uninvited', genres: ['slasher'] },
-  { text: "A character recognizes the killer's signature weapon", genres: ['slasher'] },
+  { text: 'The Final Girl survives', genres: ['slasher'] },
+  { text: 'Killer presumed dead', genres: ['slasher'] },
+  { text: 'A call from inside', genres: ['slasher'] },
+  { text: 'A close-up of a weapon', genres: ['slasher'] },
+  { text: 'Killer wears a mask', genres: ['slasher'] },
+  { text: 'A threatening text', genres: ['slasher'] },
+  { text: 'Killer was a friend', genres: ['slasher'] },
+  { text: 'A scary phone call', genres: ['slasher'] },
+  { text: 'Killer in the back seat', genres: ['slasher'] },
+  { text: 'A villain monologue', genres: ['slasher'] },
+  { text: 'Picked off one by one', genres: ['slasher'] },
+  { text: 'Final fight, back home', genres: ['slasher'] },
+  { text: 'An unlikely suspect', genres: ['slasher'] },
+  { text: 'A familiar weapon', genres: ['slasher'] },
 
   // ---------- Supernatural / Haunted House ----------
-  { text: 'A mirror reveals something standing behind a character', genres: ['supernatural'] },
-  { text: 'A creepy child says something unsettling', genres: ['supernatural'] },
-  { text: 'A character reads aloud from a cursed book or tape', genres: ['supernatural'] },
-  { text: "An old photograph shows something that wasn't there before", genres: ['supernatural'] },
-  { text: 'A religious symbol fails to stop the evil', genres: ['supernatural'] },
-  { text: 'A séance or ritual goes horribly wrong', genres: ['supernatural'] },
-  { text: 'A character spots the ghost in a reflection first', genres: ['supernatural'] },
-  { text: 'A creepy doll or toy moves on its own', genres: ['supernatural'] },
-  { text: 'The house was built on a cursed burial ground', genres: ['supernatural'] },
-  { text: "A character's shadow moves on its own", genres: ['supernatural'] },
-  { text: 'A character hears their own name whispered', genres: ['supernatural', 'psychological'] },
-  { text: 'A clock stops at the same time every night', genres: ['supernatural'] },
-  { text: 'An urban legend turns out to be true', genres: ['supernatural'] },
-  { text: 'A character sees a figure standing perfectly still in the distance', genres: ['supernatural', 'psychological'] },
-  { text: "A character makes a deal with something they shouldn't have", genres: ['supernatural'] },
-  { text: 'A priest, medium, or exorcist is called in to help', genres: ['supernatural'] },
-  { text: "An object must be returned to its resting place to end the haunting", genres: ['supernatural'] },
-  { text: 'The haunting follows the family when they try to move away', genres: ['supernatural'] },
-  { text: 'A character is possessed and acts out of character', genres: ['supernatural'] },
+  { text: 'A mirror scare', genres: ['supernatural'] },
+  { text: 'One or more creepy children', genres: ['supernatural'] },
+  { text: 'A cursed artifact', genres: ['supernatural'] },
+  { text: 'A clue in a photo', genres: ['supernatural'] },
+  { text: 'A religious symbol fails', genres: ['supernatural'] },
+  { text: 'Rituals or cultlike behavior', genres: ['supernatural'] },
+  { text: 'Ghost seen in reflection', genres: ['supernatural'] },
+  { text: 'A creepy doll', genres: ['supernatural'] },
+  { text: 'A cemetery', genres: ['supernatural'] },
+  { text: 'A moving shadow', genres: ['supernatural'] },
+  { text: 'Whispering voices', genres: ['supernatural', 'psychological'] },
+  { text: 'A clock stops nightly', genres: ['supernatural'] },
+  { text: 'An urban legend is real', genres: ['supernatural'] },
+  { text: 'A mysterious background figure', genres: ['supernatural', 'psychological'] },
+  { text: 'A dangerous deal made', genres: ['supernatural'] },
+  { text: 'A witch, wizard, or sorcerer', genres: ['supernatural'] },
+  { text: 'An object must be returned', genres: ['supernatural'] },
+  { text: 'A haunted house', genres: ['supernatural'] },
+  { text: 'Demonic possession', genres: ['supernatural'] },
 
   // ---------- Zombie / Outbreak ----------
-  { text: 'A single zombie bite dooms a character who hides it from the group', genres: ['zombie'] },
-  { text: 'The group barricades windows and doors against the horde', genres: ['zombie'] },
-  { text: 'A character is bitten while saving someone else', genres: ['zombie'] },
-  { text: 'Survivors argue about whether to trust a stranger', genres: ['zombie'] },
-  { text: 'The military or government response makes things worse', genres: ['zombie'] },
-  { text: 'A radio broadcast gives false hope of a safe zone', genres: ['zombie'] },
-  { text: 'Someone insists a turned loved one isn\'t "really gone"', genres: ['zombie'] },
-  { text: 'The horde is drawn by a loud noise or alarm', genres: ['zombie'] },
-  { text: 'A character is overwhelmed after running out of ammo', genres: ['zombie'] },
-  { text: 'The infection spreads faster than anyone expected', genres: ['zombie'] },
-  { text: 'A supply run to the store goes wrong', genres: ['zombie'] },
-  { text: 'The group loses a vehicle in the middle of the outbreak', genres: ['zombie'] },
+  { text: 'A hidden bite', genres: ['zombie'] },
+  { text: 'Barricading the doors', genres: ['zombie'] },
+  { text: 'Bitten saving someone else', genres: ['zombie'] },
+  { text: 'Arguing to trust a stranger', genres: ['zombie'] },
+  { text: 'The military makes it worse', genres: ['zombie'] },
+  { text: 'A false safe-zone broadcast', genres: ['zombie'] },
+  { text: '"They\'re not really gone"', genres: ['zombie'] },
+  { text: 'A noise draws the horde', genres: ['zombie'] },
+  { text: 'Out of ammo', genres: ['zombie'] },
+  { text: 'A transformative virus', genres: ['zombie'] },
+  { text: 'A supply run gone wrong', genres: ['zombie'] },
+  { text: 'Losing the getaway vehicle', genres: ['zombie'] },
 
   // ---------- Found Footage ----------
-  { text: 'Found-footage camera shakes violently', genres: ['found-footage'] },
-  { text: 'Static or distortion appears right before a scare', genres: ['found-footage'] },
-  { text: 'A character live-streams their own demise', genres: ['found-footage'] },
-  { text: 'Someone insists on continuing to film despite the danger', genres: ['found-footage'] },
-  { text: "The camera battery or memory card conveniently runs out at a key moment", genres: ['found-footage'] },
-  { text: "Night-vision footage reveals something the group didn't notice in the dark", genres: ['found-footage'] },
-  { text: 'The footage was "recovered" after the group went missing', genres: ['found-footage'] },
-  { text: 'A character narrates directly to the camera about their fear', genres: ['found-footage'] },
-  { text: 'The camera is dropped but keeps recording', genres: ['found-footage'] },
-  { text: 'GPS or map apps stop working once the group is in danger', genres: ['found-footage'] },
-  { text: "A character apologizes to the camera as if it's their last recording", genres: ['found-footage'] },
+  { text: 'Camera shakes violently', genres: ['found-footage'] },
+  { text: 'Static right before a scare', genres: ['found-footage'] },
+  { text: 'A character live-streams this', genres: ['found-footage'] },
+  { text: '"Why are you still filming?"', genres: ['found-footage'] },
+  { text: 'Battery dies at worst time', genres: ['found-footage'] },
+  { text: 'Night-vision reveals something', genres: ['found-footage'] },
+  { text: '"Recovered" footage', genres: ['found-footage'] },
+  { text: 'Narrating straight to camera', genres: ['found-footage'] },
+  { text: 'Camera dropped, still recording', genres: ['found-footage'] },
+  { text: 'GPS stops working', genres: ['found-footage'] },
+  { text: 'A goodbye to the camera', genres: ['found-footage'] },
 
   // ---------- Psychological ----------
-  { text: 'A character wakes from a nightmare... or did they?', genres: ['psychological'] },
-  { text: 'The main character questions their own sanity', genres: ['psychological'] },
-  { text: "A twist reveals events weren't happening the way we thought", genres: ['psychological'] },
-  { text: "A character sees someone or something others insist isn't there", genres: ['psychological'] },
-  { text: 'Time seems to loop or repeat for a character', genres: ['psychological'] },
-  { text: "A character's medication or treatment is suspiciously involved", genres: ['psychological'] },
-  { text: 'The "monster" turns out to be a manifestation of grief or guilt', genres: ['psychological'] },
-  { text: "A therapist or doctor doesn't believe the protagonist", genres: ['psychological'] },
-  { text: 'Reality and memory blur together for the protagonist', genres: ['psychological'] },
-  { text: "A character discovers they've done something horrific and forgotten it", genres: ['psychological'] },
-  { text: 'The house or setting seems to change layout unexpectedly', genres: ['psychological'] },
-  { text: 'A character is gaslit by someone close to them', genres: ['psychological'] },
-  { text: 'The ending recontextualizes an earlier "safe" scene as sinister', genres: ['psychological'] },
+  { text: 'Waking from a nightmare', genres: ['psychological'] },
+  { text: 'Questioning their own sanity', genres: ['psychological'] },
+  { text: 'A twist ending', genres: ['psychological'] },
+  { text: 'No one else sees it', genres: ['psychological'] },
+  { text: 'Time loops or repeats', genres: ['psychological'] },
+  { text: 'Suspicious medication', genres: ['psychological'] },
+  { text: 'Grief given monstrous form', genres: ['psychological'] },
+  { text: 'The know-it-all dies', genres: ['psychological'] },
+  { text: 'Memory and reality blur', genres: ['psychological'] },
+  { text: 'A forgotten, horrific act', genres: ['psychological'] },
+  { text: 'The house rearranges itself', genres: ['psychological'] },
+  { text: 'Gaslit by a loved one', genres: ['psychological'] },
+  { text: 'An earlier scene wasn\'t safe', genres: ['psychological'] },
 
   // ---------- Creature Feature / Monster ----------
-  { text: 'The monster is only glimpsed in shadow or partial view at first', genres: ['creature'] },
-  { text: 'A local warns the group not to go into the woods or water', genres: ['creature'] },
-  { text: 'The creature turns out to be smarter than expected', genres: ['creature'] },
-  { text: "A character is snatched from just outside the group's reach", genres: ['creature'] },
-  { text: "The creature's origin is tied to a science experiment gone wrong", genres: ['creature'] },
-  { text: 'The group discovers the remains of a previous victim', genres: ['creature'] },
-  { text: 'A trap set for the creature fails or backfires', genres: ['creature'] },
-  { text: 'The creature is revealed to be more than one', genres: ['creature'] },
-  { text: 'Weapons that should work on the creature barely slow it down', genres: ['creature'] },
-  { text: 'A character bonds with or tries to spare the creature', genres: ['creature'] },
-  { text: 'The creature mimics a human voice to lure victims', genres: ['creature'] },
-  { text: 'A flare or light source reveals the creature just in time', genres: ['creature'] },
+  { text: 'Glimpsed only in shadow', genres: ['creature'] },
+  { text: 'A local\'s dire warning', genres: ['creature'] },
+  { text: 'Smarter than expected', genres: ['creature'] },
+  { text: 'Snatched just out of reach', genres: ['creature'] },
+  { text: 'A failed lab experiment', genres: ['creature'] },
+  { text: 'Remains of a past victim', genres: ['creature'] },
+  { text: 'A trap backfires', genres: ['creature'] },
+  { text: 'There\'s more than one', genres: ['creature'] },
+  { text: 'Weapons barely slow it', genres: ['creature'] },
+  { text: 'Tries to spare the creature', genres: ['creature'] },
+  { text: 'Mimics a human voice', genres: ['creature'] },
+  { text: 'A flare reveals it', genres: ['creature'] },
 ];
+
+export const CENTER_INDEX = 12; // middle of a 5x5 grid (0-indexed)
+export const FREE_SPACE_TEXT = 'FREE SPACE';
 
 function shuffle(arr) {
   const a = arr.slice();
@@ -148,7 +152,35 @@ function shuffle(arr) {
   return a;
 }
 
-export function generateBoard(subgenre = DEFAULT_SUBGENRE) {
-  const pool = TROPES.filter((t) => t.genres.includes('general') || t.genres.includes(subgenre));
-  return shuffle(pool.map((t) => t.text)).slice(0, 25);
+// Picks `total` trope texts for a board, guaranteeing at least half come from
+// the general pool regardless of sub-genre (general tropes are the shared
+// baseline; sub-genre-specific tropes only fill the remaining slots).
+function pickBoardTropes(subgenre, total) {
+  const minGeneral = Math.ceil(total / 2);
+  const generalPool = shuffle(TROPES.filter((t) => t.genres.includes('general')).map((t) => t.text));
+  const specificPool = subgenre === DEFAULT_SUBGENRE
+    ? []
+    : shuffle(TROPES.filter((t) => !t.genres.includes('general') && t.genres.includes(subgenre)).map((t) => t.text));
+
+  let generalCount = Math.max(minGeneral, total - specificPool.length);
+  generalCount = Math.min(generalCount, generalPool.length, total);
+  const specificCount = Math.min(total - generalCount, specificPool.length);
+
+  let chosen = [...generalPool.slice(0, generalCount), ...specificPool.slice(0, specificCount)];
+  if (chosen.length < total) {
+    chosen = chosen.concat(generalPool.slice(generalCount, generalCount + (total - chosen.length)));
+  }
+  return shuffle(chosen).slice(0, total);
+}
+
+export function generateBoard(subgenre = DEFAULT_SUBGENRE, useFreeSpace = false) {
+  if (!useFreeSpace) return pickBoardTropes(subgenre, 25);
+
+  const chosen = pickBoardTropes(subgenre, 24);
+  const board = new Array(25);
+  let idx = 0;
+  for (let i = 0; i < 25; i++) {
+    board[i] = i === CENTER_INDEX ? FREE_SPACE_TEXT : chosen[idx++];
+  }
+  return board;
 }

@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { SUBGENRES } from '../data/tropes.js';
 
-export default function ResetModal({ currentSubgenre, onConfirm, onCancel }) {
+export default function ResetModal({ currentSubgenre, currentFreeSpace, onConfirm, onCancel }) {
   const [subgenre, setSubgenre] = useState(currentSubgenre || SUBGENRES[0].id);
+  const [freeSpace, setFreeSpace] = useState(!!currentFreeSpace);
 
   return (
     <div className="modal">
@@ -17,8 +18,16 @@ export default function ResetModal({ currentSubgenre, onConfirm, onCancel }) {
             <option key={g.id} value={g.id}>{g.label}</option>
           ))}
         </select>
+        <label className="checkbox-label">
+          <input
+            type="checkbox"
+            checked={freeSpace}
+            onChange={(e) => setFreeSpace(e.target.checked)}
+          />
+          Free center space
+        </label>
         <div className="claim-vote-buttons cancel-claim-btn">
-          <button className="btn disagree" onClick={() => onConfirm(subgenre)}>Reset Game</button>
+          <button className="btn disagree" onClick={() => onConfirm(subgenre, freeSpace)}>Reset Game</button>
           <button className="btn" onClick={onCancel}>Cancel</button>
         </div>
       </div>

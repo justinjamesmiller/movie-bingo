@@ -8,7 +8,7 @@
 // seat -- every client can compute this independently since game state is
 // replicated to everyone via broadcast.
 import { createClient } from '@supabase/supabase-js';
-import { generateBoard, SUBGENRES } from '../data/tropes.js';
+import { generateBoard, SUBGENRES, CENTER_INDEX } from '../data/tropes.js';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -51,13 +51,14 @@ export class GameClient {
 
   // ---------- Public API ----------
 
-  async hostGame(name, subgenre) {
+  async hostGame(name, subgenre, freeSpace) {
     const trimmedName = (name || '').trim();
     if (!trimmedName) throw new Error('Please enter your name.');
     const safeSubgenre = VALID_SUBGENRES.has(subgenre) ? subgenre : DEFAULT_SUBGENRE;
+    const useFreeSpace = !!freeSpace;
     const code = randomCode();
     await this._connectChannel(code);
-    this._initHostState(code, trimmedName, safeSubgenre);
+    this._initHostState(code, trimmedName, safeSubgenre, useFreeSpace);
     this._emitState();
     return code;
   }
@@ -107,8 +108,8 @@ export class GameClient {
     this._dispatch({ t: 'cancelClaim', claimId });
   }
 
-  resetGame(subgenre) {
-    this._dispatch({ t: 'reset', subgenre });
+  resetGame(subgenre, freeSpace) {
+    this._dispatch({ t: 'reset', subgenre, freeSpace });
   }
 
   isHost() {
@@ -209,13 +210,15 @@ export class GameClient {
 
   // ---------- Host-side game state management ----------
 
-  _initHostState(code, name, subgenre) {
-    const board = generateBoard(subgenre);
+  _initHostState(code, name, subgenre, freeSpace) {
+    const board = generateBoard(subgenre, freeSpace);
+    const marked = freeSpace ? [CENTER_INDEX] : [];
     this.state = {
       code,
       subgenre,
+      freeSpace,
       players: {
-        [this.myId]: { id: this.myId, name, seat: 0, connected: true, board, wagered: [], marked: [] },
+        [this.myId]: { id: this.myId, name, seat: 0, connected: true, board, wagered: [], marked },
       },
       seatOrder: [this.myId],
       started: false,
@@ -226,9 +229,10 @@ export class GameClient {
   _handleJoin(newId, name) {
     if (this.state.started || this.state.players[newId]) return;
     const safeName = (name || '').trim() || 'Player';
-    const board = generateBoard(this.state.subgenre);
+    const board = generateBoard(this.state.subgenre, this.state.freeSpace);
+    const marked = this.state.freeSpace ? [CENTER_INDEX] : [];
     const seat = this.state.seatOrder.length;
-    this.state.players[newId] = { id: newId, name: safeName, seat, connected: true, board, wagered: [], marked: [] };
+    this.state.players[newId] = { id: newId, name: safeName, seat, connected: true, board, wagered: [], marked };
     this.state.seatOrder.push(newId);
 
     this._send({ t: 'welcome', to: newId, state: this.state });
@@ -252,7 +256,7 @@ export class GameClient {
     if (action.t === 'setWager') {
       if (state.started) return;
       const indices = Array.isArray(action.indices)
-        ? action.indices.filter((i) => Number.isInteger(i) && i >= 0 && i < 25)
+        ? action.indices.filter((i) => Number.isInteger(i) && i >= 0 && i < 25 && !(state.freeSpace && i === CENTER_INDEX))
         : [];
       player.wagered = Array.from(new Set(indices)).slice(0, 5);
       this._emitState();
@@ -272,6 +276,7 @@ export class GameClient {
       if (!state.started || state.pendingClaim) return;
       const index = action.index;
       if (!Number.isInteger(index) || index < 0 || index >= 25) return;
+      if (state.freeSpace && index === CENTER_INDEX) return;
       const kind = player.marked.includes(index) ? 'unmark' : 'mark';
       this._startClaim(fromId, index, kind);
       return;
@@ -302,10 +307,11 @@ export class GameClient {
       if (fromId !== this._currentHostId()) return;
       clearTimeout(this.claimTimeout);
       if (VALID_SUBGENRES.has(action.subgenre)) state.subgenre = action.subgenre;
+      if (typeof action.freeSpace === 'boolean') state.freeSpace = action.freeSpace;
       for (const p of Object.values(state.players)) {
-        p.board = generateBoard(state.subgenre);
+        p.board = generateBoard(state.subgenre, state.freeSpace);
         p.wagered = [];
-        p.marked = [];
+        p.marked = state.freeSpace ? [CENTER_INDEX] : [];
       }
       state.started = false;
       state.pendingClaim = null;

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { GameClient } from './net/relay.js';
-import { SUBGENRES } from './data/tropes.js';
+import { SUBGENRES, CENTER_INDEX } from './data/tropes.js';
 import ThemeToggle from './components/ThemeToggle.jsx';
 import Landing from './components/Landing.jsx';
 import PlayersPanel from './components/PlayersPanel.jsx';
@@ -66,12 +66,12 @@ function App() {
     return client;
   }
 
-  async function handleHost(name, subgenre) {
+  async function handleHost(name, subgenre, freeSpace) {
     setError('');
     setBusy(true);
     try {
       const client = makeClient();
-      await client.hostGame(name, subgenre);
+      await client.hostGame(name, subgenre, freeSpace);
       setScreen('game');
     } catch (err) {
       setError(err.message || 'Could not host a game.');
@@ -100,6 +100,7 @@ function App() {
 
   function handleCellClick(index) {
     if (!gameState) return;
+    if (gameState.freeSpace && index === CENTER_INDEX) return;
     const me = gameState.players[myId];
     const client = clientRef.current;
 
@@ -130,9 +131,9 @@ function App() {
     setResetModalOpen(true);
   }
 
-  function handleConfirmReset(subgenre) {
+  function handleConfirmReset(subgenre, freeSpace) {
     setResetModalOpen(false);
-    clientRef.current.resetGame(subgenre);
+    clientRef.current.resetGame(subgenre, freeSpace);
   }
 
   if (screen === 'landing' || !gameState) {
@@ -195,6 +196,7 @@ function App() {
                 board={me.board}
                 wagered={me.wagered}
                 marked={me.marked}
+                freeSpace={gameState.freeSpace}
                 pending={!!gameState.pendingClaim}
                 onCellClick={handleCellClick}
               />
@@ -215,6 +217,7 @@ function App() {
       {resetModalOpen && (
         <ResetModal
           currentSubgenre={gameState.subgenre}
+          currentFreeSpace={gameState.freeSpace}
           onConfirm={handleConfirmReset}
           onCancel={() => setResetModalOpen(false)}
         />

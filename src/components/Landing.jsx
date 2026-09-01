@@ -4,6 +4,7 @@ import { SUBGENRES } from '../data/tropes.js';
 export default function Landing({ onHost, onJoin, error, busy }) {
   const [hostName, setHostName] = useState('');
   const [hostSubgenre, setHostSubgenre] = useState(SUBGENRES[0].id);
+  const [hostFreeSpace, setHostFreeSpace] = useState(false);
   const [joinName, setJoinName] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const [localError, setLocalError] = useState('');
@@ -15,7 +16,7 @@ export default function Landing({ onHost, onJoin, error, busy }) {
       return;
     }
     setLocalError('');
-    onHost(name, hostSubgenre);
+    onHost(name, hostSubgenre, hostFreeSpace);
   }
 
   function handleJoinClick() {
@@ -51,6 +52,14 @@ export default function Landing({ onHost, onJoin, error, busy }) {
             <option key={g.id} value={g.id}>{g.label}</option>
           ))}
         </select>
+        <label className="checkbox-label">
+          <input
+            type="checkbox"
+            checked={hostFreeSpace}
+            onChange={(e) => setHostFreeSpace(e.target.checked)}
+          />
+          Free center space
+        </label>
         <button className="btn primary" disabled={busy} onClick={handleHostClick}>
           Host Game
         </button>

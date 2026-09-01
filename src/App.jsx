@@ -68,12 +68,12 @@ function App() {
     return client;
   }
 
-  async function handleHost(name, subgenre, freeSpace) {
+  async function handleHost(name, subgenre, freeSpace, generalPercent) {
     setError('');
     setBusy(true);
     try {
       const client = makeClient();
-      await client.hostGame(name, subgenre, freeSpace);
+      await client.hostGame(name, subgenre, freeSpace, generalPercent);
       setScreen('game');
     } catch (err) {
       setError(err.message || 'Could not host a game.');
@@ -133,17 +133,14 @@ function App() {
     setResetModalOpen(true);
   }
 
-  function handleConfirmReset(subgenre, freeSpace) {
+  function handleConfirmReset(subgenre, freeSpace, generalPercent) {
     setResetModalOpen(false);
-    clientRef.current.resetGame(subgenre, freeSpace);
+    clientRef.current.resetGame(subgenre, freeSpace, generalPercent);
   }
 
   function handleChallenge(text) {
-    const confirmed = window.confirm(`Challenge "${text}"? This asks the group to vote on undoing it.`);
-    if (confirmed) {
-      clientRef.current.challengeTrope(text);
-      setTropesModalOpen(false);
-    }
+    clientRef.current.challengeTrope(text);
+    setTropesModalOpen(false);
   }
 
   if (screen === 'landing' || !gameState) {
@@ -177,6 +174,7 @@ function App() {
           <div className="game-topbar">
             <div className="code-display">Code: {gameState.code}</div>
             <div className="code-display">Sub-genre: {subgenreLabel}</div>
+            <div className="code-display">General mix: {gameState.generalPercent}%</div>
             <div className="game-status">
               {gameState.started
                 ? 'Game in progress — click a space when it happens on screen!'
@@ -234,6 +232,7 @@ function App() {
         <ResetModal
           currentSubgenre={gameState.subgenre}
           currentFreeSpace={gameState.freeSpace}
+          currentGeneralPercent={gameState.generalPercent}
           onConfirm={handleConfirmReset}
           onCancel={() => setResetModalOpen(false)}
         />

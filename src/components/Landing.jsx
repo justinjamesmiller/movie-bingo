@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { SUBGENRES } from '../data/tropes.js';
+import { SUBGENRES, GENERAL_PERCENT_OPTIONS, DEFAULT_GENERAL_PERCENT } from '../data/tropes.js';
 
 export default function Landing({ onHost, onJoin, error, busy }) {
   const [hostName, setHostName] = useState('');
   const [hostSubgenre, setHostSubgenre] = useState(SUBGENRES[0].id);
   const [hostFreeSpace, setHostFreeSpace] = useState(false);
+  const [hostGeneralPercent, setHostGeneralPercent] = useState(DEFAULT_GENERAL_PERCENT);
   const [joinName, setJoinName] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const [localError, setLocalError] = useState('');
@@ -16,7 +17,7 @@ export default function Landing({ onHost, onJoin, error, busy }) {
       return;
     }
     setLocalError('');
-    onHost(name, hostSubgenre, hostFreeSpace);
+    onHost(name, hostSubgenre, hostFreeSpace, hostGeneralPercent);
   }
 
   function handleJoinClick() {
@@ -60,6 +61,22 @@ export default function Landing({ onHost, onJoin, error, busy }) {
           />
           Free center space
         </label>
+        <label htmlFor="host-general-percent">General tropes: {hostGeneralPercent}%</label>
+        <input
+          id="host-general-percent"
+          type="range"
+          min={0}
+          max={100}
+          step={10}
+          list="general-percent-ticks"
+          value={hostGeneralPercent}
+          onChange={(e) => setHostGeneralPercent(Number(e.target.value))}
+        />
+        <datalist id="general-percent-ticks">
+          {GENERAL_PERCENT_OPTIONS.map((p) => (
+            <option key={p} value={p} />
+          ))}
+        </datalist>
         <button className="btn primary" disabled={busy} onClick={handleHostClick}>
           Host Game
         </button>

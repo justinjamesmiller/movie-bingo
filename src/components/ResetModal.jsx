@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { SUBGENRES } from '../data/tropes.js';
+import { SUBGENRES, GENERAL_PERCENT_OPTIONS, DEFAULT_GENERAL_PERCENT } from '../data/tropes.js';
 
-export default function ResetModal({ currentSubgenre, currentFreeSpace, onConfirm, onCancel }) {
+export default function ResetModal({ currentSubgenre, currentFreeSpace, currentGeneralPercent, onConfirm, onCancel }) {
   const [subgenre, setSubgenre] = useState(currentSubgenre || SUBGENRES[0].id);
   const [freeSpace, setFreeSpace] = useState(!!currentFreeSpace);
+  const [generalPercent, setGeneralPercent] = useState(currentGeneralPercent ?? DEFAULT_GENERAL_PERCENT);
 
   return (
     <div className="modal">
@@ -26,8 +27,24 @@ export default function ResetModal({ currentSubgenre, currentFreeSpace, onConfir
           />
           Free center space
         </label>
+        <label htmlFor="reset-general-percent">General tropes: {generalPercent}%</label>
+        <input
+          id="reset-general-percent"
+          type="range"
+          min={0}
+          max={100}
+          step={10}
+          list="reset-general-percent-ticks"
+          value={generalPercent}
+          onChange={(e) => setGeneralPercent(Number(e.target.value))}
+        />
+        <datalist id="reset-general-percent-ticks">
+          {GENERAL_PERCENT_OPTIONS.map((p) => (
+            <option key={p} value={p} />
+          ))}
+        </datalist>
         <div className="claim-vote-buttons cancel-claim-btn">
-          <button className="btn disagree" onClick={() => onConfirm(subgenre, freeSpace)}>Reset Game</button>
+          <button className="btn disagree" onClick={() => onConfirm(subgenre, freeSpace, generalPercent)}>Reset Game</button>
           <button className="btn" onClick={onCancel}>Cancel</button>
         </div>
       </div>

@@ -8,7 +8,7 @@
 // seat -- every client can compute this independently since game state is
 // replicated to everyone via broadcast.
 import { createClient } from '@supabase/supabase-js';
-import { generateBoard, SUBGENRES, CENTER_INDEX } from '../data/tropes.js';
+import { generateBoard, SUBGENRES, CENTER_INDEX, GENERAL_PERCENT_OPTIONS, DEFAULT_GENERAL_PERCENT } from '../data/tropes.js';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -17,6 +17,7 @@ const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I
 const CLAIM_TIMEOUT_MS = 20000;
 const JOIN_TIMEOUT_MS = 10000;
 const VALID_SUBGENRES = new Set(SUBGENRES.map((g) => g.id));
+const VALID_GENERAL_PERCENTS = new Set(GENERAL_PERCENT_OPTIONS);
 const DEFAULT_SUBGENRE = 'general';
 
 function randomCode() {
@@ -51,14 +52,15 @@ export class GameClient {
 
   // ---------- Public API ----------
 
-  async hostGame(name, subgenre, freeSpace) {
+  async hostGame(name, subgenre, freeSpace, generalPercent) {
     const trimmedName = (name || '').trim();
     if (!trimmedName) throw new Error('Please enter your name.');
     const safeSubgenre = VALID_SUBGENRES.has(subgenre) ? subgenre : DEFAULT_SUBGENRE;
     const useFreeSpace = !!freeSpace;
+    const safeGeneralPercent = VALID_GENERAL_PERCENTS.has(generalPercent) ? generalPercent : DEFAULT_GENERAL_PERCENT;
     const code = randomCode();
     await this._connectChannel(code);
-    this._initHostState(code, trimmedName, safeSubgenre, useFreeSpace);
+    this._initHostState(code, trimmedName, safeSubgenre, useFreeSpace, safeGeneralPercent);
     this._emitState();
     return code;
   }
@@ -112,8 +114,8 @@ export class GameClient {
     this._dispatch({ t: 'cancelClaim', claimId });
   }
 
-  resetGame(subgenre, freeSpace) {
-    this._dispatch({ t: 'reset', subgenre, freeSpace });
+  resetGame(subgenre, freeSpace, generalPercent) {
+    this._dispatch({ t: 'reset', subgenre, freeSpace, generalPercent });
   }
 
   isHost() {
@@ -214,13 +216,14 @@ export class GameClient {
 
   // ---------- Host-side game state management ----------
 
-  _initHostState(code, name, subgenre, freeSpace) {
-    const board = generateBoard(subgenre, freeSpace);
+  _initHostState(code, name, subgenre, freeSpace, generalPercent) {
+    const board = generateBoard(subgenre, freeSpace, generalPercent);
     const marked = freeSpace ? [CENTER_INDEX] : [];
     this.state = {
       code,
       subgenre,
       freeSpace,
+      generalPercent,
       players: {
         [this.myId]: { id: this.myId, name, seat: 0, connected: true, board, wagered: [], marked },
       },
@@ -234,7 +237,7 @@ export class GameClient {
   _handleJoin(newId, name) {
     if (this.state.started || this.state.players[newId]) return;
     const safeName = (name || '').trim() || 'Player';
-    const board = generateBoard(this.state.subgenre, this.state.freeSpace);
+    const board = generateBoard(this.state.subgenre, this.state.freeSpace, this.state.generalPercent);
     const marked = this.state.freeSpace ? [CENTER_INDEX] : [];
     const seat = this.state.seatOrder.length;
     this.state.players[newId] = { id: newId, name: safeName, seat, connected: true, board, wagered: [], marked };
@@ -320,8 +323,9 @@ export class GameClient {
       clearTimeout(this.claimTimeout);
       if (VALID_SUBGENRES.has(action.subgenre)) state.subgenre = action.subgenre;
       if (typeof action.freeSpace === 'boolean') state.freeSpace = action.freeSpace;
+      if (VALID_GENERAL_PERCENTS.has(action.generalPercent)) state.generalPercent = action.generalPercent;
       for (const p of Object.values(state.players)) {
-        p.board = generateBoard(state.subgenre, state.freeSpace);
+        p.board = generateBoard(state.subgenre, state.freeSpace, state.generalPercent);
         p.wagered = [];
         p.marked = state.freeSpace ? [CENTER_INDEX] : [];
       }

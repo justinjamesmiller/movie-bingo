@@ -164,6 +164,11 @@ export const TROPES = [
 export const CENTER_INDEX = 12; // middle of a 5x5 grid (0-indexed)
 export const FREE_SPACE_TEXT = 'FREE SPACE';
 
+// Host-configurable slider steps for how much of the board is drawn from the
+// general pool vs. the chosen sub-genre's specific pool.
+export const GENERAL_PERCENT_OPTIONS = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
+export const DEFAULT_GENERAL_PERCENT = 50;
+
 function shuffle(arr) {
   const a = arr.slice();
   for (let i = a.length - 1; i > 0; i--) {
@@ -173,18 +178,19 @@ function shuffle(arr) {
   return a;
 }
 
-// Picks `total` trope texts for a board, guaranteeing at least half come from
-// the general pool regardless of sub-genre (general tropes are the shared
-// baseline; sub-genre-specific tropes only fill the remaining slots).
-function pickBoardTropes(subgenre, total) {
-  const minGeneral = Math.ceil(total / 2);
+// Picks `total` trope texts for a board, aiming for `generalPercent`% from the
+// general pool (general tropes are the shared baseline; sub-genre-specific
+// tropes fill the rest). Falls back to topping up from the general pool if
+// the specific pool is too small to hit the requested mix -- a board always
+// has exactly `total` unique tropes even if the exact percentage can't be met.
+function pickBoardTropes(subgenre, total, generalPercent) {
+  const desiredGeneral = Math.round((total * generalPercent) / 100);
   const generalPool = shuffle(TROPES.filter((t) => t.genres.includes('general')).map((t) => t.text));
   const specificPool = subgenre === DEFAULT_SUBGENRE
     ? []
     : shuffle(TROPES.filter((t) => !t.genres.includes('general') && t.genres.includes(subgenre)).map((t) => t.text));
 
-  let generalCount = Math.max(minGeneral, total - specificPool.length);
-  generalCount = Math.min(generalCount, generalPool.length, total);
+  let generalCount = Math.min(desiredGeneral, generalPool.length, total);
   const specificCount = Math.min(total - generalCount, specificPool.length);
 
   let chosen = [...generalPool.slice(0, generalCount), ...specificPool.slice(0, specificCount)];
@@ -194,10 +200,10 @@ function pickBoardTropes(subgenre, total) {
   return shuffle(chosen).slice(0, total);
 }
 
-export function generateBoard(subgenre = DEFAULT_SUBGENRE, useFreeSpace = false) {
-  if (!useFreeSpace) return pickBoardTropes(subgenre, 25);
+export function generateBoard(subgenre = DEFAULT_SUBGENRE, useFreeSpace = false, generalPercent = DEFAULT_GENERAL_PERCENT) {
+  if (!useFreeSpace) return pickBoardTropes(subgenre, 25, generalPercent);
 
-  const chosen = pickBoardTropes(subgenre, 24);
+  const chosen = pickBoardTropes(subgenre, 24, generalPercent);
   const board = new Array(25);
   let idx = 0;
   for (let i = 0; i < 25; i++) {

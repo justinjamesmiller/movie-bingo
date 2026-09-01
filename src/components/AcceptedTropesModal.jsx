@@ -1,4 +1,24 @@
+import { useState } from 'react';
+
 export default function AcceptedTropesModal({ acceptedTropes, onChallenge, onClose }) {
+  const [pendingText, setPendingText] = useState(null);
+
+  if (pendingText) {
+    return (
+      <div className="modal">
+        <div className="modal-content">
+          <h3>Challenge this trope?</h3>
+          <p className="claim-text">{pendingText}</p>
+          <p className="hint">This asks the group to vote on undoing it.</p>
+          <div className="claim-vote-buttons">
+            <button className="btn agree" onClick={() => onChallenge(pendingText)}>👍 Yes, challenge it</button>
+            <button className="btn disagree" onClick={() => setPendingText(null)}>👎 Never mind</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="modal">
       <div className="modal-content">
@@ -11,7 +31,7 @@ export default function AcceptedTropesModal({ acceptedTropes, onChallenge, onClo
             <ul className="challenge-list">
               {acceptedTropes.map((text) => (
                 <li key={text}>
-                  <button className="btn challenge-item" onClick={() => onChallenge(text)}>
+                  <button className="btn challenge-item" onClick={() => setPendingText(text)}>
                     {text}
                   </button>
                 </li>

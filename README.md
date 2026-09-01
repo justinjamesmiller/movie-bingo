@@ -44,8 +44,17 @@ without it, genres/sub-genres are just picked manually via checkboxes.
 2. Add it to `.env` as `VITE_OMDB_API_KEY` (local dev) and as a `OMDB_API_KEY` repository secret for
    the GitHub Pages deploy workflow. If unset, the movie-lookup UI simply doesn't appear.
 
-Note: OMDb only reports broad genres (e.g. "Horror, Comedy"), not this app's finer sub-genres, so a
-matched genre defaults to its "general" pool — pick specific sub-genres manually if you want.
+Note: OMDb only reports broad genres (e.g. "Horror, Comedy"), not this app's finer sub-genres — see
+below for how those get suggested automatically.
+
+### Sub-genre suggestions via Wikidata (automatic, no setup needed)
+
+[Wikidata](https://www.wikidata.org/) tags films with a "genre" property that's often much more
+specific than OMDb's broad genres (e.g. "slasher film", "zombie film", "heist film"). Whenever you
+pick a movie, its Wikidata genre tags are matched against a hand-picked list to suggest (and
+pre-check) specific sub-genres — this is inherently best-effort, since Wikidata's genre labels are
+free text, not a fixed list, and not every film has this data. No API key, signup, or configuration
+is required for this — it just works as long as `VITE_OMDB_API_KEY` is set (see above).
 
 ## Development
 

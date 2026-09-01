@@ -19,10 +19,10 @@ export default function ResetModal({ currentGenres, currentSubgenreSelections, c
     });
   }
 
-  function handleMovieFound(foundGenres) {
+  function handleMovieFound(foundGenres, foundSubgenreSelections) {
     const safeGenres = foundGenres.length ? foundGenres : [GENRES[0].id];
     setGenres(safeGenres);
-    setSubgenreSelections([]);
+    setSubgenreSelections(foundSubgenreSelections || []);
     ensurePercentsFor(safeGenres);
   }
 

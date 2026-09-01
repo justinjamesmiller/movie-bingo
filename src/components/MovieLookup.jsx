@@ -1,27 +1,55 @@
 import { useState } from 'react';
-import { isMovieLookupAvailable, lookupMovie } from '../net/movieLookup.js';
+import { isMovieLookupAvailable, searchMovies, getMovieDetails } from '../net/movieLookup.js';
+import { getSuggestedSubgenres } from '../net/wikidataLookup.js';
+import { SUBGENRES_BY_GENRE } from '../data/tropes.js';
 
 export default function MovieLookup({ onFound }) {
   const [query, setQuery] = useState('');
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState(null);
+  const [results, setResults] = useState(null);
+  const [selected, setSelected] = useState(null);
+  const [suggestedSubgenres, setSuggestedSubgenres] = useState([]);
   const [error, setError] = useState('');
 
   if (!isMovieLookupAvailable()) return null;
 
   async function handleSearch() {
     setError('');
-    setResult(null);
+    setResults(null);
+    setSelected(null);
     setBusy(true);
     try {
-      const found = await lookupMovie(query);
-      setResult(found);
-      onFound(found.genres);
+      const found = await searchMovies(query);
+      setResults(found);
     } catch (err) {
       setError(err.message || 'Could not find that movie.');
     } finally {
       setBusy(false);
     }
+  }
+
+  async function handlePick(imdbID) {
+    setError('');
+    setBusy(true);
+    try {
+      const details = await getMovieDetails(imdbID);
+      const subgenres = (await getSuggestedSubgenres(imdbID)).filter((s) => details.genres.includes(s.genre));
+      setSelected(details);
+      setSuggestedSubgenres(subgenres);
+      setResults(null);
+      onFound(details.genres, subgenres);
+    } catch (err) {
+      setError(err.message || 'Could not load that movie.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function handleSearchAgain() {
+    setSelected(null);
+    setSuggestedSubgenres([]);
+    setResults(null);
+    setError('');
   }
 
   return (
@@ -31,7 +59,7 @@ export default function MovieLookup({ onFound }) {
         <input
           id="movie-search"
           type="text"
-          placeholder="e.g. Your Monster"
+          placeholder="e.g. Spiral"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
@@ -46,12 +74,52 @@ export default function MovieLookup({ onFound }) {
         </button>
       </div>
       {error && <p className="error-text">{error}</p>}
-      {result && (
-        <p className="hint">
-          Found "{result.title}" ({result.year}) — genres applied: {result.genres.length ? result.genres.join(', ') : 'none matched'}.
-          {result.unmapped.length > 0 && ` Not supported yet: ${result.unmapped.join(', ')}.`}
-          {' '}Sub-genres aren't in IMDb data, so each genre defaults to "general" — pick specific ones below if you want.
-        </p>
+
+      {results && (
+        <ul className="movie-result-list">
+          {results.map((m) => (
+            <li key={m.imdbID}>
+              <button type="button" className="movie-result-item" disabled={busy} onClick={() => handlePick(m.imdbID)}>
+                {m.poster ? (
+                  <img src={m.poster} alt="" className="movie-result-poster" />
+                ) : (
+                  <span className="movie-result-poster movie-result-poster-placeholder">🎬</span>
+                )}
+                <span className="movie-result-info">
+                  <span className="movie-result-title">{m.title}</span>
+                  <span className="movie-result-year">{m.year}</span>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {selected && (
+        <div className="movie-selected">
+          <div className="movie-selected-row">
+            {selected.poster && <img src={selected.poster} alt="" className="movie-result-poster" />}
+            <p className="hint">
+              Picked "{selected.title}" ({selected.year})
+              {selected.director && ` — directed by ${selected.director}`}
+              {selected.actors && `, starring ${selected.actors}`}.
+              {' '}Genres applied: {selected.genres.length ? selected.genres.join(', ') : 'none matched'}.
+              {selected.unmapped.length > 0 && ` Not supported yet: ${selected.unmapped.join(', ')}.`}
+              {suggestedSubgenres.length > 0 ? (
+                <>
+                  {' '}Sub-genres suggested via Wikidata:{' '}
+                  {suggestedSubgenres
+                    .map((s) => (SUBGENRES_BY_GENRE[s.genre] || []).find((sg) => sg.id === s.subgenre)?.label || s.subgenre)
+                    .join(', ')}
+                  {' '}(already checked below — feel free to adjust).
+                </>
+              ) : (
+                " No specific sub-genres recognized, so each genre defaults to 'general' — pick specific ones below if you want."
+              )}
+            </p>
+          </div>
+          <button type="button" className="btn" onClick={handleSearchAgain}>Search a different movie</button>
+        </div>
       )}
     </div>
   );

@@ -23,10 +23,10 @@ export default function Landing({ onHost, onJoin, error, busy, savedSession, onR
     });
   }
 
-  function handleMovieFound(genres) {
+  function handleMovieFound(genres, subgenreSelections) {
     const safeGenres = genres.length ? genres : [GENRES[0].id];
     setHostGenres(safeGenres);
-    setHostSubgenreSelections([]);
+    setHostSubgenreSelections(subgenreSelections || []);
     ensurePercentsFor(safeGenres);
   }
 

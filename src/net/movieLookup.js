@@ -27,22 +27,8 @@ export function isMovieLookupAvailable() {
   return !!OMDB_API_KEY;
 }
 
-export async function lookupMovie(title) {
-  const trimmed = (title || '').trim();
-  if (!trimmed) throw new Error('Enter a movie title to search.');
-  if (!OMDB_API_KEY) throw new Error("Movie lookup isn't configured (missing VITE_OMDB_API_KEY).");
-
-  let res;
-  try {
-    res = await fetch(`https://www.omdbapi.com/?apikey=${encodeURIComponent(OMDB_API_KEY)}&t=${encodeURIComponent(trimmed)}`);
-  } catch {
-    throw new Error('Could not reach the movie database. Check your connection and try again.');
-  }
-  if (!res.ok) throw new Error('Could not reach the movie database.');
-  const data = await res.json();
-  if (data.Response === 'False') throw new Error(data.Error || 'Movie not found.');
-
-  const omdbGenres = (data.Genre || '').split(',').map((g) => g.trim()).filter(Boolean);
+function mapGenres(genreString) {
+  const omdbGenres = (genreString || '').split(',').map((g) => g.trim()).filter(Boolean);
   const genres = [];
   const unmapped = [];
   for (const g of omdbGenres) {
@@ -53,6 +39,66 @@ export async function lookupMovie(title) {
       unmapped.push(g);
     }
   }
+  return { genres, unmapped };
+}
 
+async function omdbFetch(params) {
+  if (!OMDB_API_KEY) throw new Error("Movie lookup isn't configured (missing VITE_OMDB_API_KEY).");
+  let res;
+  try {
+    res = await fetch(`https://www.omdbapi.com/?apikey=${encodeURIComponent(OMDB_API_KEY)}&${params}`);
+  } catch {
+    throw new Error('Could not reach the movie database. Check your connection and try again.');
+  }
+  if (!res.ok) throw new Error('Could not reach the movie database.');
+  return res.json();
+}
+
+// Searches by (partial) title, returning up to 10 candidate movies so the
+// user can pick the right one (OMDb's search endpoint only returns basic
+// fields -- title/year/poster/id -- not genre, hence the separate detail
+// lookup below).
+export async function searchMovies(title) {
+  const trimmed = (title || '').trim();
+  if (!trimmed) throw new Error('Enter a movie title to search.');
+  const data = await omdbFetch(`s=${encodeURIComponent(trimmed)}&type=movie`);
+  if (data.Response === 'False') throw new Error(data.Error || 'No movies found with that title.');
+
+  return data.Search.map((m) => ({
+    imdbID: m.imdbID,
+    title: m.Title,
+    year: m.Year,
+    poster: m.Poster && m.Poster !== 'N/A' ? m.Poster : null,
+  }));
+}
+
+// Fetches full details for one movie by IMDb id (from searchMovies) --
+// includes genre plus other identifying info (director, actors, poster) to
+// help confirm it's the right pick.
+export async function getMovieDetails(imdbID) {
+  const data = await omdbFetch(`i=${encodeURIComponent(imdbID)}`);
+  if (data.Response === 'False') throw new Error(data.Error || 'Movie not found.');
+
+  const { genres, unmapped } = mapGenres(data.Genre);
+  return {
+    title: data.Title,
+    year: data.Year,
+    poster: data.Poster && data.Poster !== 'N/A' ? data.Poster : null,
+    director: data.Director && data.Director !== 'N/A' ? data.Director : null,
+    actors: data.Actors && data.Actors !== 'N/A' ? data.Actors : null,
+    genres,
+    unmapped,
+  };
+}
+
+// Convenience one-shot lookup (exact title match) kept for callers that just
+// want the first/best match without showing a picker.
+export async function lookupMovie(title) {
+  const trimmed = (title || '').trim();
+  if (!trimmed) throw new Error('Enter a movie title to search.');
+  const data = await omdbFetch(`t=${encodeURIComponent(trimmed)}`);
+  if (data.Response === 'False') throw new Error(data.Error || 'Movie not found.');
+
+  const { genres, unmapped } = mapGenres(data.Genre);
   return { title: data.Title, year: data.Year, genres, unmapped };
 }

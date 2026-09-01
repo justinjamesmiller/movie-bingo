@@ -131,6 +131,88 @@ body {
   flex: 0 0 auto;
 }
 
+.movie-result-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0 0;
+  max-height: 40vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.movie-result-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  text-align: left;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.35rem;
+}
+
+.movie-result-item:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.movie-result-poster {
+  width: 36px;
+  height: 54px;
+  object-fit: cover;
+  border-radius: 4px;
+  flex-shrink: 0;
+  background: var(--border);
+}
+
+.movie-result-poster-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+}
+
+.movie-result-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.movie-result-title {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.movie-result-year {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.movie-selected {
+  margin-top: 0.5rem;
+}
+
+.movie-selected-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  margin-bottom: 0.5rem;
+}
+
+.movie-selected .movie-result-poster {
+  width: 60px;
+  height: 90px;
+}
+
+.movie-selected-row .hint {
+  flex: 1 1 auto;
+}
+
 .genre-checkboxes {
   display: flex;
   flex-wrap: wrap;

@@ -38,6 +38,10 @@ const LABEL_SUBGENRE_MAP = [
   { match: ['workplace comedy'], genre: 'comedy', subgenre: 'workplace' },
   { match: ['period drama', 'costume drama', 'regency romance'], genre: 'romance', subgenre: 'period-romance' },
   { match: ['melodrama', 'romantic drama'], genre: 'romance', subgenre: 'romantic-drama' },
+  { match: ['legal drama', 'courtroom'], genre: 'drama', subgenre: 'legal' },
+  { match: ['family drama', 'family film'], genre: 'drama', subgenre: 'family-drama' },
+  { match: ['true crime'], genre: 'documentary', subgenre: 'true-crime' },
+  { match: ['nature documentary', 'wildlife'], genre: 'documentary', subgenre: 'nature' },
 ];
 
 // Returns a list of `{genre, subgenre}` suggestions for an IMDb id, or an

@@ -9,7 +9,7 @@ export default function PlayersPanel({ players, hostId, myId, isHost, wagerCount
           return (
             <li key={p.id}>
               <div className="player-row">
-                <span>{p.name}{!p.connected ? ' (disconnected)' : ''}</span>
+                <span>{p.avatar ? `${p.avatar} ` : ''}{p.name}{!p.connected ? ' (disconnected)' : ''}</span>
                 <span>
                   {p.id === hostId && <span className="tag">HOST</span>}
                   {' '}

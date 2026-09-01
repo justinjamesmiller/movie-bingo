@@ -3,6 +3,7 @@ import { GENRES, DEFAULT_GENERAL_PERCENT, TOTAL_TROPES_OPTIONS, DEFAULT_TOTAL_TR
 import MovieLookup from './MovieLookup.jsx';
 import GenreSubgenrePicker from './GenreSubgenrePicker.jsx';
 import GeneralPercentSliders from './GeneralPercentSliders.jsx';
+import CustomTropesEditor from './CustomTropesEditor.jsx';
 
 export default function Landing({ onHost, onJoin, error, busy, savedSession, onRejoin }) {
   const [hostName, setHostName] = useState('');
@@ -11,8 +12,12 @@ export default function Landing({ onHost, onJoin, error, busy, savedSession, onR
   const [hostFreeSpace, setHostFreeSpace] = useState(false);
   const [hostGeneralPercents, setHostGeneralPercents] = useState({ [GENRES[0].id]: DEFAULT_GENERAL_PERCENT });
   const [hostTotalTropes, setHostTotalTropes] = useState(DEFAULT_TOTAL_TROPES);
+  const [hostCustomTropes, setHostCustomTropes] = useState([]);
   const [joinName, setJoinName] = useState('');
-  const [joinCode, setJoinCode] = useState('');
+  const [joinCode, setJoinCode] = useState(() => {
+    const fromUrl = new URLSearchParams(window.location.search).get('code');
+    return fromUrl ? fromUrl.trim().toUpperCase().slice(0, 4) : '';
+  });
   const [localError, setLocalError] = useState('');
 
   function ensurePercentsFor(genres) {
@@ -43,7 +48,7 @@ export default function Landing({ onHost, onJoin, error, busy, savedSession, onR
       return;
     }
     setLocalError('');
-    onHost(name, hostGenres, hostSubgenreSelections, hostFreeSpace, hostGeneralPercents, hostTotalTropes);
+    onHost(name, hostGenres, hostSubgenreSelections, hostFreeSpace, hostGeneralPercents, hostTotalTropes, hostCustomTropes);
   }
 
   function handleJoinClick() {
@@ -97,6 +102,7 @@ export default function Landing({ onHost, onJoin, error, busy, savedSession, onR
         </label>
         <GeneralPercentSliders
           genres={hostGenres}
+          subgenreSelections={hostSubgenreSelections}
           generalPercents={hostGeneralPercents}
           onChange={(genreId, value) => setHostGeneralPercents((prev) => ({ ...prev, [genreId]: value }))}
         />
@@ -110,6 +116,7 @@ export default function Landing({ onHost, onJoin, error, busy, savedSession, onR
             <option key={n} value={n}>{n}</option>
           ))}
         </select>
+        <CustomTropesEditor customTropes={hostCustomTropes} onChange={setHostCustomTropes} />
         <button className="btn primary" disabled={busy} onClick={handleHostClick}>
           Host Game
         </button>

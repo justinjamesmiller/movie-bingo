@@ -3,6 +3,7 @@ import { GENRES, DEFAULT_GENERAL_PERCENT, TOTAL_TROPES_OPTIONS, DEFAULT_TOTAL_TR
 import MovieLookup from './MovieLookup.jsx';
 import GenreSubgenrePicker from './GenreSubgenrePicker.jsx';
 import GeneralPercentSliders from './GeneralPercentSliders.jsx';
+import CustomTropesEditor from './CustomTropesEditor.jsx';
 
 export default function ResetModal({ currentGenres, currentSubgenreSelections, currentFreeSpace, currentGeneralPercents, currentTotalTropes, onConfirm, onCancel }) {
   const [genres, setGenres] = useState(currentGenres?.length ? currentGenres : [GENRES[0].id]);
@@ -10,6 +11,7 @@ export default function ResetModal({ currentGenres, currentSubgenreSelections, c
   const [freeSpace, setFreeSpace] = useState(!!currentFreeSpace);
   const [generalPercents, setGeneralPercents] = useState(currentGeneralPercents || { [GENRES[0].id]: DEFAULT_GENERAL_PERCENT });
   const [totalTropes, setTotalTropes] = useState(currentTotalTropes ?? DEFAULT_TOTAL_TROPES);
+  const [customTropes, setCustomTropes] = useState([]);
 
   function ensurePercentsFor(nextGenres) {
     setGeneralPercents((prev) => {
@@ -55,6 +57,7 @@ export default function ResetModal({ currentGenres, currentSubgenreSelections, c
         </label>
         <GeneralPercentSliders
           genres={genres}
+          subgenreSelections={subgenreSelections}
           generalPercents={generalPercents}
           onChange={(genreId, value) => setGeneralPercents((prev) => ({ ...prev, [genreId]: value }))}
         />
@@ -68,8 +71,9 @@ export default function ResetModal({ currentGenres, currentSubgenreSelections, c
             <option key={n} value={n}>{n}</option>
           ))}
         </select>
+        <CustomTropesEditor customTropes={customTropes} onChange={setCustomTropes} />
         <div className="claim-vote-buttons cancel-claim-btn">
-          <button className="btn disagree" onClick={() => onConfirm(genres, subgenreSelections, freeSpace, generalPercents, totalTropes)}>Reset Game</button>
+          <button className="btn disagree" onClick={() => onConfirm(genres, subgenreSelections, freeSpace, generalPercents, totalTropes, customTropes)}>Reset Game</button>
           <button className="btn" onClick={onCancel}>Cancel</button>
         </div>
       </div>

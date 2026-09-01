@@ -21,6 +21,7 @@ import {
   TOTAL_TROPES_OPTIONS,
   DEFAULT_TOTAL_TROPES,
 } from '../data/tropes.js';
+import { AVATAR_OPTIONS } from '../data/avatars.js';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -33,10 +34,33 @@ const VALID_GENERAL_PERCENTS = new Set(GENERAL_PERCENT_OPTIONS);
 const VALID_TOTAL_TROPES = new Set(TOTAL_TROPES_OPTIONS);
 const DEFAULT_GENRE = 'horror';
 const SESSION_KEY = 'movie-bingo-session';
+const MAX_CUSTOM_TROPES = 20;
+const MAX_CUSTOM_TROPE_LENGTH = 60;
 
 function isValidSubgenre(genre, subgenre) {
   return (SUBGENRES_BY_GENRE[genre] || []).some((s) => s.id === subgenre);
 }
+
+function defaultAvatarForSeat(seat) {
+  return AVATAR_OPTIONS[seat % AVATAR_OPTIONS.length];
+}
+
+// Sanitizes a list of free-text custom trope submissions (host/reset-time):
+// trims, drops blanks, caps length, dedupes, caps total count.
+function sanitizeCustomTropes(customTropes) {
+  const seen = new Set();
+  const safe = [];
+  for (const raw of Array.isArray(customTropes) ? customTropes : []) {
+    if (typeof raw !== 'string') continue;
+    const trimmed = raw.trim().slice(0, MAX_CUSTOM_TROPE_LENGTH);
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    safe.push(trimmed);
+    if (safe.length >= MAX_CUSTOM_TROPES) break;
+  }
+  return safe;
+}
+
 
 // Sanitizes a host/reset genre + sub-genre selection: `genres` is an array of
 // genre ids (at least one, deduped, falls back to the default genre if none
@@ -135,16 +159,17 @@ export class GameClient {
 
   // ---------- Public API ----------
 
-  async hostGame(name, genres, subgenreSelections, freeSpace, generalPercents, totalTropes) {
+  async hostGame(name, genres, subgenreSelections, freeSpace, generalPercents, totalTropes, customTropes) {
     const trimmedName = (name || '').trim();
     if (!trimmedName) throw new Error('Please enter your name.');
     const safe = sanitizeGenreSelection(genres, subgenreSelections);
     const useFreeSpace = !!freeSpace;
     const safeGeneralPercents = sanitizeGeneralPercents(safe.genres, generalPercents);
     const safeTotalTropes = VALID_TOTAL_TROPES.has(totalTropes) ? totalTropes : DEFAULT_TOTAL_TROPES;
+    const safeCustomTropes = sanitizeCustomTropes(customTropes);
     const code = randomCode();
     await this._connectChannel(code);
-    this._initHostState(code, trimmedName, safe.genres, safe.subgenreSelections, useFreeSpace, safeGeneralPercents, safeTotalTropes);
+    this._initHostState(code, trimmedName, safe.genres, safe.subgenreSelections, useFreeSpace, safeGeneralPercents, safeTotalTropes, safeCustomTropes);
     this._saveSession(code, trimmedName);
     this._emitState();
     return code;
@@ -294,6 +319,15 @@ export class GameClient {
     this._dispatch({ t: 'setWager', indices });
   }
 
+  // Proposes adding and/or removing wagers after the game has started (e.g. a
+  // slot freed up via an approved 'replace', spaces never wagered pre-game,
+  // or simply changing one's mind) -- unlike setWager, this requires majority
+  // approval from the other players since it happens mid-game. All removals
+  // and additions picked at once are submitted together as a single proposal.
+  proposeWagerChange(add, remove) {
+    this._dispatch({ t: 'proposeWagerChange', add, remove });
+  }
+
   startGame() {
     this._dispatch({ t: 'start' });
   }
@@ -314,8 +348,8 @@ export class GameClient {
     this._dispatch({ t: 'cancelClaim', claimId });
   }
 
-  resetGame(genres, subgenreSelections, freeSpace, generalPercents, totalTropes) {
-    this._dispatch({ t: 'reset', genres, subgenreSelections, freeSpace, generalPercents, totalTropes });
+  resetGame(genres, subgenreSelections, freeSpace, generalPercents, totalTropes, customTropes) {
+    this._dispatch({ t: 'reset', genres, subgenreSelections, freeSpace, generalPercents, totalTropes, customTropes });
   }
 
   // `genre`/`subgenre` here can be ANY genre/sub-genre in the whole registry,
@@ -329,11 +363,37 @@ export class GameClient {
     this._dispatch({ t: 'proposeAccept', text });
   }
 
+  // Host-only: marks the game as over and broadcasts a recap trigger to
+  // everyone (no further claims/wagers can be proposed after this).
+  declareGameOver() {
+    this._dispatch({ t: 'gameOver' });
+  }
+
   changeName(newName) {
     const trimmed = (newName || '').trim().slice(0, 20);
     if (!trimmed) return;
     this._dispatch({ t: 'changeName', name: trimmed });
     this._saveSession(this.code, trimmed);
+  }
+
+  changeAvatar(avatar) {
+    if (!AVATAR_OPTIONS.includes(avatar)) return;
+    this._dispatch({ t: 'changeAvatar', avatar });
+  }
+
+  // Submits a brand-new free-text trope (not part of the pre-built pool) for
+  // majority approval mid-game -- if approved it's added to the accepted
+  // list AND the trope pool (so it shows up in "All Tropes" going forward).
+  proposeCustomTrope(text) {
+    this._dispatch({ t: 'proposeCustom', text });
+  }
+
+  // Ephemeral -- not part of replicated game state, just a fire-and-forget
+  // broadcast (with an optimistic local echo, since broadcast.self is false)
+  // so everyone sees a brief reaction burst.
+  sendReaction(emoji) {
+    this._send({ t: 'reaction', from: this.myId, emoji });
+    this.onEvent({ type: 'reaction', from: this.myId, emoji });
   }
 
   // Host-only: removes a player and rotates the game code as a security
@@ -368,9 +428,13 @@ export class GameClient {
       channel.subscribe((status, err) => {
         if (status === 'SUBSCRIBED') {
           channel.track({ id: this.myId });
+          this.onEvent({ type: 'connectionStatus', status: 'connected' });
           resolve();
-        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          reject(err || new Error('Could not connect to the relay.'));
+        } else {
+          this.onEvent({ type: 'connectionStatus', status: 'disconnected' });
+          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            reject(err || new Error('Could not connect to the relay.'));
+          }
         }
       });
     });
@@ -461,10 +525,24 @@ export class GameClient {
         this._emitState();
         break;
       case 'resolved':
-        this.onEvent({ type: 'claimResolved', text: data.text, kind: data.kind, approved: data.approved });
+        this.onEvent({
+          type: 'claimResolved',
+          text: data.text,
+          kind: data.kind,
+          custom: !!data.custom,
+          byId: data.byId,
+          approved: data.approved,
+          wagerFreed: !!data.wagerFreedIds?.includes(this.myId),
+        });
+        break;
+      case 'reaction':
+        this.onEvent({ type: 'reaction', from: data.from, emoji: data.emoji });
         break;
       case 'gameReset':
         this.onEvent({ type: 'gameReset' });
+        break;
+      case 'gameOverAnnounced':
+        this.onEvent({ type: 'gameOver' });
         break;
       case 'migrate':
         if (!this.state) break;
@@ -490,8 +568,8 @@ export class GameClient {
 
   // ---------- Host-side game state management ----------
 
-  _initHostState(code, name, genres, subgenreSelections, freeSpace, generalPercents, totalTropes) {
-    const tropePool = pickTropePool(genres, subgenreSelections, generalPercents, totalTropes);
+  _initHostState(code, name, genres, subgenreSelections, freeSpace, generalPercents, totalTropes, customTropes = []) {
+    const tropePool = Array.from(new Set([...pickTropePool(genres, subgenreSelections, generalPercents, totalTropes), ...customTropes]));
     const board = buildPlayerBoard(tropePool, freeSpace);
     const marked = freeSpace ? [CENTER_INDEX] : [];
     this.state = {
@@ -503,13 +581,24 @@ export class GameClient {
       totalTropes,
       tropePool,
       players: {
-        [this.myId]: { id: this.myId, name, seat: 0, connected: true, board, wagered: [], marked },
+        [this.myId]: { id: this.myId, name, seat: 0, connected: true, avatar: defaultAvatarForSeat(0), board, wagered: [], marked },
       },
       seatOrder: [this.myId],
       started: false,
+      gameOver: false,
       pendingClaim: null,
       acceptedTropes: [],
+      activityLog: [],
     };
+  }
+
+  // Appends a short activity-feed entry (capped to the most recent 30) --
+  // part of replicated state so every client sees the identical feed.
+  _logActivity(text) {
+    const state = this.state;
+    if (!Array.isArray(state.activityLog)) state.activityLog = [];
+    state.activityLog.push({ id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, text, ts: Date.now() });
+    state.activityLog = state.activityLog.slice(-30);
   }
 
   _handleJoin(newId, name, forceNew) {
@@ -532,7 +621,7 @@ export class GameClient {
     const board = buildPlayerBoard(this.state.tropePool, this.state.freeSpace);
     const marked = this.state.freeSpace ? [CENTER_INDEX] : [];
     const seat = this.state.seatOrder.length;
-    this.state.players[newId] = { id: newId, name: safeName, seat, connected: true, board, wagered: [], marked };
+    this.state.players[newId] = { id: newId, name: safeName, seat, connected: true, avatar: defaultAvatarForSeat(seat), board, wagered: [], marked };
     this.state.seatOrder.push(newId);
 
     this._send({ t: 'welcome', to: newId, state: this.state });
@@ -553,6 +642,7 @@ export class GameClient {
     player.connected = true;
     const trimmed = (name || '').trim();
     if (trimmed) player.name = trimmed;
+    if (!player.avatar) player.avatar = defaultAvatarForSeat(player.seat);
 
     this._send({ t: 'welcome', to: id, state: this.state });
     this._emitState();
@@ -583,16 +673,41 @@ export class GameClient {
       return;
     }
 
+    if (action.t === 'proposeWagerChange') {
+      if (!state.started || state.gameOver || state.pendingClaim) return;
+      const remove = Array.from(new Set(Array.isArray(action.remove) ? action.remove : [])).filter(
+        (i) => Number.isInteger(i) && player.wagered.includes(i),
+      );
+      const add = Array.from(new Set(Array.isArray(action.add) ? action.add : [])).filter(
+        (i) =>
+          Number.isInteger(i) &&
+          i >= 0 &&
+          i < 25 &&
+          !(state.freeSpace && i === CENTER_INDEX) &&
+          !player.marked.includes(i) &&
+          !player.wagered.includes(i) &&
+          !remove.includes(i),
+      );
+      if (add.length === 0 && remove.length === 0) return;
+      const resultingCount = player.wagered.length - remove.length + add.length;
+      if (resultingCount > 5) return;
+      const addTexts = add.map((i) => player.board[i]);
+      const removeTexts = remove.map((i) => player.board[i]);
+      this._startClaim(fromId, '', 'wagerChange', { add, remove, addTexts, removeTexts });
+      return;
+    }
+
     if (action.t === 'start') {
       if (fromId !== this._currentHostId()) return;
       state.started = true;
+      this._logActivity('🎬 The host started the game.');
       this._emitState();
       this._send({ t: 'state', state: this.state });
       return;
     }
 
     if (action.t === 'claim') {
-      if (!state.started || state.pendingClaim) return;
+      if (!state.started || state.gameOver || state.pendingClaim) return;
       const index = action.index;
       if (!Number.isInteger(index) || index < 0 || index >= 25) return;
       if (state.freeSpace && index === CENTER_INDEX) return;
@@ -602,7 +717,7 @@ export class GameClient {
     }
 
     if (action.t === 'challenge') {
-      if (!state.started || state.pendingClaim) return;
+      if (!state.started || state.gameOver || state.pendingClaim) return;
       if (typeof action.text !== 'string' || !state.acceptedTropes.includes(action.text)) return;
       this._startClaim(fromId, action.text, 'unmark');
       return;
@@ -638,15 +753,19 @@ export class GameClient {
       if (typeof action.freeSpace === 'boolean') state.freeSpace = action.freeSpace;
       state.generalPercents = sanitizeGeneralPercents(state.genres, action.generalPercents);
       if (VALID_TOTAL_TROPES.has(action.totalTropes)) state.totalTropes = action.totalTropes;
-      state.tropePool = pickTropePool(state.genres, state.subgenreSelections, state.generalPercents, state.totalTropes);
+      const safeCustomTropes = sanitizeCustomTropes(action.customTropes);
+      state.tropePool = Array.from(new Set([...pickTropePool(state.genres, state.subgenreSelections, state.generalPercents, state.totalTropes), ...safeCustomTropes]));
       for (const p of Object.values(state.players)) {
         p.board = buildPlayerBoard(state.tropePool, state.freeSpace);
         p.wagered = [];
         p.marked = state.freeSpace ? [CENTER_INDEX] : [];
       }
       state.started = false;
+      state.gameOver = false;
       state.pendingClaim = null;
       state.acceptedTropes = [];
+      state.activityLog = [];
+      this._logActivity('🔄 The host reset the game.');
       this.onEvent({ type: 'gameReset' });
       this._send({ t: 'gameReset' });
       this._emitState();
@@ -663,8 +782,25 @@ export class GameClient {
       return;
     }
 
+    if (action.t === 'changeAvatar') {
+      if (typeof action.avatar !== 'string' || !AVATAR_OPTIONS.includes(action.avatar)) return;
+      player.avatar = action.avatar;
+      this._emitState();
+      this._send({ t: 'state', state: this.state });
+      return;
+    }
+
+    if (action.t === 'proposeCustom') {
+      if (state.gameOver || state.pendingClaim) return;
+      if (typeof action.text !== 'string') return;
+      const trimmed = action.text.trim().slice(0, MAX_CUSTOM_TROPE_LENGTH);
+      if (!trimmed || trimmed === FREE_SPACE_TEXT || state.tropePool.includes(trimmed)) return;
+      this._startClaim(fromId, trimmed, 'mark', { custom: true });
+      return;
+    }
+
     if (action.t === 'proposeReplace') {
-      if (state.pendingClaim) return;
+      if (state.gameOver || state.pendingClaim) return;
       if (typeof action.text !== 'string' || action.text === FREE_SPACE_TEXT || !state.tropePool.includes(action.text)) return;
       const safeGenre = VALID_GENRES.has(action.genre) ? action.genre : state.genres[0];
       const safeSubgenre = isValidSubgenre(safeGenre, action.subgenre) ? action.subgenre : 'general';
@@ -673,10 +809,22 @@ export class GameClient {
     }
 
     if (action.t === 'proposeAccept') {
-      if (state.pendingClaim) return;
+      if (state.gameOver || state.pendingClaim) return;
       if (typeof action.text !== 'string' || !state.tropePool.includes(action.text)) return;
       if (state.acceptedTropes.includes(action.text)) return;
       this._startClaim(fromId, action.text, 'mark');
+      return;
+    }
+
+    if (action.t === 'gameOver') {
+      if (fromId !== this._currentHostId()) return;
+      if (!state.started || state.gameOver || state.pendingClaim) return;
+      state.gameOver = true;
+      this._logActivity('🏁 The game has ended.');
+      this._send({ t: 'gameOverAnnounced' });
+      this.onEvent({ type: 'gameOver' });
+      this._emitState();
+      this._send({ t: 'state', state: this.state });
       return;
     }
 
@@ -684,12 +832,14 @@ export class GameClient {
       if (fromId !== this._currentHostId()) return;
       const targetId = action.targetId;
       if (targetId === fromId || !state.players[targetId]) return;
+      const removedName = state.players[targetId].name;
       delete state.players[targetId];
       state.seatOrder = state.seatOrder.filter((id) => id !== targetId);
       if (state.pendingClaim && state.pendingClaim.byId === targetId) {
         clearTimeout(this.claimTimeout);
         state.pendingClaim = null;
       }
+      this._logActivity(`🚪 ${removedName} was removed from the game.`);
       const newCode = randomCode();
       state.code = newCode;
       this._send({ t: 'migrate', newCode, state });
@@ -756,6 +906,7 @@ export class GameClient {
     const { agree } = this._tally(pc);
     const needed = this._majorityNeeded(pc.totalPlayers);
     const approved = agree >= needed;
+    const wagerFreedIds = [];
 
     if (approved) {
       if (pc.kind === 'replace') {
@@ -768,13 +919,28 @@ export class GameClient {
           const newText = candidates[Math.floor(Math.random() * candidates.length)];
           for (const p of affected) {
             const idx = p.board.indexOf(pc.text);
+            if (p.wagered.includes(idx)) wagerFreedIds.push(p.id);
             p.board[idx] = newText;
             p.wagered = p.wagered.filter((i) => i !== idx);
             p.marked = p.marked.filter((i) => i !== idx);
           }
           if (!this.state.tropePool.includes(newText)) this.state.tropePool.push(newText);
+          this._logActivity(`🔁 "${pc.text}" was swapped out for "${newText}".`);
+        } else {
+          this._logActivity(`🔁 "${pc.text}" was approved to be swapped out, but no replacement was available.`);
         }
         this.state.acceptedTropes = this.state.acceptedTropes.filter((t) => t !== pc.text);
+      } else if (pc.kind === 'wagerChange') {
+        const proposer = this.state.players[pc.byId];
+        if (proposer) {
+          proposer.wagered = proposer.wagered.filter((idx) => !pc.remove.includes(idx));
+          for (const idx of pc.add) {
+            if (proposer.wagered.length >= 5) break;
+            if (proposer.wagered.includes(idx) || proposer.marked.includes(idx)) continue;
+            proposer.wagered.push(idx);
+          }
+          this._logActivity(`🎯 ${proposer.name} updated their wagers.`);
+        }
       } else {
         for (const p of Object.values(this.state.players)) {
           const idx = p.board.indexOf(pc.text);
@@ -788,15 +954,24 @@ export class GameClient {
         }
         if (pc.kind === 'unmark') {
           this.state.acceptedTropes = this.state.acceptedTropes.filter((t) => t !== pc.text);
-        } else if (!this.state.acceptedTropes.includes(pc.text)) {
-          this.state.acceptedTropes.push(pc.text);
+          this._logActivity(`↩️ "${pc.text}" was unmarked.`);
+        } else {
+          if (!this.state.acceptedTropes.includes(pc.text)) {
+            this.state.acceptedTropes.push(pc.text);
+          }
+          if (pc.custom) {
+            if (!this.state.tropePool.includes(pc.text)) this.state.tropePool.push(pc.text);
+            this._logActivity(`📝 "${pc.text}" was added as a new custom trope.`);
+          } else {
+            this._logActivity(`✅ "${pc.text}" was marked as happened.`);
+          }
         }
       }
     }
 
     this.state.pendingClaim = null;
-    const payload = { text: pc.text, kind: pc.kind, approved };
-    this.onEvent({ type: 'claimResolved', ...payload });
+    const payload = { text: pc.text, kind: pc.kind, custom: !!pc.custom, byId: pc.byId, approved, wagerFreedIds };
+    this.onEvent({ type: 'claimResolved', ...payload, wagerFreed: wagerFreedIds.includes(this.myId) });
     this._send({ t: 'resolved', ...payload });
     this._emitState();
     this._send({ t: 'state', state: this.state });

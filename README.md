@@ -1,8 +1,9 @@
-# Movie Trope Bingo
+# Movie/TV Trope Bingo
 
-Jackbox-style multiplayer bingo for movie tropes, spanning Horror, Comedy, Action, Sci-Fi, Fantasy,
-Thriller/Crime, and Romance (a game can mix multiple genres/sub-genres at once). No database and no
-custom backend to maintain — players connect using a 4-character game code, and
+Jackbox-style multiplayer bingo for movie & TV tropes, spanning Horror, Comedy, Action, Sci-Fi,
+Fantasy, Thriller/Crime, Romance, Drama, and Documentary (a game can mix multiple genres/sub-genres
+at once). No database and no custom backend to maintain — players connect using a 4-character
+game code, and
 [Supabase Realtime](https://supabase.com/docs/guides/realtime) is used purely as an ephemeral
 broadcast relay (no tables, nothing persisted). The whole app is a static React site deployable for
 free on GitHub Pages.
@@ -34,9 +35,9 @@ free on GitHub Pages.
 Realtime is enabled by default on new Supabase projects and needs no database tables for this app
 (only ephemeral broadcast + presence are used).
 
-## Movie lookup (optional)
+## Movie/TV lookup (optional)
 
-Hosting a game lets you search for a movie by title and auto-select its genres, using the
+Hosting a game lets you search for a movie or TV show by title and auto-select its genres, using the
 [OMDb API](https://www.omdbapi.com/) (which sources its data from IMDb). This is entirely optional —
 without it, genres/sub-genres are just picked manually via checkboxes.
 

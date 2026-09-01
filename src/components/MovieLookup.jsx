@@ -22,7 +22,7 @@ export default function MovieLookup({ onFound }) {
       const found = await searchMovies(query);
       setResults(found);
     } catch (err) {
-      setError(err.message || 'Could not find that movie.');
+      setError(err.message || 'Could not find that title.');
     } finally {
       setBusy(false);
     }
@@ -39,7 +39,7 @@ export default function MovieLookup({ onFound }) {
       setResults(null);
       onFound(details.genres, subgenres);
     } catch (err) {
-      setError(err.message || 'Could not load that movie.');
+      setError(err.message || 'Could not load that title.');
     } finally {
       setBusy(false);
     }
@@ -54,12 +54,12 @@ export default function MovieLookup({ onFound }) {
 
   return (
     <div className="movie-lookup">
-      <label htmlFor="movie-search">Look up a movie (via IMDb)</label>
+      <label htmlFor="movie-search">Look up a movie or TV show (via IMDb)</label>
       <div className="movie-lookup-row">
         <input
           id="movie-search"
           type="text"
-          placeholder="e.g. Spiral"
+          placeholder="e.g. Spiral or Breaking Bad"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
@@ -83,11 +83,13 @@ export default function MovieLookup({ onFound }) {
                 {m.poster ? (
                   <img src={m.poster} alt="" className="movie-result-poster" />
                 ) : (
-                  <span className="movie-result-poster movie-result-poster-placeholder">🎬</span>
+                  <span className="movie-result-poster movie-result-poster-placeholder">{m.type === 'series' ? '📺' : '🎬'}</span>
                 )}
                 <span className="movie-result-info">
-                  <span className="movie-result-title">{m.title}</span>
-                  <span className="movie-result-year">{m.year}</span>
+                  <span className="movie-result-title">
+                    {m.type === 'series' ? '📺' : '🎬'} {m.title}
+                  </span>
+                  <span className="movie-result-year">{m.year} · {m.type === 'series' ? 'TV Show' : 'Movie'}</span>
                 </span>
               </button>
             </li>
@@ -100,7 +102,7 @@ export default function MovieLookup({ onFound }) {
           <div className="movie-selected-row">
             {selected.poster && <img src={selected.poster} alt="" className="movie-result-poster" />}
             <p className="hint">
-              Picked "{selected.title}" ({selected.year})
+              Picked "{selected.title}" ({selected.year}, {selected.type === 'series' ? 'TV Show' : 'Movie'})
               {selected.director && ` — directed by ${selected.director}`}
               {selected.actors && `, starring ${selected.actors}`}.
               {' '}Genres applied: {selected.genres.length ? selected.genres.join(', ') : 'none matched'}.
@@ -118,7 +120,7 @@ export default function MovieLookup({ onFound }) {
               )}
             </p>
           </div>
-          <button type="button" className="btn" onClick={handleSearchAgain}>Search a different movie</button>
+          <button type="button" className="btn" onClick={handleSearchAgain}>Search a different title</button>
         </div>
       )}
     </div>

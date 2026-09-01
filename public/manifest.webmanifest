@@ -1,0 +1,13 @@
+{
+  "name": "Movie/TV Trope Bingo",
+  "short_name": "Trope Bingo",
+  "description": "A Jackbox-style multiplayer movie & TV trope bingo game.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f1ee",
+  "theme_color": "#8f1e2b",
+  "icons": [
+    { "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

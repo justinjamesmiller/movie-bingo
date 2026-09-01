@@ -1,12 +1,15 @@
 import { GENRES, GENERAL_PERCENT_OPTIONS, DEFAULT_GENERAL_PERCENT } from '../data/tropes.js';
 
-// One "general tropes %" slider per selected genre -- each genre's mix
-// between its own general pool and its own selected sub-genres is
-// independent (e.g. Horror at 30% vs. Comedy at 70%).
-export default function GeneralPercentSliders({ genres, generalPercents, onChange }) {
+// One "general tropes %" slider per selected genre that has at least one
+// sub-genre chosen -- with no sub-genre selected there's nothing to mix
+// against (it's 100% general either way), so the slider is meaningless.
+export default function GeneralPercentSliders({ genres, subgenreSelections, generalPercents, onChange }) {
+  const genresWithSubgenres = genres.filter((genreId) =>
+    subgenreSelections.some((s) => s.genre === genreId)
+  );
   return (
     <>
-      {genres.map((genreId) => {
+      {genresWithSubgenres.map((genreId) => {
         const label = GENRES.find((g) => g.id === genreId)?.label || genreId;
         const value = generalPercents[genreId] ?? DEFAULT_GENERAL_PERCENT;
         const inputId = `general-percent-${genreId}`;

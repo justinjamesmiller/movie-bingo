@@ -7,6 +7,7 @@ import PlayersPanel from './components/PlayersPanel.jsx';
 import BingoBoard from './components/BingoBoard.jsx';
 import ClaimModal from './components/ClaimModal.jsx';
 import ResetModal from './components/ResetModal.jsx';
+import AcceptedTropesModal from './components/AcceptedTropesModal.jsx';
 
 const MAX_WAGERS = 5;
 
@@ -19,6 +20,7 @@ function App() {
   const [myId, setMyId] = useState(null);
   const [toast, setToast] = useState('');
   const [resetModalOpen, setResetModalOpen] = useState(false);
+  const [tropesModalOpen, setTropesModalOpen] = useState(false);
   const [theme, setTheme] = useState(
     localStorage.getItem('bingo-theme') ||
       (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
@@ -136,6 +138,14 @@ function App() {
     clientRef.current.resetGame(subgenre, freeSpace);
   }
 
+  function handleChallenge(text) {
+    const confirmed = window.confirm(`Challenge "${text}"? This asks the group to vote on undoing it.`);
+    if (confirmed) {
+      clientRef.current.challengeTrope(text);
+      setTropesModalOpen(false);
+    }
+  }
+
   if (screen === 'landing' || !gameState) {
     return (
       <>
@@ -175,6 +185,11 @@ function App() {
             {!gameState.started && isHost && (
               <button className="btn primary" onClick={() => clientRef.current.startGame()}>
                 Start Game
+              </button>
+            )}
+            {gameState.started && (
+              <button className="btn" onClick={() => setTropesModalOpen(true)}>
+                Accepted Tropes ({gameState.acceptedTropes.length})
               </button>
             )}
             {isHost && (
@@ -221,6 +236,14 @@ function App() {
           currentFreeSpace={gameState.freeSpace}
           onConfirm={handleConfirmReset}
           onCancel={() => setResetModalOpen(false)}
+        />
+      )}
+
+      {tropesModalOpen && (
+        <AcceptedTropesModal
+          acceptedTropes={gameState.acceptedTropes}
+          onChallenge={handleChallenge}
+          onClose={() => setTropesModalOpen(false)}
         />
       )}
 

@@ -100,6 +100,10 @@ export class GameClient {
     this._dispatch({ t: 'claim', index });
   }
 
+  challengeTrope(text) {
+    this._dispatch({ t: 'challenge', text });
+  }
+
   vote(claimId, agree) {
     this._dispatch({ t: 'vote', claimId, agree });
   }
@@ -223,6 +227,7 @@ export class GameClient {
       seatOrder: [this.myId],
       started: false,
       pendingClaim: null,
+      acceptedTropes: [],
     };
   }
 
@@ -278,7 +283,14 @@ export class GameClient {
       if (!Number.isInteger(index) || index < 0 || index >= 25) return;
       if (state.freeSpace && index === CENTER_INDEX) return;
       const kind = player.marked.includes(index) ? 'unmark' : 'mark';
-      this._startClaim(fromId, index, kind);
+      this._startClaim(fromId, player.board[index], kind);
+      return;
+    }
+
+    if (action.t === 'challenge') {
+      if (!state.started || state.pendingClaim) return;
+      if (typeof action.text !== 'string' || !state.acceptedTropes.includes(action.text)) return;
+      this._startClaim(fromId, action.text, 'unmark');
       return;
     }
 
@@ -315,6 +327,7 @@ export class GameClient {
       }
       state.started = false;
       state.pendingClaim = null;
+      state.acceptedTropes = [];
       this.onEvent({ type: 'gameReset' });
       this._send({ t: 'gameReset' });
       this._emitState();
@@ -327,10 +340,8 @@ export class GameClient {
     return Object.values(this.state.players).filter((p) => p.connected).length;
   }
 
-  _startClaim(fromId, index, kind) {
+  _startClaim(fromId, text, kind) {
     const state = this.state;
-    const claimant = state.players[fromId];
-    const text = claimant.board[index];
     const claimId = `${state.code}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     state.pendingClaim = {
       claimId,
@@ -391,6 +402,11 @@ export class GameClient {
         } else if (!p.marked.includes(idx)) {
           p.marked.push(idx);
         }
+      }
+      if (pc.kind === 'unmark') {
+        this.state.acceptedTropes = this.state.acceptedTropes.filter((t) => t !== pc.text);
+      } else if (!this.state.acceptedTropes.includes(pc.text)) {
+        this.state.acceptedTropes.push(pc.text);
       }
     }
 

@@ -347,9 +347,33 @@ input[type="text"], select {
 .btn.disagree { background: var(--danger); color: #fff; }
 .cancel-claim-btn { margin: 0.75rem 0; }
 
+.challenge-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0 1rem;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.challenge-list li {
+  margin-bottom: 0.4rem;
+}
+
+.btn.challenge-item {
+  width: 100%;
+  text-align: left;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.btn.challenge-item:hover {
+  border-color: var(--accent);
+}
+
 .toast {
   position: fixed;
-  bottom: 1.5rem;
+  top: 1.5rem;
   left: 50%;
   transform: translateX(-50%);
   background: var(--surface);
@@ -359,6 +383,8 @@ input[type="text"], select {
   border-radius: 8px;
   box-shadow: var(--shadow);
   z-index: 30;
+  max-width: 90vw;
+  text-align: center;
 }
 
 @media (max-width: 600px) {

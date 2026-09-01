@@ -2,7 +2,18 @@ import { useEffect, useRef, useState } from 'react';
 import { CENTER_INDEX } from '../data/tropes.js';
 import { useLongPress } from '../hooks/useLongPress.js';
 
-function BingoCell({ index, text, isFreeSpace, wagered, marked, pending, flash, onLine, onCellClick, onCellLongPress }) {
+function BingoCell({
+  index,
+  text,
+  isFreeSpace,
+  wagered,
+  marked,
+  pending,
+  flash,
+  onLine,
+  onCellClick,
+  onCellLongPress,
+}) {
   const longPress = useLongPress(
     () => !isFreeSpace && onCellLongPress(index),
     () => onCellClick(index),
@@ -21,7 +32,16 @@ function BingoCell({ index, text, isFreeSpace, wagered, marked, pending, flash, 
   );
 }
 
-export default function BingoBoard({ board, wagered, marked, freeSpace, pending, highlightedCells, onCellClick, onCellLongPress }) {
+export default function BingoBoard({
+  board,
+  wagered,
+  marked,
+  freeSpace,
+  pending,
+  highlightedCells,
+  onCellClick,
+  onCellLongPress,
+}) {
   const prevMarkedRef = useRef(marked);
   const [flashSet, setFlashSet] = useState(new Set());
 
@@ -55,4 +75,3 @@ export default function BingoBoard({ board, wagered, marked, freeSpace, pending,
     </div>
   );
 }
-

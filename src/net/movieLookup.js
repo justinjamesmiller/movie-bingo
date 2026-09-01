@@ -29,7 +29,10 @@ export function isMovieLookupAvailable() {
 }
 
 function mapGenres(genreString) {
-  const omdbGenres = (genreString || '').split(',').map((g) => g.trim()).filter(Boolean);
+  const omdbGenres = (genreString || '')
+    .split(',')
+    .map((g) => g.trim())
+    .filter(Boolean);
   const genres = [];
   const unmapped = [];
   for (const g of omdbGenres) {
@@ -67,15 +70,13 @@ export async function searchMovies(title) {
   const data = await omdbFetch(`s=${encodeURIComponent(trimmed)}`);
   if (data.Response === 'False') throw new Error(data.Error || 'Nothing found with that title.');
 
-  return data.Search
-    .filter((m) => m.Type === 'movie' || m.Type === 'series')
-    .map((m) => ({
-      imdbID: m.imdbID,
-      title: m.Title,
-      year: m.Year,
-      type: m.Type,
-      poster: m.Poster && m.Poster !== 'N/A' ? m.Poster : null,
-    }));
+  return data.Search.filter((m) => m.Type === 'movie' || m.Type === 'series').map((m) => ({
+    imdbID: m.imdbID,
+    title: m.Title,
+    year: m.Year,
+    type: m.Type,
+    poster: m.Poster && m.Poster !== 'N/A' ? m.Poster : null,
+  }));
 }
 
 // Fetches full details for one title by IMDb id (from searchMovies) --

@@ -83,13 +83,17 @@ export default function MovieLookup({ onFound }) {
                 {m.poster ? (
                   <img src={m.poster} alt="" className="movie-result-poster" />
                 ) : (
-                  <span className="movie-result-poster movie-result-poster-placeholder">{m.type === 'series' ? '📺' : '🎬'}</span>
+                  <span className="movie-result-poster movie-result-poster-placeholder">
+                    {m.type === 'series' ? '📺' : '🎬'}
+                  </span>
                 )}
                 <span className="movie-result-info">
                   <span className="movie-result-title">
                     {m.type === 'series' ? '📺' : '🎬'} {m.title}
                   </span>
-                  <span className="movie-result-year">{m.year} · {m.type === 'series' ? 'TV Show' : 'Movie'}</span>
+                  <span className="movie-result-year">
+                    {m.year} · {m.type === 'series' ? 'TV Show' : 'Movie'}
+                  </span>
                 </span>
               </button>
             </li>
@@ -104,23 +108,29 @@ export default function MovieLookup({ onFound }) {
             <p className="hint">
               Picked "{selected.title}" ({selected.year}, {selected.type === 'series' ? 'TV Show' : 'Movie'})
               {selected.director && ` — directed by ${selected.director}`}
-              {selected.actors && `, starring ${selected.actors}`}.
-              {' '}Genres applied: {selected.genres.length ? selected.genres.join(', ') : 'none matched'}.
+              {selected.actors && `, starring ${selected.actors}`}. Genres applied:{' '}
+              {selected.genres.length ? selected.genres.join(', ') : 'none matched'}.
               {selected.unmapped.length > 0 && ` Not supported yet: ${selected.unmapped.join(', ')}.`}
               {suggestedSubgenres.length > 0 ? (
                 <>
-                  {' '}Sub-genres suggested via Wikidata:{' '}
+                  {' '}
+                  Sub-genres suggested via Wikidata:{' '}
                   {suggestedSubgenres
-                    .map((s) => (SUBGENRES_BY_GENRE[s.genre] || []).find((sg) => sg.id === s.subgenre)?.label || s.subgenre)
-                    .join(', ')}
-                  {' '}(already checked below — feel free to adjust).
+                    .map(
+                      (s) =>
+                        (SUBGENRES_BY_GENRE[s.genre] || []).find((sg) => sg.id === s.subgenre)?.label || s.subgenre,
+                    )
+                    .join(', ')}{' '}
+                  (already checked below — feel free to adjust).
                 </>
               ) : (
                 " No specific sub-genres recognized, so each genre defaults to 'general' — pick specific ones below if you want."
               )}
             </p>
           </div>
-          <button type="button" className="btn" onClick={handleSearchAgain}>Search a different title</button>
+          <button type="button" className="btn" onClick={handleSearchAgain}>
+            Search a different title
+          </button>
         </div>
       )}
     </div>

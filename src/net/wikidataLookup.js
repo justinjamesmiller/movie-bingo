@@ -17,7 +17,11 @@ export function isWikidataLookupAvailable() {
 // label for the film (already lowercased), suggest that {genre, subgenre}.
 const LABEL_SUBGENRE_MAP = [
   { match: ['slasher'], genre: 'horror', subgenre: 'slasher' },
-  { match: ['haunted house', 'haunting', 'possession', 'exorcism', 'supernatural', 'ghost', 'seance'], genre: 'horror', subgenre: 'supernatural' },
+  {
+    match: ['haunted house', 'haunting', 'possession', 'exorcism', 'supernatural', 'ghost', 'seance'],
+    genre: 'horror',
+    subgenre: 'supernatural',
+  },
   { match: ['zombie', 'undead', 'outbreak', 'infection'], genre: 'horror', subgenre: 'zombie' },
   { match: ['found footage'], genre: 'horror', subgenre: 'found-footage' },
   { match: ['psychological horror', 'psychological thriller'], genre: 'horror', subgenre: 'psychological' },
@@ -30,7 +34,11 @@ const LABEL_SUBGENRE_MAP = [
   { match: ['dystopia', 'dystopian', 'post-apocalyptic'], genre: 'sci-fi', subgenre: 'dystopian' },
   { match: ['sword and sorcery', 'high fantasy', 'epic fantasy'], genre: 'fantasy', subgenre: 'epic-fantasy' },
   { match: ['fairy tale', 'fable'], genre: 'fantasy', subgenre: 'fairy-tale' },
-  { match: ['whodunit', 'murder mystery', 'detective fiction', 'mystery film'], genre: 'thriller', subgenre: 'mystery-whodunit' },
+  {
+    match: ['whodunit', 'murder mystery', 'detective fiction', 'mystery film'],
+    genre: 'thriller',
+    subgenre: 'mystery-whodunit',
+  },
   { match: ['film noir', 'neo-noir'], genre: 'thriller', subgenre: 'noir-crime' },
   { match: ['romantic comedy'], genre: 'comedy', subgenre: 'rom-com' },
   { match: ['parody', 'spoof', 'mockumentary'], genre: 'comedy', subgenre: 'spoof-parody' },

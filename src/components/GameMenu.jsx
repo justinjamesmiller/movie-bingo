@@ -46,8 +46,12 @@ export default function GameMenu({
               <div className="code-display">Sub-genres: {subgenreLabels}</div>
               <div className="code-display">General mix: {generalMixLabels}</div>
               <div className="game-menu-copy-row">
-                <button className="btn" onClick={() => pick(onCopyCode)}>📋 Copy Code</button>
-                <button className="btn" onClick={() => pick(onCopyInviteLink)}>🔗 Copy Invite Link</button>
+                <button className="btn" onClick={() => pick(onCopyCode)}>
+                  📋 Copy Code
+                </button>
+                <button className="btn" onClick={() => pick(onCopyInviteLink)}>
+                  🔗 Copy Invite Link
+                </button>
               </div>
             </div>
             <div className="game-menu-actions">

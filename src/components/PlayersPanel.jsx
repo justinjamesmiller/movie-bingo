@@ -9,10 +9,13 @@ export default function PlayersPanel({ players, hostId, myId, isHost, wagerCount
           return (
             <li key={p.id}>
               <div className="player-row">
-                <span>{p.avatar ? `${p.avatar} ` : ''}{p.name}{!p.connected ? ' (disconnected)' : ''}</span>
                 <span>
-                  {p.id === hostId && <span className="tag">HOST</span>}
-                  {' '}
+                  {p.avatar ? `${p.avatar} ` : ''}
+                  {p.name}
+                  {!p.connected ? ' (disconnected)' : ''}
+                </span>
+                <span>
+                  {p.id === hostId && <span className="tag">HOST</span>}{' '}
                   {wagerLocked && <span className="tag">READY</span>}
                   {isHost && p.id !== myId && (
                     <button className="btn disagree kick-btn" onClick={() => onKick(p.id, p.name)}>
@@ -31,10 +34,12 @@ export default function PlayersPanel({ players, hostId, myId, isHost, wagerCount
       {!started && (
         <>
           <p className="hint">
-            Pick 5 spaces to <strong>wager</strong> — you think these
-            tropes are extra likely to happen. Wagers lock once the game starts.
+            Pick 5 spaces to <strong>wager</strong> — you think these tropes are extra likely to happen. Wagers lock
+            once the game starts.
           </p>
-          <p className="hint">Wagered: {wagerCount} / {maxWagers}</p>
+          <p className="hint">
+            Wagered: {wagerCount} / {maxWagers}
+          </p>
         </>
       )}
     </aside>

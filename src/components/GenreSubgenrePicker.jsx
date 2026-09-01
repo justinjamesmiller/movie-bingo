@@ -7,7 +7,9 @@ export default function GenreSubgenrePicker({ genres, subgenreSelections, onChan
   function toggleGenre(id) {
     const nextGenres = genres.includes(id) ? genres.filter((g) => g !== id) : [...genres, id];
     if (nextGenres.length === 0) return; // always keep at least one genre selected
-    const nextSelections = nextGenres.includes(id) ? subgenreSelections : subgenreSelections.filter((s) => s.genre !== id);
+    const nextSelections = nextGenres.includes(id)
+      ? subgenreSelections
+      : subgenreSelections.filter((s) => s.genre !== id);
     onChange(nextGenres, nextSelections);
   }
 
@@ -35,16 +37,18 @@ export default function GenreSubgenrePicker({ genres, subgenreSelections, onChan
         {genres.map((gid) => (
           <div key={gid} className="subgenre-group">
             <div className="subgenre-group-label">{GENRES.find((g) => g.id === gid)?.label}</div>
-            {SUBGENRES_BY_GENRE[gid].filter((s) => s.id !== 'general').map((sg) => (
-              <label key={sg.id} className="checkbox-label inline">
-                <input
-                  type="checkbox"
-                  checked={subgenreSelections.some((s) => s.genre === gid && s.subgenre === sg.id)}
-                  onChange={() => toggleSubgenre(gid, sg.id)}
-                />
-                {sg.label}
-              </label>
-            ))}
+            {SUBGENRES_BY_GENRE[gid]
+              .filter((s) => s.id !== 'general')
+              .map((sg) => (
+                <label key={sg.id} className="checkbox-label inline">
+                  <input
+                    type="checkbox"
+                    checked={subgenreSelections.some((s) => s.genre === gid && s.subgenre === sg.id)}
+                    onChange={() => toggleSubgenre(gid, sg.id)}
+                  />
+                  {sg.label}
+                </label>
+              ))}
           </div>
         ))}
       </div>

@@ -18,7 +18,8 @@ export default function GameOverModal({ players, onClose }) {
           {withStats.map((p) => (
             <li key={p.id} className="recap-player">
               <div className="recap-player-name">
-                {p.avatar ? `${p.avatar} ` : ''}{p.name}
+                {p.avatar ? `${p.avatar} ` : ''}
+                {p.name}
                 {topMarked > 0 && p.markedCount === topMarked && ' 🏆'}
                 {topWagered > 0 && p.wageredHit === topWagered && ' 🎯'}
               </div>
@@ -29,7 +30,9 @@ export default function GameOverModal({ players, onClose }) {
           ))}
         </ul>
         <p className="hint">🏆 most tropes marked · 🎯 most wagers hit</p>
-        <button className="btn cancel-claim-btn" onClick={onClose}>Close</button>
+        <button className="btn cancel-claim-btn" onClick={onClose}>
+          Close
+        </button>
       </div>
     </div>
   );

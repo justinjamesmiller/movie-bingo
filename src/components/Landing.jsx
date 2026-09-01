@@ -48,7 +48,15 @@ export default function Landing({ onHost, onJoin, error, busy, savedSession, onR
       return;
     }
     setLocalError('');
-    onHost(name, hostGenres, hostSubgenreSelections, hostFreeSpace, hostGeneralPercents, hostTotalTropes, hostCustomTropes);
+    onHost(
+      name,
+      hostGenres,
+      hostSubgenreSelections,
+      hostFreeSpace,
+      hostGeneralPercents,
+      hostTotalTropes,
+      hostCustomTropes,
+    );
   }
 
   function handleJoinClick() {
@@ -67,8 +75,8 @@ export default function Landing({ onHost, onJoin, error, busy, savedSession, onR
         <div className="card rejoin-card">
           <h2>Reconnect</h2>
           <p className="hint">
-            You were previously in game <strong>{savedSession.code}</strong> as {savedSession.name}.
-            If you got disconnected (e.g. as the host), you can reconnect to the same seat.
+            You were previously in game <strong>{savedSession.code}</strong> as {savedSession.name}. If you got
+            disconnected (e.g. as the host), you can reconnect to the same seat.
           </p>
           <button className="btn primary" disabled={busy} onClick={onRejoin}>
             Reconnect to {savedSession.code}
@@ -93,11 +101,7 @@ export default function Landing({ onHost, onJoin, error, busy, savedSession, onR
           onChange={handleGenreSubgenreChange}
         />
         <label className="checkbox-label">
-          <input
-            type="checkbox"
-            checked={hostFreeSpace}
-            onChange={(e) => setHostFreeSpace(e.target.checked)}
-          />
+          <input type="checkbox" checked={hostFreeSpace} onChange={(e) => setHostFreeSpace(e.target.checked)} />
           Free center space
         </label>
         <GeneralPercentSliders
@@ -113,7 +117,9 @@ export default function Landing({ onHost, onJoin, error, busy, savedSession, onR
           onChange={(e) => setHostTotalTropes(Number(e.target.value))}
         >
           {TOTAL_TROPES_OPTIONS.map((n) => (
-            <option key={n} value={n}>{n}</option>
+            <option key={n} value={n}>
+              {n}
+            </option>
           ))}
         </select>
         <CustomTropesEditor customTropes={hostCustomTropes} onChange={setHostCustomTropes} />

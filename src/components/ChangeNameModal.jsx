@@ -33,8 +33,12 @@ export default function ChangeNameModal({ currentName, currentAvatar, onConfirm,
           ))}
         </div>
         <div className="claim-vote-buttons cancel-claim-btn">
-          <button className="btn agree" disabled={!trimmed} onClick={() => onConfirm(trimmed, avatar)}>Save</button>
-          <button className="btn" onClick={onCancel}>Cancel</button>
+          <button className="btn agree" disabled={!trimmed} onClick={() => onConfirm(trimmed, avatar)}>
+            Save
+          </button>
+          <button className="btn" onClick={onCancel}>
+            Cancel
+          </button>
         </div>
       </div>
     </div>

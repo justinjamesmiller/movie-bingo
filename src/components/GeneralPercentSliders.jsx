@@ -4,9 +4,7 @@ import { GENRES, GENERAL_PERCENT_OPTIONS, DEFAULT_GENERAL_PERCENT } from '../dat
 // sub-genre chosen -- with no sub-genre selected there's nothing to mix
 // against (it's 100% general either way), so the slider is meaningless.
 export default function GeneralPercentSliders({ genres, subgenreSelections, generalPercents, onChange }) {
-  const genresWithSubgenres = genres.filter((genreId) =>
-    subgenreSelections.some((s) => s.genre === genreId)
-  );
+  const genresWithSubgenres = genres.filter((genreId) => subgenreSelections.some((s) => s.genre === genreId));
   return (
     <>
       {genresWithSubgenres.map((genreId) => {
@@ -15,7 +13,9 @@ export default function GeneralPercentSliders({ genres, subgenreSelections, gene
         const inputId = `general-percent-${genreId}`;
         return (
           <div key={genreId}>
-            <label htmlFor={inputId}>{label} general tropes: {value}%</label>
+            <label htmlFor={inputId}>
+              {label} general tropes: {value}%
+            </label>
             <input
               id={inputId}
               type="range"

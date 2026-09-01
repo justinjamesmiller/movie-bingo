@@ -9,7 +9,11 @@ export default function AllWagersModal({ players, acceptedTropes, onClose }) {
           <ul className="wager-list">
             {players.map((p) => (
               <li key={p.id} className="wager-player">
-                <div className="wager-player-name">{p.avatar ? `${p.avatar} ` : ''}{p.name}{!p.connected ? ' (disconnected)' : ''}</div>
+                <div className="wager-player-name">
+                  {p.avatar ? `${p.avatar} ` : ''}
+                  {p.name}
+                  {!p.connected ? ' (disconnected)' : ''}
+                </div>
                 {p.wagered.length === 0 ? (
                   <p className="hint">No wagers.</p>
                 ) : (
@@ -29,7 +33,9 @@ export default function AllWagersModal({ players, acceptedTropes, onClose }) {
             ))}
           </ul>
         )}
-        <button className="btn cancel-claim-btn" onClick={onClose}>Close</button>
+        <button className="btn cancel-claim-btn" onClick={onClose}>
+          Close
+        </button>
       </div>
     </div>
   );

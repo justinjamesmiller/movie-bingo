@@ -2,8 +2,23 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { GameClient } from './net/relay.js';
 import { GENRES, SUBGENRES_BY_GENRE, CENTER_INDEX } from './data/tropes.js';
 import { getCompletedLines, getCompletedLineCells } from './utils/bingoLines.js';
-import { isSoundMuted, setSoundMuted, playNewClaimSound, playApprovedSound, playDeniedSound, playBingoSound, playGameOverSound, playPersonalMarkSound } from './utils/sound.js';
-import { isVibrationMuted, setVibrationMuted, vibrate, VIBRATE_PATTERN_MARK, VIBRATE_PATTERN_BINGO } from './utils/haptics.js';
+import {
+  isSoundMuted,
+  setSoundMuted,
+  playNewClaimSound,
+  playApprovedSound,
+  playDeniedSound,
+  playBingoSound,
+  playGameOverSound,
+  playPersonalMarkSound,
+} from './utils/sound.js';
+import {
+  isVibrationMuted,
+  setVibrationMuted,
+  vibrate,
+  VIBRATE_PATTERN_MARK,
+  VIBRATE_PATTERN_BINGO,
+} from './utils/haptics.js';
 import ThemeToggle from './components/ThemeToggle.jsx';
 import Landing from './components/Landing.jsx';
 import PlayersPanel from './components/PlayersPanel.jsx';
@@ -23,6 +38,8 @@ import ConfirmModal from './components/ConfirmModal.jsx';
 import ProposeReplaceModal from './components/ProposeReplaceModal.jsx';
 import ManageWagersModal from './components/ManageWagersModal.jsx';
 import JoinChoiceModal from './components/JoinChoiceModal.jsx';
+import JoinPendingModal from './components/JoinPendingModal.jsx';
+import JoinRequestModal from './components/JoinRequestModal.jsx';
 import KickConfirmModal from './components/KickConfirmModal.jsx';
 import ChangeNameModal from './components/ChangeNameModal.jsx';
 import HelpModal from './components/HelpModal.jsx';
@@ -47,6 +64,7 @@ function App() {
   const [focusMode, setFocusMode] = useState(false);
   const [savedSession, setSavedSession] = useState(() => GameClient.getSavedSession());
   const [joinChoice, setJoinChoice] = useState(null);
+  const [joinApprovalPending, setJoinApprovalPending] = useState(false);
   const [kickTarget, setKickTarget] = useState(null);
   const [changeNameModalOpen, setChangeNameModalOpen] = useState(false);
   const [helpModalOpen, setHelpModalOpen] = useState(false);
@@ -84,8 +102,12 @@ function App() {
   }, []);
 
   useEffect(() => {
-    function handleOffline() { setBrowserOffline(true); }
-    function handleOnline() { setBrowserOffline(false); }
+    function handleOffline() {
+      setBrowserOffline(true);
+    }
+    function handleOnline() {
+      setBrowserOffline(false);
+    }
     window.addEventListener('offline', handleOffline);
     window.addEventListener('online', handleOnline);
     return () => {
@@ -232,7 +254,11 @@ function App() {
             }
           } else {
             playDeniedSound();
-            showToast(wagerChange ? '❌ The proposed wager changes did not reach majority agreement.' : `❌ "${evt.text}" did not reach majority agreement.`);
+            showToast(
+              wagerChange
+                ? '❌ The proposed wager changes did not reach majority agreement.'
+                : `❌ "${evt.text}" did not reach majority agreement.`,
+            );
           }
         } else if (evt.type === 'reaction') {
           const state = gameStateRef.current;
@@ -261,6 +287,14 @@ function App() {
           setConnectionStatus(evt.status);
         } else if (evt.type === 'codeChanged') {
           showToast('A player was removed — the game code was rotated for security.');
+        } else if (evt.type === 'joinApproved') {
+          setJoinApprovalPending(false);
+          setScreen('game');
+        } else if (evt.type === 'joinDenied') {
+          clientRef.current = null;
+          setJoinApprovalPending(false);
+          setError(evt.reason || 'The host declined your request to join.');
+          setConnectionStatus('connected');
         } else if (evt.type === 'kicked') {
           clientRef.current = null;
           setScreen('landing');
@@ -302,6 +336,8 @@ function App() {
       const result = await client.joinGame(code, name);
       if (result.needsChoice) {
         setJoinChoice({ name: result.name, options: result.options, allowNew: result.allowNew });
+      } else if (result.needsApproval) {
+        setJoinApprovalPending(true);
       } else {
         setScreen('game');
       }
@@ -332,9 +368,13 @@ function App() {
     setError('');
     setBusy(true);
     try {
-      await clientRef.current.confirmNewJoin(joinChoice.name);
+      const result = await clientRef.current.confirmNewJoin(joinChoice.name);
       setJoinChoice(null);
-      setScreen('game');
+      if (result.needsApproval) {
+        setJoinApprovalPending(true);
+      } else {
+        setScreen('game');
+      }
     } catch (err) {
       setError(err.message || 'Could not join that game.');
       setJoinChoice(null);
@@ -348,6 +388,14 @@ function App() {
     clientRef.current?.destroy();
     clientRef.current = null;
     setJoinChoice(null);
+    setConnectionStatus('connected');
+  }
+
+  function handleCancelJoinApproval() {
+    clientRef.current?.destroy();
+    clientRef.current = null;
+    setJoinApprovalPending(false);
+    setConnectionStatus('connected');
   }
 
   async function handleRejoin() {
@@ -464,6 +512,18 @@ function App() {
     setKickTarget(null);
   }
 
+  function handleApproveJoin() {
+    clientRef.current.approveJoinRequest();
+  }
+
+  function handleDenyJoin() {
+    clientRef.current.denyJoinRequest(false);
+  }
+
+  function handleDenyAndRotateJoin() {
+    clientRef.current.denyJoinRequest(true);
+  }
+
   function handleConfirmChangeName(name, avatar) {
     clientRef.current.changeName(name);
     clientRef.current.changeAvatar(avatar);
@@ -492,10 +552,16 @@ function App() {
             <button className="btn" onClick={toggleSoundMuted} aria-label={soundMuted ? 'Unmute sound' : 'Mute sound'}>
               {soundMuted ? '🔇' : '🔊'}
             </button>
-            <button className="btn" onClick={toggleVibrationMuted} aria-label={vibrationMuted ? 'Unmute vibration' : 'Mute vibration'}>
+            <button
+              className="btn"
+              onClick={toggleVibrationMuted}
+              aria-label={vibrationMuted ? 'Unmute vibration' : 'Mute vibration'}
+            >
               {vibrationMuted ? '📴' : '📳'}
             </button>
-            <button className="btn" onClick={() => setHelpModalOpen(true)}>❓ Help</button>
+            <button className="btn" onClick={() => setHelpModalOpen(true)}>
+              ❓ Help
+            </button>
             <ThemeToggle theme={theme} onToggle={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
           </div>
         </header>
@@ -520,6 +586,7 @@ function App() {
             onCancel={handleCancelJoinChoice}
           />
         )}
+        {joinApprovalPending && <JoinPendingModal onCancel={handleCancelJoinApproval} />}
         {helpModalOpen && <HelpModal onClose={() => setHelpModalOpen(false)} />}
       </>
     );
@@ -552,10 +619,16 @@ function App() {
             <button className="btn" onClick={toggleSoundMuted} aria-label={soundMuted ? 'Unmute sound' : 'Mute sound'}>
               {soundMuted ? '🔇' : '🔊'}
             </button>
-            <button className="btn" onClick={toggleVibrationMuted} aria-label={vibrationMuted ? 'Unmute vibration' : 'Mute vibration'}>
+            <button
+              className="btn"
+              onClick={toggleVibrationMuted}
+              aria-label={vibrationMuted ? 'Unmute vibration' : 'Mute vibration'}
+            >
               {vibrationMuted ? '📴' : '📳'}
             </button>
-            <button className="btn" onClick={() => setHelpModalOpen(true)}>❓ Help</button>
+            <button className="btn" onClick={() => setHelpModalOpen(true)}>
+              ❓ Help
+            </button>
             <ThemeToggle theme={theme} onToggle={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
           </div>
         </header>
@@ -611,9 +684,7 @@ function App() {
             </div>
           )}
 
-          {!focusMode && gameState.started && (
-            <ReactionBar onReact={handleSendReaction} />
-          )}
+          {!focusMode && gameState.started && <ReactionBar onReact={handleSendReaction} />}
 
           <div className="game-layout">
             {!focusMode && (
@@ -721,6 +792,15 @@ function App() {
         />
       )}
 
+      {isHost && gameState.pendingJoinRequest && (
+        <JoinRequestModal
+          name={gameState.pendingJoinRequest.name}
+          onApprove={handleApproveJoin}
+          onDeny={handleDenyJoin}
+          onDenyAndRotate={handleDenyAndRotateJoin}
+        />
+      )}
+
       {changeNameModalOpen && (
         <ChangeNameModal
           currentName={me.name}
@@ -731,18 +811,10 @@ function App() {
       )}
 
       {activityFeedOpen && (
-        <ActivityFeedModal
-          activityLog={gameState.activityLog || []}
-          onClose={() => setActivityFeedOpen(false)}
-        />
+        <ActivityFeedModal activityLog={gameState.activityLog || []} onClose={() => setActivityFeedOpen(false)} />
       )}
 
-      {gameOverModalOpen && (
-        <GameOverModal
-          players={players}
-          onClose={() => setGameOverModalOpen(false)}
-        />
-      )}
+      {gameOverModalOpen && <GameOverModal players={players} onClose={() => setGameOverModalOpen(false)} />}
 
       {leaveConfirmOpen && (
         <ConfirmModal
@@ -765,10 +837,7 @@ function App() {
       )}
 
       {customTropeModalOpen && (
-        <CustomTropeModal
-          onSubmit={handleSubmitCustomTrope}
-          onCancel={() => setCustomTropeModalOpen(false)}
-        />
+        <CustomTropeModal onSubmit={handleSubmitCustomTrope} onCancel={() => setCustomTropeModalOpen(false)} />
       )}
 
       {helpModalOpen && <HelpModal onClose={() => setHelpModalOpen(false)} />}

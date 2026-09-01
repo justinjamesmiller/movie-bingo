@@ -13,8 +13,8 @@ export default function CustomTropeModal({ onSubmit, onCancel }) {
       <div className="modal-content">
         <h3>📝 Submit a Custom Trope</h3>
         <p className="hint">
-          Not covered by the board? Type it in — the group votes on approving it just like any other
-          claim, and it's added to the trope pool if approved.
+          Not covered by the board? Type it in — the group votes on approving it just like any other claim, and it's
+          added to the trope pool if approved.
         </p>
         <label htmlFor="custom-trope-input">Trope description</label>
         <input
@@ -26,12 +26,16 @@ export default function CustomTropeModal({ onSubmit, onCancel }) {
           value={text}
           onChange={(e) => setText(e.target.value)}
         />
-        <p className="hint">{trimmed.length} / {MAX_LENGTH}</p>
+        <p className="hint">
+          {trimmed.length} / {MAX_LENGTH}
+        </p>
         <div className="claim-vote-buttons cancel-claim-btn">
           <button className="btn agree" disabled={!trimmed} onClick={() => onSubmit(trimmed)}>
             Submit for approval
           </button>
-          <button className="btn" onClick={onCancel}>Cancel</button>
+          <button className="btn" onClick={onCancel}>
+            Cancel
+          </button>
         </div>
       </div>
     </div>

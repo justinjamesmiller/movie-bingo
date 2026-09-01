@@ -22,7 +22,9 @@ export default function ActivityFeedModal({ activityLog, onClose }) {
             ))}
           </ul>
         )}
-        <button className="btn cancel-claim-btn" onClick={onClose}>Close</button>
+        <button className="btn cancel-claim-btn" onClick={onClose}>
+          Close
+        </button>
       </div>
     </div>
   );

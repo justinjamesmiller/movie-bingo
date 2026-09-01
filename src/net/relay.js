@@ -45,6 +45,15 @@ function defaultAvatarForSeat(seat) {
   return AVATAR_OPTIONS[seat % AVATAR_OPTIONS.length];
 }
 
+// Pre-marks any board spaces that match tropes already accepted before this
+// board was dealt (e.g. a player joining mid-game) so they don't have to
+// re-claim something the group already confirmed happened.
+function markAlreadyAcceptedTropes(board, marked, acceptedTropes) {
+  board.forEach((text, index) => {
+    if (acceptedTropes.includes(text) && !marked.includes(index)) marked.push(index);
+  });
+}
+
 // Sanitizes a list of free-text custom trope submissions (host/reset-time):
 // trims, drops blanks, caps length, dedupes, caps total count.
 function sanitizeCustomTropes(customTropes) {
@@ -61,7 +70,6 @@ function sanitizeCustomTropes(customTropes) {
   return safe;
 }
 
-
 // Sanitizes a host/reset genre + sub-genre selection: `genres` is an array of
 // genre ids (at least one, deduped, falls back to the default genre if none
 // are valid); `subgenreSelections` is an array of `{genre, subgenre}` pairs
@@ -75,7 +83,8 @@ function sanitizeGenreSelection(genres, subgenreSelections) {
   const seen = new Set();
   const safeSelections = (Array.isArray(subgenreSelections) ? subgenreSelections : []).filter((s) => {
     if (!s || typeof s.genre !== 'string' || typeof s.subgenre !== 'string') return false;
-    if (s.subgenre === 'general' || !safeGenres.includes(s.genre) || !isValidSubgenre(s.genre, s.subgenre)) return false;
+    if (s.subgenre === 'general' || !safeGenres.includes(s.genre) || !isValidSubgenre(s.genre, s.subgenre))
+      return false;
     const key = `${s.genre}::${s.subgenre}`;
     if (seen.has(key)) return false;
     seen.add(key);
@@ -108,9 +117,7 @@ function randomId() {
 export class GameClient {
   constructor({ onState, onEvent } = {}) {
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-      throw new Error(
-        'Missing Supabase configuration. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY (see README).',
-      );
+      throw new Error('Missing Supabase configuration. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY (see README).');
     }
     this.onState = onState || (() => {});
     this.onEvent = onEvent || (() => {});
@@ -123,6 +130,7 @@ export class GameClient {
   }
 
   destroy() {
+    this._destroyed = true;
     clearTimeout(this.claimTimeout);
     if (this.channel) this.supabase.removeChannel(this.channel);
   }
@@ -169,16 +177,26 @@ export class GameClient {
     const safeCustomTropes = sanitizeCustomTropes(customTropes);
     const code = randomCode();
     await this._connectChannel(code);
-    this._initHostState(code, trimmedName, safe.genres, safe.subgenreSelections, useFreeSpace, safeGeneralPercents, safeTotalTropes, safeCustomTropes);
+    this._initHostState(
+      code,
+      trimmedName,
+      safe.genres,
+      safe.subgenreSelections,
+      useFreeSpace,
+      safeGeneralPercents,
+      safeTotalTropes,
+      safeCustomTropes,
+    );
     this._saveSession(code, trimmedName);
     this._emitState();
     return code;
   }
 
-  // Resolves to `{ needsChoice: false }` once fully joined, or, if the host
-  // finds disconnected seats on that code, to `{ needsChoice: true, options,
-  // allowNew, name }` so the UI can offer picking one up (see claimDisconnectedSeat)
-  // instead of always creating a brand-new seat.
+  // Resolves to `{ needsChoice: false }` once fully joined, `{ needsChoice: true,
+  // options, allowNew, name }` if the host finds disconnected seats on that
+  // code (see claimDisconnectedSeat), or `{ needsApproval: true }` if the game
+  // has already started and the host must approve this as a brand-new seat --
+  // in that last case, listen for the 'joinApproved'/'joinDenied' events.
   joinGame(code, name) {
     const trimmedName = (name || '').trim();
     if (!trimmedName) return Promise.reject(new Error('Please enter your name.'));
@@ -188,10 +206,15 @@ export class GameClient {
         .then(() => {
           const timeout = setTimeout(() => {
             this._pendingJoin = null;
-            reject(new Error('No response from a host with that code. Double-check the code and that the host is still connected.'));
+            reject(
+              new Error(
+                'No response from a host with that code. Double-check the code and that the host is still connected.',
+              ),
+            );
           }, JOIN_TIMEOUT_MS);
 
           this._pendingJoin = {
+            name: trimmedName,
             resolve: () => {
               clearTimeout(timeout);
               this._pendingJoin = null;
@@ -207,6 +230,11 @@ export class GameClient {
               clearTimeout(timeout);
               resolve({ needsChoice: true, options, allowNew, name: trimmedName });
             },
+            pending: () => {
+              clearTimeout(timeout);
+              this._pendingJoin.awaitingApproval = true;
+              resolve({ needsApproval: true });
+            },
           };
           this._send({ t: 'join', from: this.myId, name: trimmedName });
         })
@@ -217,6 +245,8 @@ export class GameClient {
   // Re-sends the join request on the same (already-connected) temp channel,
   // telling the host to skip the claim-offer and create a brand-new seat.
   // Used when the player picks "Join as a new player" from the choice modal.
+  // Resolves to `{ needsApproval: true }` the same way joinGame() can, if the
+  // game has already started.
   confirmNewJoin(name) {
     const trimmedName = (name || '').trim();
     return new Promise((resolve, reject) => {
@@ -225,16 +255,22 @@ export class GameClient {
         reject(new Error('No response from the host.'));
       }, JOIN_TIMEOUT_MS);
       this._pendingJoin = {
+        name: trimmedName,
         resolve: () => {
           clearTimeout(timeout);
           this._pendingJoin = null;
           this._saveSession(this.code, trimmedName);
-          resolve();
+          resolve({ needsApproval: false });
         },
         reject: (err) => {
           clearTimeout(timeout);
           this._pendingJoin = null;
           reject(err);
+        },
+        pending: () => {
+          clearTimeout(timeout);
+          this._pendingJoin.awaitingApproval = true;
+          resolve({ needsApproval: true });
         },
       };
       this._send({ t: 'join', from: this.myId, name: trimmedName, forceNew: true });
@@ -403,6 +439,18 @@ export class GameClient {
     this._dispatch({ t: 'kick', targetId });
   }
 
+  // Host-only: seats the currently-pending mid-game join request.
+  approveJoinRequest() {
+    this._dispatch({ t: 'approveJoin' });
+  }
+
+  // Host-only: turns away the currently-pending mid-game join request,
+  // optionally rotating the game code afterward (e.g. if the code may have
+  // leaked to someone unwanted).
+  denyJoinRequest(rotateCode = false) {
+    this._dispatch({ t: 'denyJoin', rotateCode: !!rotateCode });
+  }
+
   leaveGame() {
     GameClient.clearSavedSession();
     this.destroy();
@@ -426,6 +474,14 @@ export class GameClient {
       channel.on('presence', { event: 'leave' }, ({ key }) => this._onPeerLeft(key));
 
       channel.subscribe((status, err) => {
+        // Ignore status events from a channel that's already been replaced
+        // (e.g. its own CLOSED callback firing after a code-rotation
+        // migration intentionally removed it) -- otherwise a stale event can
+        // be misread as a fresh disconnect right after successfully
+        // reconnecting on the new channel. Also ignore anything after this
+        // client has been explicitly destroyed (removeChannel's own async
+        // teardown can still fire a CLOSED status well after the fact).
+        if (this._destroyed || this.channel !== channel) return;
         if (status === 'SUBSCRIBED') {
           channel.track({ id: this.myId });
           this.onEvent({ type: 'connectionStatus', status: 'connected' });
@@ -500,8 +556,20 @@ export class GameClient {
       case 'welcome':
         if (data.to === this.myId && this._pendingJoin) {
           this.state = data.state;
-          this._pendingJoin.resolve();
-          this._emitState();
+          if (this._pendingJoin.awaitingApproval) {
+            this._saveSession(this.code, this._pendingJoin.name);
+            this._pendingJoin = null;
+            this._emitState();
+            this.onEvent({ type: 'joinApproved' });
+          } else {
+            this._pendingJoin.resolve();
+            this._emitState();
+          }
+        }
+        break;
+      case 'joinPending':
+        if (data.to === this.myId && this._pendingJoin?.pending) {
+          this._pendingJoin.pending();
         }
         break;
       case 'claimOffer':
@@ -511,8 +579,25 @@ export class GameClient {
         break;
       case 'joinRejected':
         if (data.to === this.myId && this._pendingJoin) {
-          const reason = data.reason === 'started' ? 'That game has already started.' : 'Could not join that game.';
-          this._pendingJoin.reject?.(new Error(reason));
+          if (this._pendingJoin.awaitingApproval) {
+            this._pendingJoin = null;
+            GameClient.clearSavedSession();
+            const reason =
+              data.reason === 'busy'
+                ? 'Someone else was already waiting to join — try again shortly.'
+                : 'The host declined your request to join.';
+            this.onEvent({ type: 'joinDenied', reason });
+            // Tear down the channel subscription now -- otherwise this
+            // never-seated client keeps listening and can misread later
+            // broadcasts (e.g. a subsequent code rotation) as being kicked.
+            this.destroy();
+          } else {
+            const reason =
+              data.reason === 'busy'
+                ? 'Someone else is already waiting to join — try again in a moment.'
+                : 'Could not join that game.';
+            this._pendingJoin.reject?.(new Error(reason));
+          }
         }
         break;
       case 'rejoinFailed':
@@ -569,7 +654,9 @@ export class GameClient {
   // ---------- Host-side game state management ----------
 
   _initHostState(code, name, genres, subgenreSelections, freeSpace, generalPercents, totalTropes, customTropes = []) {
-    const tropePool = Array.from(new Set([...pickTropePool(genres, subgenreSelections, generalPercents, totalTropes), ...customTropes]));
+    const tropePool = Array.from(
+      new Set([...pickTropePool(genres, subgenreSelections, generalPercents, totalTropes), ...customTropes]),
+    );
     const board = buildPlayerBoard(tropePool, freeSpace);
     const marked = freeSpace ? [CENTER_INDEX] : [];
     this.state = {
@@ -581,12 +668,22 @@ export class GameClient {
       totalTropes,
       tropePool,
       players: {
-        [this.myId]: { id: this.myId, name, seat: 0, connected: true, avatar: defaultAvatarForSeat(0), board, wagered: [], marked },
+        [this.myId]: {
+          id: this.myId,
+          name,
+          seat: 0,
+          connected: true,
+          avatar: defaultAvatarForSeat(0),
+          board,
+          wagered: [],
+          marked,
+        },
       },
       seatOrder: [this.myId],
       started: false,
       gameOver: false,
       pendingClaim: null,
+      pendingJoinRequest: null,
       acceptedTropes: [],
       activityLog: [],
     };
@@ -609,19 +706,38 @@ export class GameClient {
         t: 'claimOffer',
         to: newId,
         options: disconnected.map((p) => ({ id: p.id, name: p.name, seat: p.seat })),
-        allowNew: !this.state.started,
+        allowNew: true,
       });
       return;
     }
+    const safeName = (name || '').trim() || 'Player';
     if (this.state.started) {
-      this._send({ t: 'joinRejected', to: newId, reason: 'started' });
+      // Brand-new seats mid-game need the host's go-ahead first -- only one
+      // request can be pending at a time.
+      if (this.state.pendingJoinRequest) {
+        this._send({ t: 'joinRejected', to: newId, reason: 'busy' });
+        return;
+      }
+      this.state.pendingJoinRequest = { id: newId, name: safeName };
+      this._send({ t: 'joinPending', to: newId });
+      this._emitState();
+      this._send({ t: 'state', state: this.state });
       return;
     }
-    const safeName = (name || '').trim() || 'Player';
     const board = buildPlayerBoard(this.state.tropePool, this.state.freeSpace);
     const marked = this.state.freeSpace ? [CENTER_INDEX] : [];
+    markAlreadyAcceptedTropes(board, marked, this.state.acceptedTropes);
     const seat = this.state.seatOrder.length;
-    this.state.players[newId] = { id: newId, name: safeName, seat, connected: true, avatar: defaultAvatarForSeat(seat), board, wagered: [], marked };
+    this.state.players[newId] = {
+      id: newId,
+      name: safeName,
+      seat,
+      connected: true,
+      avatar: defaultAvatarForSeat(seat),
+      board,
+      wagered: [],
+      marked,
+    };
     this.state.seatOrder.push(newId);
 
     this._send({ t: 'welcome', to: newId, state: this.state });
@@ -665,7 +781,9 @@ export class GameClient {
     if (action.t === 'setWager') {
       if (state.started) return;
       const indices = Array.isArray(action.indices)
-        ? action.indices.filter((i) => Number.isInteger(i) && i >= 0 && i < 25 && !(state.freeSpace && i === CENTER_INDEX))
+        ? action.indices.filter(
+            (i) => Number.isInteger(i) && i >= 0 && i < 25 && !(state.freeSpace && i === CENTER_INDEX),
+          )
         : [];
       player.wagered = Array.from(new Set(indices)).slice(0, 5);
       this._emitState();
@@ -754,7 +872,12 @@ export class GameClient {
       state.generalPercents = sanitizeGeneralPercents(state.genres, action.generalPercents);
       if (VALID_TOTAL_TROPES.has(action.totalTropes)) state.totalTropes = action.totalTropes;
       const safeCustomTropes = sanitizeCustomTropes(action.customTropes);
-      state.tropePool = Array.from(new Set([...pickTropePool(state.genres, state.subgenreSelections, state.generalPercents, state.totalTropes), ...safeCustomTropes]));
+      state.tropePool = Array.from(
+        new Set([
+          ...pickTropePool(state.genres, state.subgenreSelections, state.generalPercents, state.totalTropes),
+          ...safeCustomTropes,
+        ]),
+      );
       for (const p of Object.values(state.players)) {
         p.board = buildPlayerBoard(state.tropePool, state.freeSpace);
         p.wagered = [];
@@ -763,6 +886,7 @@ export class GameClient {
       state.started = false;
       state.gameOver = false;
       state.pendingClaim = null;
+      state.pendingJoinRequest = null;
       state.acceptedTropes = [];
       state.activityLog = [];
       this._logActivity('🔄 The host reset the game.');
@@ -801,7 +925,8 @@ export class GameClient {
 
     if (action.t === 'proposeReplace') {
       if (state.gameOver || state.pendingClaim) return;
-      if (typeof action.text !== 'string' || action.text === FREE_SPACE_TEXT || !state.tropePool.includes(action.text)) return;
+      if (typeof action.text !== 'string' || action.text === FREE_SPACE_TEXT || !state.tropePool.includes(action.text))
+        return;
       const safeGenre = VALID_GENRES.has(action.genre) ? action.genre : state.genres[0];
       const safeSubgenre = isValidSubgenre(safeGenre, action.subgenre) ? action.subgenre : 'general';
       this._startClaim(fromId, action.text, 'replace', { genre: safeGenre, subgenre: safeSubgenre });
@@ -839,15 +964,65 @@ export class GameClient {
         clearTimeout(this.claimTimeout);
         state.pendingClaim = null;
       }
-      this._logActivity(`🚪 ${removedName} was removed from the game.`);
-      const newCode = randomCode();
-      state.code = newCode;
-      this._send({ t: 'migrate', newCode, state });
-      this._emitState();
-      this.onEvent({ type: 'codeChanged', code: newCode });
-      this._migrateToCode(newCode).catch(() => {});
+      this._rotateCode(`🚪 ${removedName} was removed from the game.`);
       return;
     }
+
+    if (action.t === 'approveJoin') {
+      if (fromId !== this._currentHostId()) return;
+      const req = state.pendingJoinRequest;
+      if (!req) return;
+      const board = buildPlayerBoard(state.tropePool, state.freeSpace);
+      const marked = state.freeSpace ? [CENTER_INDEX] : [];
+      markAlreadyAcceptedTropes(board, marked, state.acceptedTropes);
+      const seat = state.seatOrder.length;
+      state.players[req.id] = {
+        id: req.id,
+        name: req.name,
+        seat,
+        connected: true,
+        avatar: defaultAvatarForSeat(seat),
+        board,
+        wagered: [],
+        marked,
+      };
+      state.seatOrder.push(req.id);
+      state.pendingJoinRequest = null;
+      this._logActivity(`🙋 ${req.name} joined mid-game.`);
+      this._send({ t: 'welcome', to: req.id, state });
+      this._emitState();
+      this._send({ t: 'state', state: this.state });
+      return;
+    }
+
+    if (action.t === 'denyJoin') {
+      if (fromId !== this._currentHostId()) return;
+      const req = state.pendingJoinRequest;
+      if (!req) return;
+      state.pendingJoinRequest = null;
+      this._send({ t: 'joinRejected', to: req.id, reason: 'denied' });
+      if (action.rotateCode) {
+        this._rotateCode(`🔒 The game code was rotated after denying ${req.name}.`);
+      } else {
+        this._emitState();
+        this._send({ t: 'state', state: this.state });
+      }
+      return;
+    }
+  }
+
+  // Generates a new game code, rotates the channel every connected client is
+  // on (including this one), and broadcasts the migration -- shared by kick
+  // and "deny + rotate code" so a leaked/compromised code stops working.
+  _rotateCode(activityText) {
+    const state = this.state;
+    const newCode = randomCode();
+    state.code = newCode;
+    if (activityText) this._logActivity(activityText);
+    this._send({ t: 'migrate', newCode, state });
+    this._emitState();
+    this.onEvent({ type: 'codeChanged', code: newCode });
+    this._migrateToCode(newCode).catch(() => {});
   }
 
   _connectedCount() {

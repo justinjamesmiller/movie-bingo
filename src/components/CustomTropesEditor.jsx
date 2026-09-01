@@ -38,7 +38,12 @@ export default function CustomTropesEditor({ customTropes, onChange }) {
             }
           }}
         />
-        <button type="button" className="btn" disabled={!draft.trim() || customTropes.length >= MAX_COUNT} onClick={handleAdd}>
+        <button
+          type="button"
+          className="btn"
+          disabled={!draft.trim() || customTropes.length >= MAX_COUNT}
+          onClick={handleAdd}
+        >
           Add
         </button>
       </div>
@@ -47,7 +52,12 @@ export default function CustomTropesEditor({ customTropes, onChange }) {
           {customTropes.map((text) => (
             <li key={text} className="custom-trope-chip">
               {text}
-              <button type="button" className="custom-trope-chip-remove" onClick={() => handleRemove(text)} aria-label={`Remove ${text}`}>
+              <button
+                type="button"
+                className="custom-trope-chip-remove"
+                onClick={() => handleRemove(text)}
+                aria-label={`Remove ${text}`}
+              >
                 ✕
               </button>
             </li>

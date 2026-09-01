@@ -38,8 +38,8 @@ export default function ManageWagersModal({ board, wagered, marked, freeSpaceInd
       <div className="modal-content">
         <h3>Manage Your Wagers</h3>
         <p className="hint">
-          Remove and/or add wagered spaces below, then submit — all your changes go out together as a
-          single proposal for the group to approve.
+          Remove and/or add wagered spaces below, then submit — all your changes go out together as a single proposal
+          for the group to approve.
         </p>
         <h4>Your current wagers</h4>
         {currentWagers.length === 0 ? (
@@ -52,13 +52,16 @@ export default function ManageWagersModal({ board, wagered, marked, freeSpaceInd
                   className={`btn challenge-item${toRemove.includes(index) ? ' selected' : ''}`}
                   onClick={() => toggleRemove(index)}
                 >
-                  {toRemove.includes(index) ? '🗑️ ' : '✅ '}{text}
+                  {toRemove.includes(index) ? '🗑️ ' : '✅ '}
+                  {text}
                 </button>
               </li>
             ))}
           </ul>
         )}
-        <h4>Add new wager(s) ({openSlots} open slot{openSlots === 1 ? '' : 's'})</h4>
+        <h4>
+          Add new wager(s) ({openSlots} open slot{openSlots === 1 ? '' : 's'})
+        </h4>
         {eligibleToAdd.length === 0 ? (
           <p className="hint">No open spaces left to wager on.</p>
         ) : (
@@ -70,7 +73,8 @@ export default function ManageWagersModal({ board, wagered, marked, freeSpaceInd
                   disabled={!toAdd.includes(index) && toAdd.length >= openSlots}
                   onClick={() => toggleAdd(index)}
                 >
-                  {toAdd.includes(index) ? '☑ ' : '☐ '}{text}
+                  {toAdd.includes(index) ? '☑ ' : '☐ '}
+                  {text}
                 </button>
               </li>
             ))}
@@ -80,7 +84,9 @@ export default function ManageWagersModal({ board, wagered, marked, freeSpaceInd
           <button className="btn agree" disabled={!hasChanges} onClick={() => onSubmit(toAdd, toRemove)}>
             Submit for approval
           </button>
-          <button className="btn" onClick={onCancel}>Not now</button>
+          <button className="btn" onClick={onCancel}>
+            Not now
+          </button>
         </div>
       </div>
     </div>

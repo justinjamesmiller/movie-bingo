@@ -5,11 +5,21 @@ import GenreSubgenrePicker from './GenreSubgenrePicker.jsx';
 import GeneralPercentSliders from './GeneralPercentSliders.jsx';
 import CustomTropesEditor from './CustomTropesEditor.jsx';
 
-export default function ResetModal({ currentGenres, currentSubgenreSelections, currentFreeSpace, currentGeneralPercents, currentTotalTropes, onConfirm, onCancel }) {
+export default function ResetModal({
+  currentGenres,
+  currentSubgenreSelections,
+  currentFreeSpace,
+  currentGeneralPercents,
+  currentTotalTropes,
+  onConfirm,
+  onCancel,
+}) {
   const [genres, setGenres] = useState(currentGenres?.length ? currentGenres : [GENRES[0].id]);
   const [subgenreSelections, setSubgenreSelections] = useState(currentSubgenreSelections || []);
   const [freeSpace, setFreeSpace] = useState(!!currentFreeSpace);
-  const [generalPercents, setGeneralPercents] = useState(currentGeneralPercents || { [GENRES[0].id]: DEFAULT_GENERAL_PERCENT });
+  const [generalPercents, setGeneralPercents] = useState(
+    currentGeneralPercents || { [GENRES[0].id]: DEFAULT_GENERAL_PERCENT },
+  );
   const [totalTropes, setTotalTropes] = useState(currentTotalTropes ?? DEFAULT_TOTAL_TROPES);
   const [customTropes, setCustomTropes] = useState([]);
 
@@ -38,9 +48,7 @@ export default function ResetModal({ currentGenres, currentSubgenreSelections, c
     <div className="modal">
       <div className="modal-content">
         <h3>Reset the game?</h3>
-        <p className="hint">
-          This deals fresh boards and clears all marks and wagers for every player.
-        </p>
+        <p className="hint">This deals fresh boards and clears all marks and wagers for every player.</p>
         <MovieLookup onFound={handleMovieFound} />
         <GenreSubgenrePicker
           genres={genres}
@@ -48,11 +56,7 @@ export default function ResetModal({ currentGenres, currentSubgenreSelections, c
           onChange={handleGenreSubgenreChange}
         />
         <label className="checkbox-label">
-          <input
-            type="checkbox"
-            checked={freeSpace}
-            onChange={(e) => setFreeSpace(e.target.checked)}
-          />
+          <input type="checkbox" checked={freeSpace} onChange={(e) => setFreeSpace(e.target.checked)} />
           Free center space
         </label>
         <GeneralPercentSliders
@@ -62,19 +66,24 @@ export default function ResetModal({ currentGenres, currentSubgenreSelections, c
           onChange={(genreId, value) => setGeneralPercents((prev) => ({ ...prev, [genreId]: value }))}
         />
         <label htmlFor="reset-total-tropes">Total unique tropes in play</label>
-        <select
-          id="reset-total-tropes"
-          value={totalTropes}
-          onChange={(e) => setTotalTropes(Number(e.target.value))}
-        >
+        <select id="reset-total-tropes" value={totalTropes} onChange={(e) => setTotalTropes(Number(e.target.value))}>
           {TOTAL_TROPES_OPTIONS.map((n) => (
-            <option key={n} value={n}>{n}</option>
+            <option key={n} value={n}>
+              {n}
+            </option>
           ))}
         </select>
         <CustomTropesEditor customTropes={customTropes} onChange={setCustomTropes} />
         <div className="claim-vote-buttons cancel-claim-btn">
-          <button className="btn disagree" onClick={() => onConfirm(genres, subgenreSelections, freeSpace, generalPercents, totalTropes, customTropes)}>Reset Game</button>
-          <button className="btn" onClick={onCancel}>Cancel</button>
+          <button
+            className="btn disagree"
+            onClick={() => onConfirm(genres, subgenreSelections, freeSpace, generalPercents, totalTropes, customTropes)}
+          >
+            Reset Game
+          </button>
+          <button className="btn" onClick={onCancel}>
+            Cancel
+          </button>
         </div>
       </div>
     </div>

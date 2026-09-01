@@ -24,8 +24,12 @@ export default function AcceptedTropesModal({ acceptedTropes, onChallenge, onReq
           <p className="claim-text">{pendingText}</p>
           <p className="hint">This asks the group to vote on undoing it.</p>
           <div className="claim-vote-buttons">
-            <button className="btn agree" onClick={() => onChallenge(pendingText)}>👍 Yes, challenge it</button>
-            <button className="btn disagree" onClick={() => setPendingText(null)}>👎 Never mind</button>
+            <button className="btn agree" onClick={() => onChallenge(pendingText)}>
+              👍 Yes, challenge it
+            </button>
+            <button className="btn disagree" onClick={() => setPendingText(null)}>
+              👎 Never mind
+            </button>
           </div>
         </div>
       </div>
@@ -46,17 +50,15 @@ export default function AcceptedTropesModal({ acceptedTropes, onChallenge, onReq
             <ul className="challenge-list">
               {acceptedTropes.map((text) => (
                 <li key={text}>
-                  <TropeItem
-                    text={text}
-                    onShortPress={setPendingText}
-                    onLongPress={onRequestReplace}
-                  />
+                  <TropeItem text={text} onShortPress={setPendingText} onLongPress={onRequestReplace} />
                 </li>
               ))}
             </ul>
           </>
         )}
-        <button className="btn cancel-claim-btn" onClick={onClose}>Close</button>
+        <button className="btn cancel-claim-btn" onClick={onClose}>
+          Close
+        </button>
       </div>
     </div>
   );

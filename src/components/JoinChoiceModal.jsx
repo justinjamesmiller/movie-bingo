@@ -4,8 +4,8 @@ export default function JoinChoiceModal({ name, options, allowNew, busy, onClaim
       <div className="modal-content">
         <h3>Reconnect as an existing player?</h3>
         <p className="hint">
-          This game has disconnected players. If one of these is you, pick your name below to take
-          back your board (with your marks and wagers intact) as "{name}".
+          This game has disconnected players. If one of these is you, pick your name below to take back your board (with
+          your marks and wagers intact) as "{name}".
         </p>
         <ul className="challenge-list">
           {options.map((opt) => (
@@ -21,7 +21,9 @@ export default function JoinChoiceModal({ name, options, allowNew, busy, onClaim
             None of these are me — join as a new player
           </button>
         )}
-        <button className="btn cancel-claim-btn" disabled={busy} onClick={onCancel}>Cancel</button>
+        <button className="btn cancel-claim-btn" disabled={busy} onClick={onCancel}>
+          Cancel
+        </button>
       </div>
     </div>
   );

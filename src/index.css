@@ -30,18 +30,24 @@ body.dark {
   --shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
 }
 
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
 
-html, body, #root {
+html,
+body,
+#root {
   height: 100%;
 }
 
 body {
   margin: 0;
-  font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   background: var(--bg);
   color: var(--text);
-  transition: background 0.2s ease, color 0.2s ease;
+  transition:
+    background 0.2s ease,
+    color 0.2s ease;
   min-height: 100vh;
 }
 
@@ -256,7 +262,8 @@ label {
   color: var(--muted);
 }
 
-input[type="text"], select {
+input[type='text'],
+select {
   width: 100%;
   padding: 0.6rem 0.7rem;
   border-radius: 6px;
@@ -312,7 +319,9 @@ input[type="text"], select {
   width: 100%;
 }
 
-.btn.primary:hover:not(:disabled) { background: var(--accent-hover); }
+.btn.primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
 
 .error-text {
   color: var(--danger);
@@ -453,7 +462,9 @@ input[type="text"], select {
   text-align: left;
 }
 
-.players-panel h3 { margin-top: 0; }
+.players-panel h3 {
+  margin-top: 0;
+}
 
 .players-list {
   list-style: none;
@@ -527,7 +538,9 @@ input[type="text"], select {
   line-height: 1.15;
   cursor: pointer;
   position: relative;
-  transition: transform 0.1s ease, background 0.15s ease;
+  transition:
+    transform 0.1s ease,
+    background 0.15s ease;
 }
 
 .bingo-cell:hover {
@@ -565,9 +578,18 @@ input[type="text"], select {
 }
 
 @keyframes cell-flash {
-  0% { transform: scale(1); box-shadow: 0 0 0 0 var(--marked); }
-  30% { transform: scale(1.12); box-shadow: 0 0 12px 4px var(--marked); }
-  100% { transform: scale(1); box-shadow: 0 0 0 0 var(--marked); }
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 var(--marked);
+  }
+  30% {
+    transform: scale(1.12);
+    box-shadow: 0 0 12px 4px var(--marked);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 var(--marked);
+  }
 }
 
 .connection-banner {
@@ -608,9 +630,18 @@ input[type="text"], select {
 }
 
 @keyframes bingo-pop {
-  0% { transform: scale(0.4); opacity: 0; }
-  60% { transform: scale(1.1); opacity: 1; }
-  100% { transform: scale(1); opacity: 1; }
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 .bingo-confetti {
@@ -621,8 +652,14 @@ input[type="text"], select {
 }
 
 @keyframes confetti-fall {
-  0% { transform: translateY(0) rotate(0deg); opacity: 1; }
-  100% { transform: translateY(110vh) rotate(360deg); opacity: 0; }
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(110vh) rotate(360deg);
+    opacity: 0;
+  }
 }
 
 .recap-list {
@@ -733,9 +770,17 @@ input[type="text"], select {
   gap: 0.75rem;
 }
 
-.btn.agree { background: var(--marked); color: #fff; }
-.btn.disagree { background: var(--danger); color: #fff; }
-.cancel-claim-btn { margin: 0.75rem 0; }
+.btn.agree {
+  background: var(--marked);
+  color: #fff;
+}
+.btn.disagree {
+  background: var(--danger);
+  color: #fff;
+}
+.cancel-claim-btn {
+  margin: 0.75rem 0;
+}
 
 .challenge-list {
   list-style: none;
@@ -921,8 +966,14 @@ input[type="text"], select {
 }
 
 @keyframes reaction-float {
-  0% { transform: translateY(0); opacity: 1; }
-  100% { transform: translateY(-70vh); opacity: 0; }
+  0% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-70vh);
+    opacity: 0;
+  }
 }
 
 @media (max-width: 600px) {

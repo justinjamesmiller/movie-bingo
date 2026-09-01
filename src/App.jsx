@@ -54,6 +54,8 @@ function App() {
           showToast(`"${evt.text}" claim was cancelled.`);
         } else if (evt.type === 'promotedToHost') {
           showToast('The host disconnected — you are now the host.');
+        } else if (evt.type === 'gameReset') {
+          showToast('The host reset the game — new boards have been dealt.');
         }
       },
     });
@@ -121,6 +123,13 @@ function App() {
     client.claim(index);
   }
 
+  function handleResetGame() {
+    const confirmed = window.confirm(
+      'Reset the game for everyone? This deals fresh boards and clears all marks and wagers.',
+    );
+    if (confirmed) clientRef.current.resetGame();
+  }
+
   if (screen === 'landing' || !gameState) {
     return (
       <>
@@ -158,6 +167,11 @@ function App() {
             {!gameState.started && isHost && (
               <button className="btn primary" onClick={() => clientRef.current.startGame()}>
                 Start Game
+              </button>
+            )}
+            {isHost && (
+              <button className="btn disagree" onClick={handleResetGame}>
+                Reset Game
               </button>
             )}
           </div>

@@ -100,6 +100,10 @@ export class GameClient {
     this._dispatch({ t: 'cancelClaim', claimId });
   }
 
+  resetGame() {
+    this._dispatch({ t: 'reset' });
+  }
+
   isHost() {
     return !!this.state && this._currentHostId() === this.myId;
   }
@@ -184,6 +188,9 @@ export class GameClient {
         break;
       case 'resolved':
         this.onEvent({ type: 'claimResolved', text: data.text, kind: data.kind, approved: data.approved });
+        break;
+      case 'gameReset':
+        this.onEvent({ type: 'gameReset' });
         break;
       case 'action':
         if (this.isHost()) this._applyAction(data.from, data.action);
@@ -279,6 +286,23 @@ export class GameClient {
       this._emitState();
       this._send({ t: 'state', state: this.state });
       this.onEvent({ type: 'claimCancelled', text: pc.text });
+      return;
+    }
+
+    if (action.t === 'reset') {
+      if (fromId !== this._currentHostId()) return;
+      clearTimeout(this.claimTimeout);
+      for (const p of Object.values(state.players)) {
+        p.board = generateBoard();
+        p.wagered = [];
+        p.marked = [];
+      }
+      state.started = false;
+      state.pendingClaim = null;
+      this.onEvent({ type: 'gameReset' });
+      this._send({ t: 'gameReset' });
+      this._emitState();
+      this._send({ t: 'state', state: this.state });
       return;
     }
   }

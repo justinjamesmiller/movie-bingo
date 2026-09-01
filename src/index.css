@@ -206,6 +206,7 @@ input[type="text"], select {
 
 .players-panel {
   flex: 1 1 220px;
+  min-width: 0;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -256,11 +257,12 @@ input[type="text"], select {
   flex: 2 1 420px;
   display: flex;
   justify-content: center;
+  min-width: 0;
 }
 
 .bingo-board {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 6px;
   width: 100%;
   max-width: 560px;
@@ -360,5 +362,20 @@ input[type="text"], select {
 }
 
 @media (max-width: 600px) {
-  .bingo-cell { font-size: 0.62rem; }
+  #app {
+    padding: 0.75rem;
+  }
+
+  .game-layout {
+    gap: 0.75rem;
+  }
+
+  .bingo-board {
+    gap: 4px;
+  }
+
+  .bingo-cell {
+    font-size: 0.62rem;
+    padding: 0.25rem;
+  }
 }

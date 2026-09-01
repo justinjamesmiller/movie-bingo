@@ -190,6 +190,7 @@ function App() {
               hostId={hostId}
               wagerCount={me.wagered.length}
               maxWagers={MAX_WAGERS}
+              started={gameState.started}
             />
             <div className="board-wrap">
               <BingoBoard

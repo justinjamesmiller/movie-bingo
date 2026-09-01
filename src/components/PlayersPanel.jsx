@@ -1,4 +1,4 @@
-export default function PlayersPanel({ players, hostId, wagerCount, maxWagers }) {
+export default function PlayersPanel({ players, hostId, wagerCount, maxWagers, started }) {
   return (
     <aside className="players-panel">
       <h3>Players</h3>
@@ -23,11 +23,15 @@ export default function PlayersPanel({ players, hostId, wagerCount, maxWagers })
           );
         })}
       </ul>
-      <p className="hint">
-        Pick 5 spaces to <strong>wager</strong> — you think these
-        tropes are extra likely to happen. Wagers lock once the game starts.
-      </p>
-      <p className="hint">Wagered: {wagerCount} / {maxWagers}</p>
+      {!started && (
+        <>
+          <p className="hint">
+            Pick 5 spaces to <strong>wager</strong> — you think these
+            tropes are extra likely to happen. Wagers lock once the game starts.
+          </p>
+          <p className="hint">Wagered: {wagerCount} / {maxWagers}</p>
+        </>
+      )}
     </aside>
   );
 }

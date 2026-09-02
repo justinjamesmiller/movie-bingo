@@ -23,7 +23,7 @@ export default function AllWagersModal({ players, acceptedTropes, onClose }) {
                       const accepted = acceptedTropes.includes(text);
                       return (
                         <li key={index} className={accepted ? 'accepted' : ''}>
-                          {accepted ? '✅' : '☐'} {text}
+                          {text}
                         </li>
                       );
                     })}

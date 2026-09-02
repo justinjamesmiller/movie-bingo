@@ -14,6 +14,7 @@ class FakeChannel {
   constructor(name, presenceKey) {
     this.name = name;
     this.presenceKey = presenceKey;
+    this.state = 'closed';
     this._broadcastHandlers = [];
     this._leaveHandlers = [];
   }
@@ -27,7 +28,10 @@ class FakeChannel {
   subscribe(cb) {
     if (!bus.has(this.name)) bus.set(this.name, new Set());
     bus.get(this.name).add(this);
-    queueMicrotask(() => cb('SUBSCRIBED'));
+    queueMicrotask(() => {
+      this.state = 'joined';
+      cb('SUBSCRIBED');
+    });
     return this;
   }
 
@@ -35,13 +39,35 @@ class FakeChannel {
     // Presence payload itself isn't asserted on in these tests.
   }
 
+  presenceState() {
+    const present = {};
+    for (const peer of bus.get(this.name) || []) present[peer.presenceKey] = [{ id: peer.presenceKey }];
+    return present;
+  }
+
+  // Simulates the transport dropping without an explicit removeChannel (what a
+  // backgrounded phone or a flaky network actually does): peers see a presence
+  // leave, and this channel stops sending and receiving.
+  simulateDrop() {
+    const peers = bus.get(this.name);
+    this.state = 'closed';
+    if (!peers) return;
+    peers.delete(this);
+    for (const peer of peers) {
+      for (const cb of peer._leaveHandlers) cb({ key: this.presenceKey });
+    }
+  }
+
   send({ payload }) {
     const peers = bus.get(this.name);
-    if (!peers) return;
+    if (!peers || this.state !== 'joined') return;
     for (const peer of peers) {
       if (peer === this) continue;
+      // Real broadcasts go over the wire as JSON, so peers must never end up
+      // sharing a live object reference with the sender.
+      const copy = structuredClone(payload);
       queueMicrotask(() => {
-        for (const cb of peer._broadcastHandlers) cb({ payload });
+        for (const cb of peer._broadcastHandlers) cb({ payload: copy });
       });
     }
   }
@@ -54,6 +80,7 @@ export function createClient() {
       return new FakeChannel(name, presenceKey);
     },
     removeChannel(channel) {
+      channel.state = 'closed';
       const peers = bus.get(channel.name);
       if (!peers) return;
       peers.delete(channel);

@@ -29,13 +29,59 @@ const CHANNEL_PREFIX = 'bingo-';
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I
 const CLAIM_TIMEOUT_MS = 20000;
 const JOIN_TIMEOUT_MS = 10000;
+// A phone that backgrounds for a moment (answering a text, locking the screen)
+// drops its websocket almost immediately, so presence "leave" alone is far too
+// trigger-happy to treat as someone having actually left the game.
+const DISCONNECT_GRACE_MS = 120000;
+const RECONNECT_BASE_DELAY_MS = 1000;
+const RECONNECT_MAX_DELAY_MS = 15000;
 const VALID_GENRES = new Set(GENRES.map((g) => g.id));
 const VALID_GENERAL_PERCENTS = new Set(GENERAL_PERCENT_OPTIONS);
 const VALID_TOTAL_TROPES = new Set(TOTAL_TROPES_OPTIONS);
 const DEFAULT_GENRE = 'horror';
 const SESSION_KEY = 'movie-bingo-session';
+// Mirrored in localStorage so closing the tab (which wipes sessionStorage)
+// doesn't cost the player their seat.
+const SESSION_BACKUP_KEY = 'movie-bingo-session-backup';
+const SNAPSHOT_KEY = 'movie-bingo-snapshot';
+const SNAPSHOT_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 const MAX_CUSTOM_TROPES = 20;
 const MAX_CUSTOM_TROPE_LENGTH = 60;
+
+// Storage can be entirely unavailable (private browsing, blocked cookies) or
+// throw on write (quota), and none of it is worth failing a game over.
+function readStore(store, key) {
+  try {
+    const raw = store?.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStore(store, key, value) {
+  try {
+    store?.setItem(key, JSON.stringify(value));
+  } catch {
+    // ignore
+  }
+}
+
+function removeStore(store, key) {
+  try {
+    store?.removeItem(key);
+  } catch {
+    // ignore
+  }
+}
+
+function sessionStore() {
+  return typeof sessionStorage === 'undefined' ? null : sessionStorage;
+}
+
+function localStore() {
+  return typeof localStorage === 'undefined' ? null : localStorage;
+}
 
 function isValidSubgenre(genre, subgenre) {
   return (SUBGENRES_BY_GENRE[genre] || []).some((s) => s.id === subgenre);
@@ -127,42 +173,100 @@ export class GameClient {
     this.state = null;
     this.claimTimeout = null;
     this._pendingJoin = null;
+    this._pendingDisconnects = new Map();
+    this._reconnectTimer = null;
+    this._reconnectAttempts = 0;
+    this._installLifecycleListeners();
+  }
+
+  // Returning to the tab or regaining network are the two moments when a
+  // silently-dropped subscription is most likely, and also exactly when the
+  // player expects to be back in the game -- so re-check the channel then
+  // rather than making them refresh the page.
+  _installLifecycleListeners() {
+    if (typeof document === 'undefined' || typeof window === 'undefined') return;
+    this._onWake = () => {
+      if (document.visibilityState === 'hidden') return;
+      this._checkConnection();
+    };
+    document.addEventListener('visibilitychange', this._onWake);
+    window.addEventListener('online', this._onWake);
+    window.addEventListener('focus', this._onWake);
+  }
+
+  _removeLifecycleListeners() {
+    if (!this._onWake) return;
+    document.removeEventListener('visibilitychange', this._onWake);
+    window.removeEventListener('online', this._onWake);
+    window.removeEventListener('focus', this._onWake);
+    this._onWake = null;
   }
 
   destroy() {
     this._destroyed = true;
     clearTimeout(this.claimTimeout);
+    clearTimeout(this._reconnectTimer);
+    this._reconnectTimer = null;
+    this._pendingDisconnects.forEach((timer) => clearTimeout(timer));
+    this._pendingDisconnects.clear();
+    this._removeLifecycleListeners();
     if (this.channel) this.supabase.removeChannel(this.channel);
   }
 
   // ---------- Session persistence (lets a disconnected player/host reconnect) ----------
 
   static getSavedSession() {
-    try {
-      const raw = sessionStorage.getItem(SESSION_KEY);
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      if (!parsed?.code || !parsed?.myId || !parsed?.name) return null;
-      return parsed;
-    } catch {
-      return null;
-    }
+    const parsed = readStore(sessionStore(), SESSION_KEY) || readStore(localStore(), SESSION_BACKUP_KEY);
+    if (!parsed?.code || !parsed?.myId || !parsed?.name) return null;
+    return parsed;
+  }
+
+  // The full replicated game state, kept so a game can be revived even when
+  // every player was disconnected at once and nobody is left to answer.
+  static getSavedSnapshot(code) {
+    const snap = readStore(localStore(), SNAPSHOT_KEY);
+    if (!snap?.state || !snap.code) return null;
+    if (code && snap.code !== code) return null;
+    if (Date.now() - (snap.savedAt || 0) > SNAPSHOT_MAX_AGE_MS) return null;
+    return snap;
   }
 
   static clearSavedSession() {
-    try {
-      sessionStorage.removeItem(SESSION_KEY);
-    } catch {
-      // ignore
-    }
+    removeStore(sessionStore(), SESSION_KEY);
+    removeStore(localStore(), SESSION_BACKUP_KEY);
+    removeStore(localStore(), SNAPSHOT_KEY);
   }
 
   _saveSession(code, name) {
-    try {
-      sessionStorage.setItem(SESSION_KEY, JSON.stringify({ code, myId: this.myId, name }));
-    } catch {
-      // sessionStorage may be unavailable (e.g. private browsing); reconnect just won't be offered
-    }
+    const session = { code, myId: this.myId, name };
+    writeStore(sessionStore(), SESSION_KEY, session);
+    writeStore(localStore(), SESSION_BACKUP_KEY, session);
+  }
+
+  _saveSnapshot() {
+    if (!this.state || !this.code) return;
+    writeStore(localStore(), SNAPSHOT_KEY, { code: this.code, savedAt: Date.now(), state: this.state });
+  }
+
+  // Nobody answered our rejoin, so revive the game from our own copy of the
+  // replicated state -- this is what lets a table that all stepped away at
+  // once come back to the same boards instead of losing the game. Anyone else
+  // returning later syncs to whichever copy has the higher revision.
+  _restoreFromSnapshot(code, name) {
+    const snapshot = GameClient.getSavedSnapshot(code);
+    const me = snapshot?.state?.players?.[this.myId];
+    if (!me) return false;
+
+    this.state = snapshot.state;
+    if (name) me.name = name;
+    // Everyone is presumed away until they turn up; each returning player
+    // re-announces itself and gets marked connected again.
+    for (const player of Object.values(this.state.players)) player.connected = player.id === this.myId;
+    this._saveSession(code, me.name);
+    this._emitState();
+    this._send({ t: 'state', state: this.state });
+    this.onEvent({ type: 'gameRestored' });
+    return true;
   }
 
   // ---------- Public API ----------
@@ -327,6 +431,10 @@ export class GameClient {
         .then(() => {
           const timeout = setTimeout(() => {
             this._pendingJoin = null;
+            if (this._restoreFromSnapshot(saved.code, saved.name)) {
+              resolve();
+              return;
+            }
             GameClient.clearSavedSession();
             reject(new Error('No response from that game. It may have ended.'));
           }, JOIN_TIMEOUT_MS);
@@ -362,6 +470,12 @@ export class GameClient {
   // and additions picked at once are submitted together as a single proposal.
   proposeWagerChange(add, remove) {
     this._dispatch({ t: 'proposeWagerChange', add, remove });
+  }
+
+  // Asks the group to deal this player a brand new board (majority approval,
+  // same as any other mid-game change).
+  proposeBoardSwap() {
+    this._dispatch({ t: 'proposeBoardSwap' });
   }
 
   startGame() {
@@ -484,10 +598,14 @@ export class GameClient {
         if (this._destroyed || this.channel !== channel) return;
         if (status === 'SUBSCRIBED') {
           channel.track({ id: this.myId });
+          this._reconnectAttempts = 0;
           this.onEvent({ type: 'connectionStatus', status: 'connected' });
           resolve();
         } else {
           this.onEvent({ type: 'connectionStatus', status: 'disconnected' });
+          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+            this._scheduleReconnect();
+          }
           if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
             reject(err || new Error('Could not connect to the relay.'));
           }
@@ -496,8 +614,66 @@ export class GameClient {
     });
   }
 
+  // Re-subscribes (with backoff) after the transport drops, then re-asserts our
+  // seat so whoever currently holds authority clears our disconnected flag --
+  // recovering without the player having to refresh and reconnect by hand.
+  _scheduleReconnect() {
+    if (this._destroyed || this._reconnectTimer || !this.state || !this.code) return;
+    const delay = Math.min(RECONNECT_BASE_DELAY_MS * 2 ** this._reconnectAttempts, RECONNECT_MAX_DELAY_MS);
+    this._reconnectAttempts += 1;
+    this._reconnectTimer = setTimeout(() => {
+      this._reconnectTimer = null;
+      this._reconnect();
+    }, delay);
+  }
+
+  async _reconnect() {
+    if (this._destroyed || !this.state || !this.code) return;
+    const oldChannel = this.channel;
+    try {
+      await this._connectChannel(this.code);
+    } catch {
+      this._scheduleReconnect();
+      return;
+    }
+    if (oldChannel && oldChannel !== this.channel) this.supabase.removeChannel(oldChannel);
+    this._announceSelf();
+  }
+
+  // Checks the subscription is genuinely still live and repairs it if not.
+  _checkConnection() {
+    if (this._destroyed || !this.state || !this.code) return;
+    if (this.channel?.state === 'joined') {
+      this.channel.track({ id: this.myId });
+      this._announceSelf();
+      return;
+    }
+    clearTimeout(this._reconnectTimer);
+    this._reconnectTimer = null;
+    this._reconnectAttempts = 0;
+    this._reconnect();
+  }
+
+  // Tells the rest of the table we're here, so a stale disconnected flag on our
+  // own seat gets cleared by whoever holds authority.
+  _announceSelf() {
+    const me = this.state?.players?.[this.myId];
+    if (!me) return;
+    if (me.connected && this.isHost()) {
+      this._send({ t: 'state', state: this.state });
+      return;
+    }
+    this._send({ t: 'rejoin', from: this.myId, name: me.name });
+  }
+
+  // Every message carries its sender so receivers can tell which client a
+  // full-state broadcast came from (see _shouldAcceptState) and can treat any
+  // traffic from a peer as proof that peer is still around. State broadcasts
+  // also carry a revision that only ever moves forward, so returning clients
+  // can tell a fresher snapshot from a staler one.
   _send(msg) {
-    this.channel?.send({ type: 'broadcast', event: 'msg', payload: msg });
+    if (msg.t === 'state' && this.state) this.state.rev = (this.state.rev || 0) + 1;
+    this.channel?.send({ type: 'broadcast', event: 'msg', payload: { ...msg, sender: this.myId } });
   }
 
   // Transparently swaps the transport channel to a new code (used after a
@@ -521,16 +697,66 @@ export class GameClient {
   }
 
   _currentHostId() {
+    return this._authorityId();
+  }
+
+  // The lowest-seat connected player, optionally ignoring one seat. Excluding a
+  // seat answers "who should act for the table while that player is away",
+  // which is how a rejoin request from the host itself still gets answered.
+  _authorityId(excludeId = null) {
     if (!this.state) return null;
-    return this.state.seatOrder.find((id) => this.state.players[id]?.connected) || null;
+    return this.state.seatOrder.find((id) => id !== excludeId && this.state.players[id]?.connected) || null;
   }
 
   _emitState() {
+    this._saveSnapshot();
     this.onState(this.state, this.myId);
   }
 
+  // Presence "leave" fires the instant a phone backgrounds, so hold the seat
+  // open for a grace period -- any traffic from that peer in the meantime
+  // cancels the pending disconnect entirely.
   _onPeerLeft(peerId) {
     if (!this.state || !this.state.players[peerId]) return;
+    if (this._pendingDisconnects.has(peerId)) return;
+    this._pendingDisconnects.set(
+      peerId,
+      setTimeout(() => {
+        this._pendingDisconnects.delete(peerId);
+        this._markDisconnected(peerId);
+      }, DISCONNECT_GRACE_MS),
+    );
+  }
+
+  _isPresent(peerId) {
+    try {
+      return Object.keys(this.channel?.presenceState?.() || {}).includes(peerId);
+    } catch {
+      return false;
+    }
+  }
+
+  // Any message from a peer proves they're still here, so cancel a pending
+  // disconnect and undo a stale one.
+  _notePeerAlive(peerId) {
+    if (!peerId || peerId === this.myId) return;
+    const timer = this._pendingDisconnects.get(peerId);
+    if (timer) {
+      clearTimeout(timer);
+      this._pendingDisconnects.delete(peerId);
+    }
+    const player = this.state?.players?.[peerId];
+    if (!player || player.connected) return;
+    player.connected = true;
+    this._emitState();
+    if (this.isHost()) this._send({ t: 'state', state: this.state });
+  }
+
+  _markDisconnected(peerId) {
+    if (!this.state || !this.state.players[peerId]) return;
+    // A leave can arrive for a channel the peer has already replaced (their own
+    // reconnect tears the old one down), so trust live presence over the event.
+    if (this._isPresent(peerId)) return;
     const wasHost = this._currentHostId();
     this.state.players[peerId].connected = false;
     const nowHost = this._currentHostId();
@@ -543,15 +769,54 @@ export class GameClient {
     if (nowHost === this.myId) this._send({ t: 'state', state: this.state });
   }
 
+  // Decides whether an incoming full-state broadcast should replace ours. A
+  // strictly fresher revision always wins, so a client returning with a stale
+  // snapshot can't roll the table back. Otherwise only a client with a
+  // stronger claim to authority (a lower seat) can, and anyone else gets our
+  // state re-asserted at a higher revision -- which is what settles two
+  // clients briefly both believing they're host after a flaky reconnect.
+  _shouldAcceptState(data) {
+    if (!this.state || !data.sender) return true;
+    const incomingRev = data.state?.rev || 0;
+    const myRev = this.state.rev || 0;
+    if (incomingRev > myRev) return true;
+    if (!this.isHost()) return true;
+    const mySeat = this.state.players[this.myId]?.seat;
+    const theirSeat = this.state.players[data.sender]?.seat ?? data.state?.players?.[data.sender]?.seat;
+    if (mySeat == null || theirSeat == null || theirSeat < mySeat) return true;
+    this._send({ t: 'state', state: this.state });
+    return false;
+  }
+
+  // Our own seat must never read as disconnected while we're plainly here --
+  // repair it immediately rather than leaving the player mislabeled (which
+  // previously desynced host authority until they refreshed).
+  _ensureSeatConnected() {
+    const me = this.state?.players?.[this.myId];
+    if (!me || me.connected) return;
+    me.connected = true;
+    this._emitState();
+    if (this._authorityId(this.myId)) {
+      this._send({ t: 'rejoin', from: this.myId, name: me.name });
+    } else {
+      this._send({ t: 'state', state: this.state });
+    }
+  }
+
   // ---------- Message handling ----------
 
   _onMessage(data) {
+    this._notePeerAlive(data.sender);
     switch (data.t) {
       case 'join':
         if (this.isHost()) this._handleJoin(data.from, data.name, data.forceNew);
         break;
       case 'rejoin':
-        if (this.isHost()) this._handleRejoin(data.from, data.name);
+        // Answered by whoever holds authority *ignoring the requester* -- when
+        // the host itself is the one rejoining, everyone else still considers
+        // them the host, so a plain isHost() check would leave the request
+        // unanswered and the host stuck retrying.
+        if (this._authorityId(data.from) === this.myId) this._handleRejoin(data.from, data.name);
         break;
       case 'welcome':
         if (data.to === this.myId && this._pendingJoin) {
@@ -606,8 +871,10 @@ export class GameClient {
         }
         break;
       case 'state':
+        if (!this._shouldAcceptState(data)) break;
         this.state = data.state;
         this._emitState();
+        this._ensureSeatConnected();
         break;
       case 'resolved':
         this.onEvent({
@@ -661,6 +928,7 @@ export class GameClient {
     const marked = freeSpace ? [CENTER_INDEX] : [];
     this.state = {
       code,
+      rev: 0,
       genres,
       subgenreSelections,
       freeSpace,
@@ -812,6 +1080,12 @@ export class GameClient {
       const addTexts = add.map((i) => player.board[i]);
       const removeTexts = remove.map((i) => player.board[i]);
       this._startClaim(fromId, '', 'wagerChange', { add, remove, addTexts, removeTexts });
+      return;
+    }
+
+    if (action.t === 'proposeBoardSwap') {
+      if (!state.started || state.gameOver || state.pendingClaim) return;
+      this._startClaim(fromId, '', 'reroll');
       return;
     }
 
@@ -1098,6 +1372,8 @@ export class GameClient {
             p.board[idx] = newText;
             p.wagered = p.wagered.filter((i) => i !== idx);
             p.marked = p.marked.filter((i) => i !== idx);
+            // The replacement can itself be a trope the group already accepted.
+            if (this.state.acceptedTropes.includes(newText)) p.marked.push(idx);
           }
           if (!this.state.tropePool.includes(newText)) this.state.tropePool.push(newText);
           this._logActivity(`🔁 "${pc.text}" was swapped out for "${newText}".`);
@@ -1115,6 +1391,18 @@ export class GameClient {
             proposer.wagered.push(idx);
           }
           this._logActivity(`🎯 ${proposer.name} updated their wagers.`);
+        }
+      } else if (pc.kind === 'reroll') {
+        const proposer = this.state.players[pc.byId];
+        if (proposer) {
+          proposer.board = buildPlayerBoard(this.state.tropePool, this.state.freeSpace);
+          proposer.marked = this.state.freeSpace ? [CENTER_INDEX] : [];
+          markAlreadyAcceptedTropes(proposer.board, proposer.marked, this.state.acceptedTropes);
+          // Wagers point at board positions that no longer mean anything, so
+          // they're cleared and can be re-placed via the usual wager proposal.
+          if (proposer.wagered.length > 0) wagerFreedIds.push(proposer.id);
+          proposer.wagered = [];
+          this._logActivity(`🔀 ${proposer.name} was dealt a fresh board.`);
         }
       } else {
         for (const p of Object.values(this.state.players)) {

@@ -26,6 +26,7 @@ export default function GameMenu({
   onCopyCode,
   onCopyInviteLink,
   onSubmitCustomTrope,
+  onRequestBoardSwap,
 }) {
   function pick(action) {
     action();
@@ -81,11 +82,16 @@ export default function GameMenu({
                   📝 Submit Custom Trope
                 </button>
               )}
+              {started && !gameOver && (
+                <button className="btn" onClick={() => pick(onRequestBoardSwap)}>
+                  🔀 Swap My Whole Board
+                </button>
+              )}
               <button className="btn" onClick={() => pick(onBoardFocus)}>
                 🔍 Board Focus
               </button>
               <button className="btn" onClick={() => pick(onChangeName)}>
-                ✏️ Change Name
+                ✏️ Change Name and Avatar
               </button>
               {gameOver && (
                 <button className="btn" onClick={() => pick(onViewRecap)}>

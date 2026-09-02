@@ -25,14 +25,14 @@ export default function HelpModal({ onClose }) {
           game, wagers lock in.
         </p>
 
-        <h4>👆 Short-click vs. 🤛 Long-press (once the game has started)</h4>
+        <h4>👆 Tapping a space (once the game has started)</h4>
         <ul className="help-list">
           <li>
-            <strong>👆 Short-click</strong> a space: claim that trope just happened. Everyone votes 👍/👎; majority
-            wins.
+            Tapping a space shows what the trope means, with an example, then lets you{' '}
+            <strong>claim it just happened</strong>. Everyone votes 👍/👎; majority wins.
           </li>
           <li>
-            <strong>🤛 Long-press</strong> a space: propose swapping it for a different trope — you pick which
+            The same window has a <strong>🔁 Propose swapping this trope out</strong> button — you pick which
             genre/sub-genre the replacement comes from. Also needs majority approval.
           </li>
         </ul>
@@ -40,12 +40,12 @@ export default function HelpModal({ onClose }) {
         <h4>📋 Accepted Tropes &amp; 📖 All Tropes lists</h4>
         <ul className="help-list">
           <li>
-            <strong>Accepted Tropes</strong> button shows everything approved so far. 👆 Click one to challenge/undo it.
-            🤛 Long-press to propose replacing it.
+            <strong>Accepted Tropes</strong> button shows everything approved so far. Tap one to challenge/undo it, or
+            to propose replacing it.
           </li>
           <li>
-            <strong>All Tropes</strong> button shows the entire pool for this game. 👆 Click one to propose it happened
-            (even if it's not on your own board). 🤛 Long-press to propose replacing it.
+            <strong>All Tropes</strong> button shows the entire pool for this game. Tap one to propose it happened (even
+            if it&apos;s not on your own board), or to propose replacing it.
           </li>
         </ul>
 
@@ -55,9 +55,16 @@ export default function HelpModal({ onClose }) {
           as you like, then submit them all together as a single group vote.
         </p>
 
+        <h4>🔀 Swapping your whole board</h4>
+        <p className="hint">
+          Stuck with a board you can't do anything with? The menu's "Swap My Whole Board" option asks the group for a
+          completely fresh set of 25 spaces. If the majority agrees, your board is re-dealt from the same trope pool —
+          anything the group has already accepted stays marked, and your wagers are cleared so you can re-place them.
+        </p>
+
         <h4>🎯 All Wagers</h4>
         <p className="hint">
-          See every player's wagered tropes in one place, with a ✅ next to any that have already been accepted.
+          See every player's wagered tropes in one place. Anything the group has already accepted is outlined in green.
         </p>
 
         <h4>📜 Activity Feed</h4>
@@ -75,8 +82,8 @@ export default function HelpModal({ onClose }) {
 
         <h4>🧑‍🎤 Avatars</h4>
         <p className="hint">
-          Pick an emoji avatar from "Change Name" — it shows up next to your name in the Players list, claim prompts,
-          and the final recap so everyone can tell you apart at a glance.
+          Pick an emoji avatar from "Change Name and Avatar" — it shows up next to your name in the Players list, claim
+          prompts, and the final recap so everyone can tell you apart at a glance.
         </p>
 
         <h4>🎉 Quick Reactions</h4>
@@ -106,7 +113,7 @@ export default function HelpModal({ onClose }) {
             🔍 <strong>Board Focus</strong> — collapse everything down to just your board.
           </li>
           <li>
-            ✏️ <strong>Change Name</strong> — rename and re-pick your avatar anytime.
+            ✏️ <strong>Change Name and Avatar</strong> — rename and re-pick your avatar anytime.
           </li>
           <li>
             📋 <strong>Copy Code</strong> / 🔗 <strong>Copy Invite Link</strong> — share the game with others.

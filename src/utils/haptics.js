@@ -30,3 +30,5 @@ export function vibrate(pattern) {
 
 export const VIBRATE_PATTERN_MARK = [40];
 export const VIBRATE_PATTERN_BINGO = [80, 40, 80, 40, 160];
+// Distinctly nagging double-buzz for "the group needs your answer".
+export const VIBRATE_PATTERN_VOTE_NEEDED = [70, 60, 70];

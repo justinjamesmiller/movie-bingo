@@ -84,6 +84,31 @@ export default function Landing({ onHost, onJoin, error, busy, savedSession, onR
         </div>
       )}
       <div className="card">
+        <h2>Join a Game</h2>
+        <label htmlFor="join-name">Your name</label>
+        <input
+          id="join-name"
+          type="text"
+          maxLength={20}
+          placeholder="e.g. Sidney"
+          value={joinName}
+          onChange={(e) => setJoinName(e.target.value)}
+        />
+        <label htmlFor="join-code">Game code</label>
+        <input
+          id="join-code"
+          type="text"
+          maxLength={4}
+          placeholder="ABCD"
+          className="code-input"
+          value={joinCode}
+          onChange={(e) => setJoinCode(e.target.value.toUpperCase().slice(0, 4))}
+        />
+        <button className="btn primary" disabled={busy} onClick={handleJoinClick}>
+          Join Game
+        </button>
+      </div>
+      <div className="card">
         <h2>Host a New Game</h2>
         <label htmlFor="host-name">Your name</label>
         <input
@@ -125,31 +150,6 @@ export default function Landing({ onHost, onJoin, error, busy, savedSession, onR
         <CustomTropesEditor customTropes={hostCustomTropes} onChange={setHostCustomTropes} />
         <button className="btn primary" disabled={busy} onClick={handleHostClick}>
           Host Game
-        </button>
-      </div>
-      <div className="card">
-        <h2>Join a Game</h2>
-        <label htmlFor="join-name">Your name</label>
-        <input
-          id="join-name"
-          type="text"
-          maxLength={20}
-          placeholder="e.g. Sidney"
-          value={joinName}
-          onChange={(e) => setJoinName(e.target.value)}
-        />
-        <label htmlFor="join-code">Game code</label>
-        <input
-          id="join-code"
-          type="text"
-          maxLength={4}
-          placeholder="ABCD"
-          className="code-input"
-          value={joinCode}
-          onChange={(e) => setJoinCode(e.target.value.toUpperCase().slice(0, 4))}
-        />
-        <button className="btn primary" disabled={busy} onClick={handleJoinClick}>
-          Join Game
         </button>
       </div>
       {(localError || error) && <p className="error-text">{localError || error}</p>}

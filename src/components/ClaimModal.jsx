@@ -1,6 +1,8 @@
 import { GENRES, SUBGENRES_BY_GENRE } from '../data/tropes.js';
+import { useTropeDescription } from '../hooks/useTropeDescription.js';
 
 export default function ClaimModal({ pendingClaim, myId, players, onAgree, onDisagree, onCancel }) {
+  const { description } = useTropeDescription(pendingClaim?.text);
   if (!pendingClaim) return null;
 
   const claimant = players.find((p) => p.id === pendingClaim.byId);
@@ -8,6 +10,7 @@ export default function ClaimModal({ pendingClaim, myId, players, onAgree, onDis
   const isUndo = pendingClaim.kind === 'unmark';
   const isReplace = pendingClaim.kind === 'replace';
   const isWagerChange = pendingClaim.kind === 'wagerChange';
+  const isReroll = pendingClaim.kind === 'reroll';
   const isCustom = pendingClaim.kind === 'mark' && pendingClaim.custom;
   const hasVoted = Object.prototype.hasOwnProperty.call(pendingClaim.votes, myId);
   const votesIn = Object.keys(pendingClaim.votes).length;
@@ -30,11 +33,13 @@ export default function ClaimModal({ pendingClaim, myId, players, onAgree, onDis
             ? ' wants to swap out this trope:'
             : isWagerChange
               ? ' wants to change their wagers:'
-              : isCustom
-                ? ' wants to add a new custom trope:'
-                : isUndo
-                  ? ' wants to undo this space:'
-                  : ' claims this happened:'}
+              : isReroll
+                ? ' wants a brand new board:'
+                : isCustom
+                  ? ' wants to add a new custom trope:'
+                  : isUndo
+                    ? ' wants to undo this space:'
+                    : ' claims this happened:'}
         </h3>
         {isWagerChange ? (
           <>
@@ -59,8 +64,18 @@ export default function ClaimModal({ pendingClaim, myId, players, onAgree, onDis
               </>
             )}
           </>
+        ) : isReroll ? (
+          <p className="hint">
+            Their 25 spaces would be re-dealt from the same trope pool. Tropes the group has already accepted stay
+            marked, and their current wagers are cleared.
+          </p>
         ) : (
           <p className="claim-text">{pendingClaim.text}</p>
+        )}
+        {description && !isWagerChange && !isReroll && (
+          <p className="hint">
+            <em>{description.what}</em>
+          </p>
         )}
         {isReplace && (
           <p className="hint">
@@ -77,22 +92,26 @@ export default function ClaimModal({ pendingClaim, myId, players, onAgree, onDis
                 ? '👍 Agree, swap it out'
                 : isWagerChange
                   ? '👍 Agree, allow it'
-                  : isCustom
-                    ? '👍 Agree, add it'
-                    : isUndo
-                      ? '👍 Agree, undo it'
-                      : '👍 Agree, it happened'}
+                  : isReroll
+                    ? '👍 Agree, deal a new board'
+                    : isCustom
+                      ? '👍 Agree, add it'
+                      : isUndo
+                        ? '👍 Agree, undo it'
+                        : '👍 Agree, it happened'}
             </button>
             <button className="btn disagree" onClick={onDisagree}>
               {isReplace
                 ? '👎 Keep it as is'
                 : isWagerChange
                   ? '👎 Deny it'
-                  : isCustom
-                    ? '👎 Reject it'
-                    : isUndo
-                      ? '👎 Keep it marked'
-                      : '👎 Disagree'}
+                  : isReroll
+                    ? '👎 Keep their board'
+                    : isCustom
+                      ? '👎 Reject it'
+                      : isUndo
+                        ? '👎 Keep it marked'
+                        : '👎 Disagree'}
             </button>
           </div>
         )}

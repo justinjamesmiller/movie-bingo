@@ -13,7 +13,6 @@ function makeBoard(overrides = {}) {
     pending: false,
     highlightedCells: new Set(),
     onCellClick: vi.fn(),
-    onCellLongPress: vi.fn(),
     ...overrides,
   };
 }

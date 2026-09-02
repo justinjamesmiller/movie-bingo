@@ -538,6 +538,12 @@ select {
   line-height: 1.15;
   cursor: pointer;
   position: relative;
+  /* Cells are controls, not prose -- stop mobile treating a press as an
+     attempt to select text (highlight, magnifier, copy callout). */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
   transition:
     transform 0.1s ease,
     background 0.15s ease;
@@ -765,6 +771,23 @@ select {
   padding-left: 1.2rem;
 }
 
+.trope-description {
+  margin: 0.5rem 0;
+  line-height: 1.45;
+}
+
+.btn.secondary-action {
+  width: 100%;
+  margin-top: 0.75rem;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.btn.secondary-action:hover {
+  border-color: var(--accent);
+}
+
 .claim-vote-buttons {
   display: flex;
   gap: 0.75rem;
@@ -823,9 +846,14 @@ select {
   padding: 0.15rem 0;
 }
 
+/* Accepted tropes read as green-outlined across every list, so the state is
+   recognizable at a glance without spelling it out in each row. */
 .wager-player-items li.accepted {
   color: var(--marked);
   font-weight: 600;
+  border: 1px solid var(--marked);
+  border-radius: 6px;
+  padding: 0.15rem 0.4rem;
 }
 
 .btn.challenge-item {
@@ -838,6 +866,11 @@ select {
 
 .btn.challenge-item:hover {
   border-color: var(--accent);
+}
+
+.btn.challenge-item.accepted {
+  border-color: var(--marked);
+  box-shadow: inset 0 0 0 1px var(--marked);
 }
 
 .btn.challenge-item.selected {

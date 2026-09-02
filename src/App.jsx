@@ -18,7 +18,10 @@ import {
   vibrate,
   VIBRATE_PATTERN_MARK,
   VIBRATE_PATTERN_BINGO,
+  VIBRATE_PATTERN_VOTE_NEEDED,
 } from './utils/haptics.js';
+import { clearTabAlert, setTabAlert } from './utils/tabAlert.js';
+import { loadTropeDescriptions } from './data/tropeDescriptions.js';
 import ThemeToggle from './components/ThemeToggle.jsx';
 import Landing from './components/Landing.jsx';
 import PlayersPanel from './components/PlayersPanel.jsx';
@@ -35,6 +38,7 @@ import AllWagersModal from './components/AllWagersModal.jsx';
 import ActivityFeedModal from './components/ActivityFeedModal.jsx';
 import GameOverModal from './components/GameOverModal.jsx';
 import ConfirmModal from './components/ConfirmModal.jsx';
+import TropeInfoModal from './components/TropeInfoModal.jsx';
 import ProposeReplaceModal from './components/ProposeReplaceModal.jsx';
 import ManageWagersModal from './components/ManageWagersModal.jsx';
 import JoinChoiceModal from './components/JoinChoiceModal.jsx';
@@ -76,12 +80,15 @@ function App() {
   const [soundMuted, setSoundMutedState] = useState(() => isSoundMuted());
   const [vibrationMuted, setVibrationMutedState] = useState(() => isVibrationMuted());
   const [customTropeModalOpen, setCustomTropeModalOpen] = useState(false);
+  const [boardSwapConfirmOpen, setBoardSwapConfirmOpen] = useState(false);
+  const [tropeInfoIndex, setTropeInfoIndex] = useState(null);
   const [reactions, setReactions] = useState([]);
   const [connectionStatus, setConnectionStatus] = useState('connected');
   const [browserOffline, setBrowserOffline] = useState(() => !navigator.onLine);
   const [bingoBanner, setBingoBanner] = useState(null);
   const [highlightedCells, setHighlightedCells] = useState(new Set());
   const prevClaimIdRef = useRef(null);
+  const prevJoinRequestIdRef = useRef(null);
   const gameStateRef = useRef(null);
   const myIdRef = useRef(null);
   const prevGameCodeRef = useRef(null);
@@ -141,14 +148,49 @@ function App() {
     prevBingoCountRef.current = lineCount;
   }, [gameState, myId]);
 
-  // Plays a notification tone when someone ELSE starts a new claim/vote.
+  // Alerts a player, on their device, that the group is waiting on their vote.
   useEffect(() => {
-    const claimId = gameState?.pendingClaim?.claimId || null;
-    if (claimId && claimId !== prevClaimIdRef.current && gameState.pendingClaim.byId !== myId) {
+    const pending = gameState?.pendingClaim || null;
+    const claimId = pending?.claimId || null;
+    const needsMyVote =
+      !!pending && pending.byId !== myId && !Object.prototype.hasOwnProperty.call(pending.votes, myId);
+    if (claimId && claimId !== prevClaimIdRef.current && needsMyVote) {
       playNewClaimSound();
+      vibrate(VIBRATE_PATTERN_VOTE_NEEDED);
     }
     prevClaimIdRef.current = claimId;
   }, [gameState?.pendingClaim?.claimId, myId]);
+
+  // Same alert for the host, who is the one deciding on a mid-game join.
+  useEffect(() => {
+    const state = gameState;
+    const amHost = !!state && state.seatOrder.find((id) => state.players[id]?.connected) === myId;
+    const requesterId = amHost ? state?.pendingJoinRequest?.id || null : null;
+    if (requesterId && requesterId !== prevJoinRequestIdRef.current) {
+      playNewClaimSound();
+      vibrate(VIBRATE_PATTERN_VOTE_NEEDED);
+    }
+    prevJoinRequestIdRef.current = requesterId;
+  }, [gameState, myId]);
+
+  // Keeps flashing the tab title for as long as the answer is outstanding.
+  useEffect(() => {
+    const state = gameState;
+    const pending = state?.pendingClaim || null;
+    const needsMyVote =
+      !!pending && pending.byId !== myId && !Object.prototype.hasOwnProperty.call(pending.votes, myId);
+    const amHost = !!state && state.seatOrder.find((id) => state.players[id]?.connected) === myId;
+    const needsMyApproval = amHost && !!state?.pendingJoinRequest;
+    if (needsMyVote || needsMyApproval) setTabAlert('🔔 Your answer is needed!');
+    else clearTabAlert();
+    return clearTabAlert;
+  }, [gameState, myId]);
+
+  // Fetch the explanations in the background once a game exists, so tapping a
+  // space doesn't wait on a network round trip.
+  useEffect(() => {
+    if (gameState) loadTropeDescriptions().catch(() => {});
+  }, [!gameState]);
 
   function toggleSoundMuted() {
     const next = !soundMuted;
@@ -227,6 +269,7 @@ function App() {
           const undo = evt.kind === 'unmark';
           const replace = evt.kind === 'replace';
           const wagerChange = evt.kind === 'wagerChange';
+          const reroll = evt.kind === 'reroll';
           const mark = evt.kind === 'mark';
           const state = gameStateRef.current;
           const me = state && myIdRef.current ? state.players[myIdRef.current] : null;
@@ -247,6 +290,13 @@ function App() {
               if (evt.wagerFreed) setManageWagersOpen(true);
             } else if (wagerChange) {
               showToast('✅ Wager changes approved!');
+            } else if (reroll) {
+              showToast(
+                evt.byId === myIdRef.current
+                  ? '🔀 Approved — here is your fresh board!'
+                  : '🔀 A player was dealt a fresh board.',
+              );
+              if (evt.wagerFreed) setManageWagersOpen(true);
             } else if (mark && evt.custom) {
               showToast(`📝 Custom trope "${evt.text}" was approved and added!`);
             } else {
@@ -257,7 +307,9 @@ function App() {
             showToast(
               wagerChange
                 ? '❌ The proposed wager changes did not reach majority agreement.'
-                : `❌ "${evt.text}" did not reach majority agreement.`,
+                : reroll
+                  ? '❌ The request for a fresh board did not reach majority agreement.'
+                  : `❌ "${evt.text}" did not reach majority agreement.`,
             );
           }
         } else if (evt.type === 'reaction') {
@@ -279,6 +331,8 @@ function App() {
         } else if (evt.type === 'gameReset') {
           showToast('The host reset the game — new boards have been dealt.');
           setGameOverModalOpen(false);
+        } else if (evt.type === 'gameRestored') {
+          showToast('Nobody else was still connected — your game was restored from where you left off.');
         } else if (evt.type === 'gameOver') {
           playGameOverSound();
           showToast('🏁 The game has ended — check out the recap!');
@@ -439,7 +493,18 @@ function App() {
       showToast('A claim is already being voted on.');
       return;
     }
-    client.claim(index);
+    setTropeInfoIndex(index);
+  }
+
+  function handleConfirmTropeClaim() {
+    const index = tropeInfoIndex;
+    setTropeInfoIndex(null);
+    if (index == null) return;
+    if (gameState.pendingClaim) {
+      showToast('A claim is already being voted on.');
+      return;
+    }
+    clientRef.current.claim(index);
   }
 
   function handleResetGame() {
@@ -486,11 +551,11 @@ function App() {
     setAllTropesModalOpen(false);
   }
 
-  function handleCellLongPress(index) {
-    if (!gameState) return;
-    if (gameState.freeSpace && index === CENTER_INDEX) return;
-    const me = gameState.players[myId];
-    handleRequestReplace(me.board[index]);
+  function handleProposeSwapFromCell() {
+    const index = tropeInfoIndex;
+    setTropeInfoIndex(null);
+    if (index == null || !gameState) return;
+    handleRequestReplace(gameState.players[myId].board[index]);
   }
 
   function handleSubmitWagerChange(add, remove) {
@@ -501,6 +566,19 @@ function App() {
     }
     clientRef.current.proposeWagerChange(add, remove);
     setManageWagersOpen(false);
+  }
+
+  function handleRequestBoardSwap() {
+    if (gameState.pendingClaim) {
+      showToast('A claim is already being voted on.');
+      return;
+    }
+    setBoardSwapConfirmOpen(true);
+  }
+
+  function handleConfirmBoardSwap() {
+    setBoardSwapConfirmOpen(false);
+    clientRef.current.proposeBoardSwap();
   }
 
   function handleKickPlayer(id, name) {
@@ -680,6 +758,7 @@ function App() {
                 onCopyCode={handleCopyCode}
                 onCopyInviteLink={handleCopyInviteLink}
                 onSubmitCustomTrope={() => setCustomTropeModalOpen(true)}
+                onRequestBoardSwap={handleRequestBoardSwap}
               />
             </div>
           )}
@@ -708,7 +787,6 @@ function App() {
                 pending={!!gameState.pendingClaim}
                 highlightedCells={highlightedCells}
                 onCellClick={handleCellClick}
-                onCellLongPress={handleCellLongPress}
               />
             </div>
           </div>
@@ -838,6 +916,26 @@ function App() {
 
       {customTropeModalOpen && (
         <CustomTropeModal onSubmit={handleSubmitCustomTrope} onCancel={() => setCustomTropeModalOpen(false)} />
+      )}
+
+      {tropeInfoIndex !== null && (
+        <TropeInfoModal
+          text={me.board[tropeInfoIndex]}
+          marked={me.marked.includes(tropeInfoIndex)}
+          onConfirm={handleConfirmTropeClaim}
+          onCancel={() => setTropeInfoIndex(null)}
+          onProposeSwap={handleProposeSwapFromCell}
+        />
+      )}
+
+      {boardSwapConfirmOpen && (
+        <ConfirmModal
+          title="Ask for a fresh board?"
+          message="The other players vote on this. If they agree, your 25 spaces are re-dealt from the same trope pool — tropes the group already accepted stay marked, and your current wagers are cleared so you can re-place them."
+          confirmLabel="🔀 Ask the group"
+          onConfirm={handleConfirmBoardSwap}
+          onCancel={() => setBoardSwapConfirmOpen(false)}
+        />
       )}
 
       {helpModalOpen && <HelpModal onClose={() => setHelpModalOpen(false)} />}

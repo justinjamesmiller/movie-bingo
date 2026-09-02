@@ -1,23 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { CENTER_INDEX } from '../data/tropes.js';
-import { useLongPress } from '../hooks/useLongPress.js';
 
-function BingoCell({
-  index,
-  text,
-  isFreeSpace,
-  wagered,
-  marked,
-  pending,
-  flash,
-  onLine,
-  onCellClick,
-  onCellLongPress,
-}) {
-  const longPress = useLongPress(
-    () => !isFreeSpace && onCellLongPress(index),
-    () => onCellClick(index),
-  );
+function BingoCell({ index, text, isFreeSpace, wagered, marked, pending, flash, onLine, onCellClick }) {
   const classes = ['bingo-cell'];
   if (wagered) classes.push('wagered');
   if (marked) classes.push('marked');
@@ -26,22 +10,13 @@ function BingoCell({
   if (flash) classes.push('flash');
   if (onLine) classes.push('bingo-line');
   return (
-    <div className={classes.join(' ')} {...longPress}>
+    <div className={classes.join(' ')} onClick={() => onCellClick(index)}>
       {text}
     </div>
   );
 }
 
-export default function BingoBoard({
-  board,
-  wagered,
-  marked,
-  freeSpace,
-  pending,
-  highlightedCells,
-  onCellClick,
-  onCellLongPress,
-}) {
+export default function BingoBoard({ board, wagered, marked, freeSpace, pending, highlightedCells, onCellClick }) {
   const prevMarkedRef = useRef(marked);
   const [flashSet, setFlashSet] = useState(new Set());
 
@@ -69,7 +44,6 @@ export default function BingoBoard({
           flash={flashSet.has(index)}
           onLine={!!highlightedCells?.has(index)}
           onCellClick={onCellClick}
-          onCellLongPress={onCellLongPress}
         />
       ))}
     </div>

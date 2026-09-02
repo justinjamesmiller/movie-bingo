@@ -49,10 +49,12 @@ export default function ManageWagersModal({ board, wagered, marked, freeSpaceInd
             {currentWagers.map(({ text, index }) => (
               <li key={index}>
                 <button
-                  className={`btn challenge-item${toRemove.includes(index) ? ' selected' : ''}`}
+                  className={`btn challenge-item${marked.includes(index) ? ' accepted' : ''}${
+                    toRemove.includes(index) ? ' selected' : ''
+                  }`}
                   onClick={() => toggleRemove(index)}
                 >
-                  {toRemove.includes(index) ? '🗑️ ' : '✅ '}
+                  {toRemove.includes(index) ? '🗑️ ' : ''}
                   {text}
                 </button>
               </li>

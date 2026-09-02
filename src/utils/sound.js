@@ -59,8 +59,13 @@ function playNotes(notes) {
   }
 }
 
+// Deliberately the most attention-grabbing cue in the app -- it's the only one
+// that asks the player to actually do something.
 export function playNewClaimSound() {
-  playNotes([[660, 0, 0.12, 'triangle', 0.12]]);
+  playNotes([
+    [740, 0, 0.14, 'triangle', 0.18],
+    [988, 0.16, 0.22, 'triangle', 0.18],
+  ]);
 }
 
 export function playApprovedSound() {

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getEligibleTropeTexts } from '../data/tropes.js';
 import { resetFakeSupabase } from '../test/fakeSupabase.js';
 
 vi.mock('@supabase/supabase-js', async () => {
@@ -50,6 +51,7 @@ describe('GameClient', () => {
   beforeEach(() => {
     resetFakeSupabase();
     sessionStorage.clear();
+    localStorage.clear();
   });
 
   afterEach(() => {
@@ -328,5 +330,380 @@ describe('GameClient', () => {
     const host = makeTrackedClient();
     await host.client.hostGame('Alice', ['not-a-real-genre'], [], false, {}, 25);
     expect(host.state.genres).toEqual(['horror']);
+  });
+
+  it('deals the proposer a fresh board when a board swap is approved', async () => {
+    const host = makeTrackedClient();
+    const code = await host.client.hostGame('Alice', ['horror'], [], false, { horror: 50 }, 40);
+    const guest = makeTrackedClient();
+    await guest.client.joinGame(code, 'Bob');
+    await flush();
+    host.client.setWager([1, 2]);
+    await flush();
+    host.client.startGame();
+    await flush();
+
+    const oldBoard = [...host.state.players[host.myId].board];
+    const guestBoard = [...guest.state.players[guest.myId].board];
+
+    host.client.proposeBoardSwap();
+    await flush();
+    expect(host.state.pendingClaim.kind).toBe('reroll');
+
+    guest.client.vote(guest.state.pendingClaim.claimId, true);
+    await flush();
+
+    const newBoard = host.state.players[host.myId].board;
+    expect(newBoard).toHaveLength(25);
+    expect(new Set(newBoard).size).toBe(25);
+    expect(newBoard).not.toEqual(oldBoard);
+    expect(newBoard.every((text) => host.state.tropePool.includes(text))).toBe(true);
+    // Only the proposer is re-dealt.
+    expect(guest.state.players[guest.myId].board).toEqual(guestBoard);
+    // Wagers pointed at the old layout, so they're cleared for re-placement.
+    expect(host.state.players[host.myId].wagered).toEqual([]);
+    expect(host.events.some((e) => e.type === 'claimResolved' && e.kind === 'reroll' && e.approved)).toBe(true);
+  });
+
+  it('keeps already-accepted tropes marked on a freshly dealt board', async () => {
+    const host = makeTrackedClient();
+    const code = await host.client.hostGame('Alice', ['horror'], [], false, { horror: 50 }, 25);
+    const guest = makeTrackedClient();
+    await guest.client.joinGame(code, 'Bob');
+    await flush();
+    host.client.startGame();
+    await flush();
+
+    const acceptedText = host.state.players[host.myId].board[0];
+    host.client.claim(0);
+    await flush();
+    guest.client.vote(guest.state.pendingClaim.claimId, true);
+    await flush();
+    expect(host.state.acceptedTropes).toContain(acceptedText);
+
+    host.client.proposeBoardSwap();
+    await flush();
+    guest.client.vote(guest.state.pendingClaim.claimId, true);
+    await flush();
+
+    const me = host.state.players[host.myId];
+    expect(me.marked).toContain(me.board.indexOf(acceptedText));
+  });
+
+  it('leaves the board untouched when a board swap is voted down', async () => {
+    const host = makeTrackedClient();
+    const code = await host.client.hostGame('Alice', ['horror'], [], false, { horror: 50 }, 40);
+    const guest = makeTrackedClient();
+    await guest.client.joinGame(code, 'Bob');
+    await flush();
+    host.client.startGame();
+    await flush();
+
+    const oldBoard = [...host.state.players[host.myId].board];
+    host.client.proposeBoardSwap();
+    await flush();
+    guest.client.vote(guest.state.pendingClaim.claimId, false);
+    await flush();
+
+    expect(host.state.pendingClaim).toBeNull();
+    expect(host.state.players[host.myId].board).toEqual(oldBoard);
+  });
+
+  it('ignores a board swap request before the game has started', async () => {
+    const host = makeTrackedClient();
+    await host.client.hostGame('Alice', ['horror'], [], false, { horror: 50 }, 25);
+    host.client.proposeBoardSwap();
+    await flush();
+    expect(host.state.pendingClaim).toBeNull();
+  });
+
+  it('marks a replacement trope that the group had already accepted', async () => {
+    const host = makeTrackedClient();
+    const code = await host.client.hostGame('Alice', ['horror'], [], false, { horror: 50 }, 40);
+    const guest = makeTrackedClient();
+    await guest.client.joinGame(code, 'Bob');
+    await flush();
+    host.client.startGame();
+    await flush();
+
+    // Treat every trope the swap could draw from as already accepted, so the
+    // randomly-picked replacement is guaranteed to be one of them.
+    host.client.state.acceptedTropes = [...getEligibleTropeTexts('horror', 'general')];
+    const oldText = host.state.players[host.myId].board[0];
+
+    host.client.proposeReplace(oldText, 'horror', 'general');
+    await flush();
+    guest.client.vote(guest.state.pendingClaim.claimId, true);
+    await flush();
+
+    const me = host.state.players[host.myId];
+    expect(me.board[0]).not.toBe(oldText);
+    expect(me.marked).toContain(0);
+  });
+});
+
+describe('GameClient connection stability', () => {
+  beforeEach(() => {
+    resetFakeSupabase();
+    sessionStorage.clear();
+    localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  // Sets up a started two-player game and hands back both tracked clients,
+  // plus the host's saved session (the guest's join overwrites it in the
+  // shared sessionStorage, so capture it while it's still the host's).
+  async function twoPlayerGame() {
+    const host = makeTrackedClient();
+    const code = await host.client.hostGame('Alice', ['horror'], [], false, { horror: 50 }, 25);
+    const hostSession = sessionStorage.getItem('movie-bingo-session');
+    const guest = makeTrackedClient();
+    await guest.client.joinGame(code, 'Bob');
+    await flush();
+    host.client.startGame();
+    await flush();
+    return { host, guest, code, hostSession };
+  }
+
+  it('does not mark a peer disconnected the moment their connection drops', async () => {
+    const { host, guest } = await twoPlayerGame();
+
+    guest.client.channel.simulateDrop();
+    await flush();
+
+    expect(host.state.players[guest.myId].connected).toBe(true);
+  });
+
+  it('marks a peer disconnected only after the grace period elapses', async () => {
+    vi.useFakeTimers();
+    const host = makeTrackedClient();
+    const code = await host.client.hostGame('Alice', ['horror'], [], false, { horror: 50 }, 25);
+    const guest = makeTrackedClient();
+    const joined = guest.client.joinGame(code, 'Bob');
+    await vi.advanceTimersByTimeAsync(50);
+    await joined;
+
+    guest.client.channel.simulateDrop();
+    await vi.advanceTimersByTimeAsync(30000);
+    expect(host.state.players[guest.myId].connected).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(120000);
+    expect(host.state.players[guest.myId].connected).toBe(false);
+  });
+
+  it('cancels a pending disconnect as soon as the peer is heard from again', async () => {
+    vi.useFakeTimers();
+    const host = makeTrackedClient();
+    const code = await host.client.hostGame('Alice', ['horror'], [], false, { horror: 50 }, 25);
+    const guest = makeTrackedClient();
+    const joined = guest.client.joinGame(code, 'Bob');
+    await vi.advanceTimersByTimeAsync(50);
+    await joined;
+
+    guest.client.channel.simulateDrop();
+    await vi.advanceTimersByTimeAsync(30000);
+
+    // The guest comes back before the grace period is up.
+    guest.client._checkConnection();
+    await vi.advanceTimersByTimeAsync(200000);
+
+    expect(host.state.players[guest.myId].connected).toBe(true);
+  });
+
+  it('restores a rejoining host to connected and back in charge', async () => {
+    const { host, guest, hostSession } = await twoPlayerGame();
+    const hostId = host.myId;
+
+    // The host's phone drops out long enough for the guest to promote itself.
+    host.client.channel.simulateDrop();
+    guest.client._markDisconnected(hostId);
+    await flush();
+    expect(guest.state.players[hostId].connected).toBe(false);
+    expect(guest.client.isHost()).toBe(true);
+
+    sessionStorage.setItem('movie-bingo-session', hostSession);
+    const returning = makeTrackedClient();
+    await returning.client.rejoinGame();
+    await flush();
+
+    expect(returning.state.players[hostId].connected).toBe(true);
+    expect(returning.client.isHost()).toBe(true);
+    expect(guest.client.isHost()).toBe(false);
+  });
+
+  // The old failure mode: everyone else still considered the host connected, so
+  // no client satisfied isHost() to answer, and the rejoin timed out.
+  it('answers a host rejoin even while peers still consider that host connected', async () => {
+    const { host, guest, hostSession } = await twoPlayerGame();
+    const hostId = host.myId;
+
+    host.client.channel.simulateDrop();
+    await flush();
+    expect(guest.state.players[hostId].connected).toBe(true);
+    expect(guest.client.isHost()).toBe(false);
+
+    sessionStorage.setItem('movie-bingo-session', hostSession);
+    const returning = makeTrackedClient();
+    await expect(returning.client.rejoinGame()).resolves.toBeUndefined();
+    expect(returning.client.isHost()).toBe(true);
+  });
+
+  it('self-heals a seat wrongly reported as disconnected instead of needing a refresh', async () => {
+    const { host, guest } = await twoPlayerGame();
+
+    // A stale snapshot from the host claims the guest has dropped, even though
+    // the guest is plainly still here and receiving it.
+    host.client.state.players[guest.myId].connected = false;
+    host.client._send({ t: 'state', state: host.client.state });
+    await flush();
+
+    expect(guest.state.players[guest.myId].connected).toBe(true);
+    expect(host.state.players[guest.myId].connected).toBe(true);
+  });
+
+  it('settles on the lowest-seat player when two clients both believe they are host', async () => {
+    const { host, guest } = await twoPlayerGame();
+
+    // Force the split brain: the guest thinks the host is gone and has taken
+    // over, while the host still believes it is in charge.
+    guest.client.state.players[host.myId].connected = false;
+    expect(guest.client.isHost()).toBe(true);
+    expect(host.client.isHost()).toBe(true);
+
+    guest.client._send({ t: 'state', state: guest.client.state });
+    await flush();
+
+    expect(host.client.isHost()).toBe(true);
+    expect(guest.client.isHost()).toBe(false);
+    expect(guest.state.players[host.myId].connected).toBe(true);
+  });
+
+  it('claims still resolve for both players after a drop and recovery', async () => {
+    const { host, guest } = await twoPlayerGame();
+
+    host.client.channel.simulateDrop();
+    await flush();
+    host.client._checkConnection();
+    await flush();
+
+    const text = host.state.players[host.myId].board[0];
+    host.client.claim(0);
+    await flush();
+    expect(guest.state.pendingClaim).not.toBeNull();
+
+    guest.client.vote(guest.state.pendingClaim.claimId, true);
+    await flush();
+
+    expect(host.state.pendingClaim).toBeNull();
+    expect(guest.state.pendingClaim).toBeNull();
+    expect(host.state.acceptedTropes).toContain(text);
+    expect(guest.state.acceptedTropes).toContain(text);
+  });
+});
+
+describe('GameClient session recovery', () => {
+  beforeEach(() => {
+    resetFakeSupabase();
+    sessionStorage.clear();
+    localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it('falls back to the localStorage backup when the tab-scoped session is gone', async () => {
+    const host = makeTrackedClient();
+    await host.client.hostGame('Alice', ['horror'], [], false, { horror: 50 }, 25);
+
+    // Closing and reopening the tab wipes sessionStorage but not localStorage.
+    sessionStorage.clear();
+
+    expect(GameClient.getSavedSession()).toMatchObject({ name: 'Alice', myId: host.myId });
+  });
+
+  it('revives the game from the local snapshot when nobody is left to answer', async () => {
+    vi.useFakeTimers();
+    const host = makeTrackedClient();
+    const code = await host.client.hostGame('Alice', ['horror'], [], false, { horror: 50 }, 25);
+    host.client.startGame();
+    const claimedText = host.state.players[host.myId].board[0];
+    host.client.claim(0);
+    await vi.advanceTimersByTimeAsync(50);
+    expect(host.state.acceptedTropes).toContain(claimedText);
+
+    // Everyone steps away: the only client is torn down entirely.
+    host.client.destroy();
+    resetFakeSupabase();
+
+    const returning = makeTrackedClient();
+    const rejoin = returning.client.rejoinGame();
+    await vi.advanceTimersByTimeAsync(11000);
+    await expect(rejoin).resolves.toBeUndefined();
+
+    expect(returning.state.code).toBe(code);
+    expect(returning.state.started).toBe(true);
+    expect(returning.state.acceptedTropes).toContain(claimedText);
+    expect(returning.state.players[returning.myId].marked).toContain(0);
+    expect(returning.client.isHost()).toBe(true);
+    expect(returning.events.some((e) => e.type === 'gameRestored')).toBe(true);
+  });
+
+  it('still reports the game as gone when there is no snapshot to revive', async () => {
+    vi.useFakeTimers();
+    const host = makeTrackedClient();
+    await host.client.hostGame('Alice', ['horror'], [], false, { horror: 50 }, 25);
+    host.client.destroy();
+    resetFakeSupabase();
+    localStorage.removeItem('movie-bingo-snapshot');
+
+    const returning = makeTrackedClient();
+    // Attach the rejection expectation before advancing timers so it's never
+    // momentarily an unhandled rejection.
+    const assertion = expect(returning.client.rejoinGame()).rejects.toThrow(/may have ended/i);
+    await vi.advanceTimersByTimeAsync(11000);
+    await assertion;
+    expect(GameClient.getSavedSession()).toBeNull();
+  });
+
+  it('lets a stale returning client be corrected by the live game instead of rolling it back', async () => {
+    const host = makeTrackedClient();
+    const code = await host.client.hostGame('Alice', ['horror'], [], false, { horror: 50 }, 25);
+    const guest = makeTrackedClient();
+    await guest.client.joinGame(code, 'Bob');
+    await flush();
+    host.client.startGame();
+    await flush();
+
+    // A snapshot taken before the game started, replayed by a client that
+    // thinks it is still pre-game.
+    const stale = structuredClone(guest.client.state);
+    stale.started = false;
+    stale.rev = 0;
+
+    guest.client._send({ t: 'state', state: stale });
+    await flush();
+
+    expect(host.state.started).toBe(true);
+    expect(guest.state.started).toBe(true);
+  });
+
+  it('drops a snapshot that belongs to a different game code', async () => {
+    const host = makeTrackedClient();
+    await host.client.hostGame('Alice', ['horror'], [], false, { horror: 50 }, 25);
+    expect(GameClient.getSavedSnapshot('ZZZZ')).toBeNull();
+  });
+
+  it('forgets the snapshot when a player deliberately leaves', async () => {
+    const host = makeTrackedClient();
+    await host.client.hostGame('Alice', ['horror'], [], false, { horror: 50 }, 25);
+    host.client.leaveGame();
+    expect(GameClient.getSavedSnapshot()).toBeNull();
+    expect(GameClient.getSavedSession()).toBeNull();
   });
 });

@@ -1,4 +1,14 @@
-export default function PlayersPanel({ players, hostId, myId, isHost, wagerCount, maxWagers, started, onKick }) {
+export default function PlayersPanel({
+  players,
+  hostId,
+  myId,
+  isHost,
+  wagerCount,
+  maxWagers,
+  started,
+  bingoCounts,
+  onKick,
+}) {
   return (
     <aside className="players-panel">
       <h3>Players</h3>
@@ -25,7 +35,8 @@ export default function PlayersPanel({ players, hostId, myId, isHost, wagerCount
                 </span>
               </div>
               <div className="hint player-stats">
-                {p.marked.length} marked · {wageredMarked}/{p.wagered.length} wagered marked
+                {p.marked.length} marked · {bingoCounts[p.id] || 0} bingo{(bingoCounts[p.id] || 0) === 1 ? '' : 's'} ·{' '}
+                {wageredMarked}/{p.wagered.length} wagered marked
               </div>
             </li>
           );

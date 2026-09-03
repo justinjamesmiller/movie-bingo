@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { GENRES, DEFAULT_GENERAL_PERCENT, TOTAL_TROPES_OPTIONS, DEFAULT_TOTAL_TROPES } from '../data/tropes.js';
 import MovieLookup from './MovieLookup.jsx';
 import GenreSubgenrePicker from './GenreSubgenrePicker.jsx';
@@ -19,6 +19,10 @@ export default function Landing({ onHost, onJoin, error, busy, savedSession, onR
     return fromUrl ? fromUrl.trim().toUpperCase().slice(0, 4) : '';
   });
   const [localError, setLocalError] = useState('');
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  }, []);
 
   function ensurePercentsFor(genres) {
     setHostGeneralPercents((prev) => {

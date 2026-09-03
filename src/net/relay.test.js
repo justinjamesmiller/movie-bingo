@@ -26,11 +26,13 @@ async function flush(times = 8) {
 // from the same onState/onEvent callbacks the real UI layer would use.
 function makeTrackedClient() {
   const events = [];
+  const states = [];
   let state = null;
   let myId = null;
   const client = new GameClient({
     onState: (s, id) => {
       state = { ...s };
+      states.push(structuredClone(s));
       myId = id;
     },
     onEvent: (evt) => events.push(evt),
@@ -38,6 +40,7 @@ function makeTrackedClient() {
   return {
     client,
     events,
+    states,
     get state() {
       return state;
     },
@@ -56,6 +59,7 @@ describe('GameClient', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.useRealTimers();
   });
 
   it('hosts a new game with the host seated as player 0', async () => {
@@ -92,6 +96,50 @@ describe('GameClient', () => {
     await host.client.hostGame('Alice', ['horror'], [], false, { horror: 50 }, 25);
     const guest = makeTrackedClient();
     await expect(guest.client.joinGame('ABCD', '   ')).rejects.toThrow(/enter your name/i);
+  });
+
+  it('rejects a join attempt if the relay subscription never completes', async () => {
+    vi.useFakeTimers();
+    const guest = makeTrackedClient();
+    const removeChannel = vi.fn();
+    guest.client.supabase = {
+      channel: () => ({
+        on() {
+          return this;
+        },
+        subscribe() {
+          return this;
+        },
+      }),
+      removeChannel,
+    };
+
+    const assertion = expect(guest.client.joinGame('ABCD', 'Bob')).rejects.toThrow(/could not connect to the relay/i);
+    await vi.advanceTimersByTimeAsync(10000);
+    await assertion;
+    expect(removeChannel).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects hosting if the relay subscription never completes', async () => {
+    vi.useFakeTimers();
+    const host = makeTrackedClient();
+    host.client.supabase = {
+      channel: () => ({
+        on() {
+          return this;
+        },
+        subscribe() {
+          return this;
+        },
+      }),
+      removeChannel: vi.fn(),
+    };
+
+    const assertion = expect(host.client.hostGame('Alice', ['horror'], [], false, { horror: 50 }, 25)).rejects.toThrow(
+      /could not connect to the relay/i,
+    );
+    await vi.advanceTimersByTimeAsync(10000);
+    await assertion;
   });
 
   it('lets a player set and clear wagers before the game starts', async () => {
@@ -162,6 +210,26 @@ describe('GameClient', () => {
     expect(host.state.players[host.myId].marked).toContain(hostIdx);
     expect(guest.state.players[guest.myId].marked).toContain(guestIdx);
     expect(host.events.some((e) => e.type === 'claimResolved' && e.approved)).toBe(true);
+  });
+
+  it('does not emit a terminal fully-voted claim as still pending before resolving', async () => {
+    const host = makeTrackedClient();
+    const code = await host.client.hostGame('Alice', ['horror'], [], false, { horror: 50 }, 25);
+    const guest = makeTrackedClient();
+    await guest.client.joinGame(code, 'Bob');
+    await flush();
+    host.client.startGame();
+    await flush();
+
+    host.client.claim(0);
+    await flush();
+    guest.client.vote(host.state.pendingClaim.claimId, true);
+    await flush();
+
+    const terminalPendingClaims = host.states
+      .map((state) => state.pendingClaim)
+      .filter((claim) => claim && Object.keys(claim.votes).length >= claim.totalPlayers);
+    expect(terminalPendingClaims).toEqual([]);
   });
 
   it('resolves a claim as rejected when the majority votes no', async () => {
@@ -550,6 +618,73 @@ describe('GameClient connection stability', () => {
     const returning = makeTrackedClient();
     await expect(returning.client.rejoinGame()).resolves.toBeUndefined();
     expect(returning.client.isHost()).toBe(true);
+  });
+
+  it('lets a disconnected player recover their same seat by using Join instead of Reconnect', async () => {
+    const { host, guest, code } = await twoPlayerGame();
+    const guestId = guest.myId;
+
+    guest.client.channel.simulateDrop();
+    host.client._markDisconnected(guestId);
+    await flush();
+
+    expect(host.state.players[guestId].connected).toBe(false);
+
+    const returning = makeTrackedClient();
+    returning.client.myId = guestId;
+    const result = await returning.client.joinGame(code, 'Bob Back');
+    await flush();
+
+    expect(result).toEqual({ needsChoice: false });
+    expect(returning.state.players[guestId].connected).toBe(true);
+    expect(returning.state.players[guestId].name).toBe('Bob Back');
+    expect(returning.myId).toBe(guestId);
+  });
+
+  it('offers disconnected seats when a returning player joins with a fresh client id', async () => {
+    const { host, guest, code } = await twoPlayerGame();
+    const guestId = guest.myId;
+
+    guest.client.channel.simulateDrop();
+    host.client._markDisconnected(guestId);
+    await flush();
+
+    const returning = makeTrackedClient();
+    const result = await returning.client.joinGame(code, 'Bob Back');
+
+    expect(result).toEqual({
+      needsChoice: true,
+      options: [{ id: guestId, name: 'Bob', seat: 1 }],
+      allowNew: true,
+      name: 'Bob Back',
+    });
+  });
+
+  it('offers a seat whose disconnect is still in the grace period when someone joins', async () => {
+    vi.useFakeTimers();
+    const host = makeTrackedClient();
+    const code = await host.client.hostGame('Alice', ['horror'], [], false, { horror: 50 }, 25);
+    const guest = makeTrackedClient();
+    const joined = guest.client.joinGame(code, 'Bob');
+    await vi.advanceTimersByTimeAsync(50);
+    await joined;
+    host.client.startGame();
+    await vi.advanceTimersByTimeAsync(50);
+
+    guest.client.channel.simulateDrop();
+    await vi.advanceTimersByTimeAsync(50);
+    expect(host.state.players[guest.myId].connected).toBe(true);
+
+    const returning = makeTrackedClient();
+    const joinAttempt = returning.client.joinGame(code, 'Bob Back');
+    await vi.advanceTimersByTimeAsync(50);
+
+    await expect(joinAttempt).resolves.toEqual({
+      needsChoice: true,
+      options: [{ id: guest.myId, name: 'Bob', seat: 1 }],
+      allowNew: true,
+      name: 'Bob Back',
+    });
   });
 
   it('self-heals a seat wrongly reported as disconnected instead of needing a refresh', async () => {

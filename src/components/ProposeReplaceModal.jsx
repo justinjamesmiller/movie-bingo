@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { GENRES, SUBGENRES_BY_GENRE } from '../data/tropes.js';
+import ModalShell from './ModalShell.jsx';
 
 export default function ProposeReplaceModal({ text, defaultGenre, defaultSubgenre, onConfirm, onCancel }) {
   const [genre, setGenre] = useState(defaultGenre);
@@ -11,7 +12,7 @@ export default function ProposeReplaceModal({ text, defaultGenre, defaultSubgenr
   }
 
   return (
-    <div className="modal">
+    <ModalShell onClose={onCancel}>
       <div className="modal-content">
         <h3>Propose swapping out this trope?</h3>
         <p className="claim-text">{text}</p>
@@ -42,6 +43,6 @@ export default function ProposeReplaceModal({ text, defaultGenre, defaultSubgenr
           </button>
         </div>
       </div>
-    </div>
+    </ModalShell>
   );
 }

@@ -1,8 +1,10 @@
 // Shown to a would-be joiner while the host decides whether to let them into
 // an already-started game.
+import ModalShell from './ModalShell.jsx';
+
 export default function JoinPendingModal({ onCancel }) {
   return (
-    <div className="modal">
+    <ModalShell onClose={onCancel}>
       <div className="modal-content">
         <h3>⏳ Waiting for the host</h3>
         <p className="hint">
@@ -13,6 +15,6 @@ export default function JoinPendingModal({ onCancel }) {
           Cancel
         </button>
       </div>
-    </div>
+    </ModalShell>
   );
 }

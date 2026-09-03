@@ -1,6 +1,8 @@
+import ModalShell from './ModalShell.jsx';
+
 export default function JoinChoiceModal({ name, options, allowNew, busy, onClaimSeat, onJoinAsNew, onCancel }) {
   return (
-    <div className="modal">
+    <ModalShell onClose={busy ? undefined : onCancel}>
       <div className="modal-content">
         <h3>Reconnect as an existing player?</h3>
         <p className="hint">
@@ -25,6 +27,6 @@ export default function JoinChoiceModal({ name, options, allowNew, busy, onClaim
           Cancel
         </button>
       </div>
-    </div>
+    </ModalShell>
   );
 }

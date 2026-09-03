@@ -37,4 +37,22 @@ describe('ConfirmModal', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
+
+  it('calls onCancel when clicking the backdrop', () => {
+    const onCancel = vi.fn();
+    const { container } = render(
+      <ConfirmModal title="Leave?" message="Sure?" onConfirm={vi.fn()} onCancel={onCancel} />,
+    );
+    fireEvent.mouseDown(container.querySelector('.modal'));
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not cancel when clicking inside the modal content', () => {
+    const onCancel = vi.fn();
+    const { container } = render(
+      <ConfirmModal title="Leave?" message="Sure?" onConfirm={vi.fn()} onCancel={onCancel} />,
+    );
+    fireEvent.mouseDown(container.querySelector('.modal-content'));
+    expect(onCancel).not.toHaveBeenCalled();
+  });
 });

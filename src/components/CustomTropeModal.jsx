@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import ModalShell from './ModalShell.jsx';
 
 const MAX_LENGTH = 60;
 
@@ -9,7 +10,7 @@ export default function CustomTropeModal({ onSubmit, onCancel }) {
   const trimmed = text.trim();
 
   return (
-    <div className="modal">
+    <ModalShell onClose={onCancel}>
       <div className="modal-content">
         <h3>📝 Submit a Custom Trope</h3>
         <p className="hint">
@@ -38,6 +39,6 @@ export default function CustomTropeModal({ onSubmit, onCancel }) {
           </button>
         </div>
       </div>
-    </div>
+    </ModalShell>
   );
 }

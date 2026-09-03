@@ -4,6 +4,7 @@ import MovieLookup from './MovieLookup.jsx';
 import GenreSubgenrePicker from './GenreSubgenrePicker.jsx';
 import GeneralPercentSliders from './GeneralPercentSliders.jsx';
 import CustomTropesEditor from './CustomTropesEditor.jsx';
+import ModalShell from './ModalShell.jsx';
 
 export default function ResetModal({
   currentGenres,
@@ -45,7 +46,7 @@ export default function ResetModal({
   }
 
   return (
-    <div className="modal">
+    <ModalShell onClose={onCancel}>
       <div className="modal-content">
         <h3>Reset the game?</h3>
         <p className="hint">This deals fresh boards and clears all marks and wagers for every player.</p>
@@ -86,6 +87,6 @@ export default function ResetModal({
           </button>
         </div>
       </div>
-    </div>
+    </ModalShell>
   );
 }

@@ -1,9 +1,18 @@
 import { useState } from 'react';
+import ModalShell from './ModalShell.jsx';
 
 // Lets a player stage BOTH removals (from their current wagers) and
 // additions (from open board spaces) locally, then submit everything as one
 // batched proposal for the group to approve together.
-export default function ManageWagersModal({ board, wagered, marked, freeSpaceIndex, onSubmit, onCancel }) {
+export default function ManageWagersModal({
+  board,
+  wagered,
+  marked,
+  freeSpaceIndex,
+  onSubmit,
+  onTropeClick,
+  onCancel,
+}) {
   const [toRemove, setToRemove] = useState([]);
   const [toAdd, setToAdd] = useState([]);
 
@@ -31,10 +40,38 @@ export default function ManageWagersModal({ board, wagered, marked, freeSpaceInd
     });
   }
 
+  function previewRemoval(text, index) {
+    const removing = toRemove.includes(index);
+    onTropeClick({
+      text,
+      marked: marked.includes(index),
+      title: removing ? 'Keep this wager?' : 'Remove this wager?',
+      actionHint: removing
+        ? 'This keeps the space in your wager picks for now.'
+        : 'This marks the wager for removal. The group approves all staged wager changes together.',
+      confirmLabel: removing ? '🎯 Keep wager' : '🗑️ Remove wager',
+      onConfirm: () => toggleRemove(index),
+    });
+  }
+
+  function previewAddition(text, index) {
+    const adding = toAdd.includes(index);
+    onTropeClick({
+      text,
+      marked: false,
+      title: adding ? 'Drop this new wager?' : 'Add this wager?',
+      actionHint: adding
+        ? 'This removes the space from your staged wager additions.'
+        : 'This stages the space as a new wager. The group approves all staged wager changes together.',
+      confirmLabel: adding ? '☐ Drop staged wager' : '☑ Add wager',
+      onConfirm: () => toggleAdd(index),
+    });
+  }
+
   const hasChanges = toRemove.length > 0 || toAdd.length > 0;
 
   return (
-    <div className="modal">
+    <ModalShell onClose={onCancel}>
       <div className="modal-content">
         <h3>Manage Your Wagers</h3>
         <p className="hint">
@@ -52,7 +89,7 @@ export default function ManageWagersModal({ board, wagered, marked, freeSpaceInd
                   className={`btn challenge-item${marked.includes(index) ? ' accepted' : ''}${
                     toRemove.includes(index) ? ' selected' : ''
                   }`}
-                  onClick={() => toggleRemove(index)}
+                  onClick={() => previewRemoval(text, index)}
                 >
                   {toRemove.includes(index) ? '🗑️ ' : ''}
                   {text}
@@ -73,7 +110,7 @@ export default function ManageWagersModal({ board, wagered, marked, freeSpaceInd
                 <button
                   className={`btn challenge-item${toAdd.includes(index) ? ' selected' : ''}`}
                   disabled={!toAdd.includes(index) && toAdd.length >= openSlots}
-                  onClick={() => toggleAdd(index)}
+                  onClick={() => previewAddition(text, index)}
                 >
                   {toAdd.includes(index) ? '☑ ' : '☐ '}
                   {text}
@@ -91,6 +128,6 @@ export default function ManageWagersModal({ board, wagered, marked, freeSpaceInd
           </button>
         </div>
       </div>
-    </div>
+    </ModalShell>
   );
 }

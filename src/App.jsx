@@ -81,7 +81,7 @@ function App() {
   const [vibrationMuted, setVibrationMutedState] = useState(() => isVibrationMuted());
   const [customTropeModalOpen, setCustomTropeModalOpen] = useState(false);
   const [boardSwapConfirmOpen, setBoardSwapConfirmOpen] = useState(false);
-  const [tropeInfoIndex, setTropeInfoIndex] = useState(null);
+  const [tropeInfo, setTropeInfo] = useState(null);
   const [reactions, setReactions] = useState([]);
   const [connectionStatus, setConnectionStatus] = useState('connected');
   const [browserOffline, setBrowserOffline] = useState(() => !navigator.onLine);
@@ -92,7 +92,7 @@ function App() {
   const gameStateRef = useRef(null);
   const myIdRef = useRef(null);
   const prevGameCodeRef = useRef(null);
-  const prevBingoCountRef = useRef(0);
+  const prevBingoCountsRef = useRef({});
   const bingoBannerTimeoutRef = useRef(null);
   const [theme, setTheme] = useState(
     localStorage.getItem('bingo-theme') ||
@@ -123,29 +123,41 @@ function App() {
     };
   }, []);
 
-  // Detects newly-completed bingo lines on my own board and fires the
-  // celebration banner + sound once per new line (baseline resets whenever
-  // the game code changes, so reconnecting mid-game doesn't re-celebrate
-  // lines that were already completed before the reconnect).
+  // Detects newly-completed bingo lines for every player from the replicated
+  // marked arrays. Each client shows the celebration locally, with a different
+  // message when the bingo belongs to someone else.
   useEffect(() => {
     if (!gameState || !myId) return;
     const me = gameState.players[myId];
     if (!me) return;
     setHighlightedCells(getCompletedLineCells(me.marked));
-    const lineCount = getCompletedLines(me.marked).length;
+    const nextCounts = Object.fromEntries(
+      Object.entries(gameState.players).map(([id, player]) => [id, getCompletedLines(player.marked).length]),
+    );
     if (prevGameCodeRef.current !== gameState.code) {
       prevGameCodeRef.current = gameState.code;
-      prevBingoCountRef.current = lineCount;
+      prevBingoCountsRef.current = nextCounts;
       return;
     }
-    if (lineCount > prevBingoCountRef.current) {
-      setBingoBanner(`🎉 BINGO!${lineCount > 1 ? ` (${lineCount} lines!)` : ''}`);
+    const previousCounts = prevBingoCountsRef.current;
+    const newBingo = gameState.seatOrder
+      .map((id) => ({
+        id,
+        player: gameState.players[id],
+        count: nextCounts[id],
+        previous: Object.prototype.hasOwnProperty.call(previousCounts, id) ? previousCounts[id] : nextCounts[id],
+      }))
+      .find(({ player, count, previous }) => player && count > previous);
+    if (newBingo) {
+      const multiple = newBingo.count > 1 ? ` (${newBingo.count} lines!)` : '';
+      const name = newBingo.id === myId ? '' : ` for ${newBingo.player.name}`;
+      setBingoBanner(`🎉 BINGO${name}!${multiple}`);
       playBingoSound();
-      vibrate(VIBRATE_PATTERN_BINGO);
+      if (newBingo.id === myId) vibrate(VIBRATE_PATTERN_BINGO);
       clearTimeout(bingoBannerTimeoutRef.current);
       bingoBannerTimeoutRef.current = setTimeout(() => setBingoBanner(null), 4000);
     }
-    prevBingoCountRef.current = lineCount;
+    prevBingoCountsRef.current = nextCounts;
   }, [gameState, myId]);
 
   // Alerts a player, on their device, that the group is waiting on their vote.
@@ -364,6 +376,12 @@ function App() {
     return client;
   }
 
+  function discardClient() {
+    clientRef.current?.destroy();
+    clientRef.current = null;
+    setConnectionStatus('connected');
+  }
+
   async function handleHost(name, genres, subgenreSelections, freeSpace, generalPercents, totalTropes, customTropes) {
     setError('');
     setBusy(true);
@@ -372,6 +390,7 @@ function App() {
       await client.hostGame(name, genres, subgenreSelections, freeSpace, generalPercents, totalTropes, customTropes);
       setScreen('game');
     } catch (err) {
+      discardClient();
       setError(err.message || 'Could not host a game.');
     } finally {
       setBusy(false);
@@ -396,6 +415,7 @@ function App() {
         setScreen('game');
       }
     } catch (err) {
+      discardClient();
       setError(err.message || 'Could not join that game.');
     } finally {
       setBusy(false);
@@ -412,7 +432,7 @@ function App() {
     } catch (err) {
       setError(err.message || 'Could not reconnect as that player.');
       setJoinChoice(null);
-      clientRef.current = null;
+      discardClient();
     } finally {
       setBusy(false);
     }
@@ -432,7 +452,7 @@ function App() {
     } catch (err) {
       setError(err.message || 'Could not join that game.');
       setJoinChoice(null);
-      clientRef.current = null;
+      discardClient();
     } finally {
       setBusy(false);
     }
@@ -460,6 +480,7 @@ function App() {
       await client.rejoinGame();
       setScreen('game');
     } catch (err) {
+      discardClient();
       setError(err.message || 'Could not reconnect to that game.');
       setSavedSession(GameClient.getSavedSession());
     } finally {
@@ -471,40 +492,115 @@ function App() {
     if (!gameState) return;
     if (gameState.freeSpace && index === CENTER_INDEX) return;
     const me = gameState.players[myId];
-    const client = clientRef.current;
 
     if (!gameState.started) {
-      const pos = me.wagered.indexOf(index);
-      let next = me.wagered.slice();
-      if (pos !== -1) {
-        next.splice(pos, 1);
-      } else {
-        if (next.length >= MAX_WAGERS) {
-          showToast(`You can only wager ${MAX_WAGERS} spaces.`);
-          return;
-        }
-        next.push(index);
-      }
-      client.setWager(next);
+      const wagered = me.wagered.includes(index);
+      setTropeInfo({
+        text: me.board[index],
+        marked: false,
+        title: wagered ? 'Remove this wager?' : 'Wager this trope?',
+        actionHint: wagered
+          ? 'This removes the space from your wager picks before the game starts.'
+          : `This adds the space to your wager picks before the game starts. You can wager up to ${MAX_WAGERS} spaces.`,
+        confirmLabel: wagered ? '🎯 Remove wager' : '🎯 Wager this trope',
+        onConfirm: () => handleTogglePregameWager(index),
+        onProposeSwap: () => handleProposeSwapFromInfo(me.board[index]),
+      });
       return;
     }
 
-    if (gameState.pendingClaim) {
-      showToast('A claim is already being voted on.');
-      return;
-    }
-    setTropeInfoIndex(index);
+    setTropeInfo({
+      text: me.board[index],
+      marked: me.marked.includes(index),
+      onConfirm: () => handleConfirmTropeClaim(index),
+      onProposeSwap: () => handleProposeSwapFromInfo(me.board[index]),
+    });
   }
 
-  function handleConfirmTropeClaim() {
-    const index = tropeInfoIndex;
-    setTropeInfoIndex(null);
+  function handleTogglePregameWager(index) {
+    setTropeInfo(null);
+    if (!gameState || gameState.started) return;
+    const me = gameState.players[myId];
+    const pos = me.wagered.indexOf(index);
+    const next = me.wagered.slice();
+    if (pos !== -1) {
+      next.splice(pos, 1);
+    } else {
+      if (next.length >= MAX_WAGERS) {
+        showToast(`You can only wager ${MAX_WAGERS} spaces.`);
+        return;
+      }
+      next.push(index);
+    }
+    clientRef.current.setWager(next);
+  }
+
+  function handleConfirmTropeClaim(index) {
+    setTropeInfo(null);
     if (index == null) return;
     if (gameState.pendingClaim) {
       showToast('A claim is already being voted on.');
       return;
     }
     clientRef.current.claim(index);
+  }
+
+  function handleAcceptedTropeInfo(text) {
+    setTropeInfo({
+      text,
+      marked: true,
+      title: 'Challenge this trope?',
+      actionHint: 'This asks the group to vote on undoing this accepted trope.',
+      confirmLabel: '👍 Challenge it',
+      onConfirm: () => handleChallenge(text),
+      onProposeSwap: () => handleProposeSwapFromInfo(text),
+    });
+  }
+
+  function handlePoolTropeInfo(text, accepted) {
+    setTropeInfo({
+      text,
+      marked: accepted,
+      title: accepted ? 'Accepted trope' : 'Propose this trope?',
+      actionHint: accepted
+        ? 'The group already accepted this trope. You can still challenge it or propose swapping it out.'
+        : "This asks the group to vote on marking it as having happened, even if it's not on your board.",
+      confirmLabel: accepted ? '👍 Challenge it' : '👍 Propose it happened',
+      onConfirm: () => (accepted ? handleChallenge(text) : handleProposeAccept(text)),
+      onProposeSwap: () => handleProposeSwapFromInfo(text),
+    });
+  }
+
+  function handleReadOnlyTropeInfo(text, accepted = false) {
+    setTropeInfo({
+      text,
+      marked: accepted,
+      title: accepted ? 'Accepted wagered trope' : 'Wagered trope',
+      actionHint: accepted
+        ? 'This wager has already been accepted by the group.'
+        : 'This is one of the wagered tropes in this game.',
+      onConfirm: null,
+      onProposeSwap: () => handleProposeSwapFromInfo(text),
+    });
+  }
+
+  function handleManagedWagerInfo({ text, marked, title, actionHint, confirmLabel, onConfirm }) {
+    setTropeInfo({
+      text,
+      marked,
+      title,
+      actionHint,
+      confirmLabel,
+      onConfirm: () => {
+        setTropeInfo(null);
+        onConfirm();
+      },
+      onProposeSwap: () => handleProposeSwapFromInfo(text),
+    });
+  }
+
+  function handleCloseTropeInfo() {
+    setTropeInfo(null);
   }
 
   function handleResetGame() {
@@ -518,7 +614,9 @@ function App() {
 
   function handleChallenge(text) {
     clientRef.current.challengeTrope(text);
+    setTropeInfo(null);
     setTropesModalOpen(false);
+    setAllTropesModalOpen(false);
   }
 
   function handleRequestReplace(text) {
@@ -533,6 +631,7 @@ function App() {
   function handleConfirmReplace(genre, subgenre) {
     clientRef.current.proposeReplace(replaceProposal.text, genre, subgenre);
     setReplaceProposal(null);
+    setTropeInfo(null);
     setTropesModalOpen(false);
     setAllTropesModalOpen(false);
   }
@@ -548,14 +647,13 @@ function App() {
       return;
     }
     clientRef.current.proposeAccept(text);
+    setTropeInfo(null);
     setAllTropesModalOpen(false);
   }
 
-  function handleProposeSwapFromCell() {
-    const index = tropeInfoIndex;
-    setTropeInfoIndex(null);
-    if (index == null || !gameState) return;
-    handleRequestReplace(gameState.players[myId].board[index]);
+  function handleProposeSwapFromInfo(text) {
+    setTropeInfo(null);
+    handleRequestReplace(text);
   }
 
   function handleSubmitWagerChange(add, remove) {
@@ -673,6 +771,7 @@ function App() {
   const me = gameState.players[myId];
   if (!me) return null;
   const players = Object.values(gameState.players).sort((a, b) => a.seat - b.seat);
+  const bingoCounts = Object.fromEntries(players.map((p) => [p.id, getCompletedLines(p.marked).length]));
   const hostId = gameState.seatOrder.find((id) => gameState.players[id]?.connected);
   const isHost = hostId === myId;
   const genreLabels = gameState.genres.map((id) => GENRES.find((g) => g.id === id)?.label || id).join(', ');
@@ -775,6 +874,7 @@ function App() {
                 wagerCount={me.wagered.length}
                 maxWagers={MAX_WAGERS}
                 started={gameState.started}
+                bingoCounts={bingoCounts}
                 onKick={handleKickPlayer}
               />
             )}
@@ -817,8 +917,7 @@ function App() {
       {tropesModalOpen && (
         <AcceptedTropesModal
           acceptedTropes={gameState.acceptedTropes}
-          onChallenge={handleChallenge}
-          onRequestReplace={handleRequestReplace}
+          onTropeClick={handleAcceptedTropeInfo}
           onClose={() => setTropesModalOpen(false)}
         />
       )}
@@ -827,8 +926,7 @@ function App() {
         <AllTropesModal
           tropePool={gameState.tropePool}
           acceptedTropes={gameState.acceptedTropes}
-          onPropose={handleProposeAccept}
-          onRequestReplace={handleRequestReplace}
+          onTropeClick={handlePoolTropeInfo}
           onClose={() => setAllTropesModalOpen(false)}
         />
       )}
@@ -837,6 +935,7 @@ function App() {
         <AllWagersModal
           players={players}
           acceptedTropes={gameState.acceptedTropes}
+          onTropeClick={handleReadOnlyTropeInfo}
           onClose={() => setAllWagersModalOpen(false)}
         />
       )}
@@ -858,6 +957,7 @@ function App() {
           marked={me.marked}
           freeSpaceIndex={gameState.freeSpace ? CENTER_INDEX : -1}
           onSubmit={handleSubmitWagerChange}
+          onTropeClick={handleManagedWagerInfo}
           onCancel={() => setManageWagersOpen(false)}
         />
       )}
@@ -892,7 +992,9 @@ function App() {
         <ActivityFeedModal activityLog={gameState.activityLog || []} onClose={() => setActivityFeedOpen(false)} />
       )}
 
-      {gameOverModalOpen && <GameOverModal players={players} onClose={() => setGameOverModalOpen(false)} />}
+      {gameOverModalOpen && (
+        <GameOverModal players={players} bingoCounts={bingoCounts} onClose={() => setGameOverModalOpen(false)} />
+      )}
 
       {leaveConfirmOpen && (
         <ConfirmModal
@@ -918,13 +1020,16 @@ function App() {
         <CustomTropeModal onSubmit={handleSubmitCustomTrope} onCancel={() => setCustomTropeModalOpen(false)} />
       )}
 
-      {tropeInfoIndex !== null && (
+      {tropeInfo && (
         <TropeInfoModal
-          text={me.board[tropeInfoIndex]}
-          marked={me.marked.includes(tropeInfoIndex)}
-          onConfirm={handleConfirmTropeClaim}
-          onCancel={() => setTropeInfoIndex(null)}
-          onProposeSwap={handleProposeSwapFromCell}
+          text={tropeInfo.text}
+          marked={tropeInfo.marked}
+          title={tropeInfo.title}
+          actionHint={tropeInfo.actionHint}
+          confirmLabel={tropeInfo.confirmLabel}
+          onConfirm={tropeInfo.onConfirm}
+          onCancel={handleCloseTropeInfo}
+          onProposeSwap={tropeInfo.onProposeSwap}
         />
       )}
 

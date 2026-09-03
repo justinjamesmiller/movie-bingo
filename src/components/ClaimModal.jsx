@@ -15,6 +15,10 @@ export default function ClaimModal({ pendingClaim, myId, players, onAgree, onDis
   const hasVoted = Object.prototype.hasOwnProperty.call(pendingClaim.votes, myId);
   const votesIn = Object.keys(pendingClaim.votes).length;
   const agreeCount = Object.values(pendingClaim.votes).filter(Boolean).length;
+  const majorityNeeded = Math.floor(pendingClaim.totalPlayers / 2) + 1;
+  const majorityReached = agreeCount >= majorityNeeded;
+  const allVoted = votesIn >= pendingClaim.totalPlayers;
+  const resultIsFinalizing = majorityReached || allVoted;
   const replaceGenreLabel = isReplace
     ? GENRES.find((g) => g.id === pendingClaim.genre)?.label || pendingClaim.genre
     : null;
@@ -116,14 +120,19 @@ export default function ClaimModal({ pendingClaim, myId, players, onAgree, onDis
           </div>
         )}
 
-        {(isClaimant || hasVoted) && <p className="hint">Waiting for the other players to vote…</p>}
+        {(isClaimant || hasVoted) && (
+          <p className="hint">
+            {resultIsFinalizing ? 'Finalizing the result…' : 'Waiting for the other players to vote…'}
+          </p>
+        )}
         {isClaimant && (
           <button className="btn disagree cancel-claim-btn" onClick={onCancel}>
             Cancel / undo my claim
           </button>
         )}
         <p className="hint">
-          {agreeCount} agree so far ({votesIn}/{pendingClaim.totalPlayers} voted, majority needed).
+          {agreeCount} agree so far ({votesIn}/{pendingClaim.totalPlayers} voted,{' '}
+          {majorityReached ? 'majority reached' : allVoted ? 'all votes in' : `${majorityNeeded} needed for majority`}).
         </p>
       </div>
     </div>

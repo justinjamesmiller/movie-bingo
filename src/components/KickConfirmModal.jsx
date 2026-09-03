@@ -1,6 +1,8 @@
+import ModalShell from './ModalShell.jsx';
+
 export default function KickConfirmModal({ playerName, onConfirm, onCancel }) {
   return (
-    <div className="modal">
+    <ModalShell onClose={onCancel}>
       <div className="modal-content">
         <h3>Remove {playerName} from the game?</h3>
         <p className="hint">
@@ -16,6 +18,6 @@ export default function KickConfirmModal({ playerName, onConfirm, onCancel }) {
           </button>
         </div>
       </div>
-    </div>
+    </ModalShell>
   );
 }

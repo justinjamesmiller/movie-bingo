@@ -10,17 +10,28 @@ free on GitHub Pages.
 
 ## How it works
 
-- The first player **hosts** a game and gets a 4-character code.
-- Others **join** with that code. Everyone gets a random 5x5 board of horror tropes, all 25 spaces
-  drawn randomly from the same trope pool (including "Jump Scare", which is just a regular trope
-  now, not forced into the center).
+- The first player **hosts** a game, picks one or more genres/sub-genres, and gets a 4-character code.
+- Others **join** with that code. Everyone gets a random 5x5 board of movie/TV tropes, all spaces
+  drawn from the same host-configured trope pool.
 - Before starting, each player picks up to 5 **wagered** spaces (tropes they think are extra likely).
-  Wagers lock once the host starts the game.
-- During the game, clicking a space claims that trope happened; other players vote to confirm.
+  Tapping a trope shows its description first, then lets the player add/remove the wager.
+- During the game, tapping a space shows the trope description, then lets the player claim that trope happened; other players vote to confirm.
   A majority is required to mark it — and it marks that same trope on every board that has it.
+- Players can view accepted tropes, the full trope pool, and everyone's wagers; most trope list items open the same description window and can be used to propose swapping a trope out.
+- Mid-game changes such as custom trope submissions, wager changes, and whole-board swaps go through the same majority-vote flow.
+- Bingos are detected automatically. Everyone sees the celebration banner, and the player list/final recap show each player's bingo count.
 - Everyone subscribes to the same Supabase Realtime channel (named after the game code) and
   broadcasts messages to it; Supabase relays messages to everyone else on the channel. If the host
   disconnects, authority automatically passes to the next-longest-connected player.
+
+## Player features
+
+- **Reconnect / seat reclaim:** returning players can use the Reconnect card, or join with the code and reclaim a disconnected seat.
+- **Invite sharing:** the in-game menu can copy the code or a join link with the code pre-filled.
+- **Activity feed:** approved marks, swaps, wager changes, resets, and other notable events are logged for anyone who looked away.
+- **Reactions:** quick emoji reactions broadcast briefly to everyone without starting a vote.
+- **Recap:** the host can end the game to show everyone final marked counts, bingo counts, and wager hits.
+- **PWA support:** the site includes a web app manifest and service worker so it can be installed via "Add to Home Screen" / browser install prompts. The app still needs network access for live multiplayer relay traffic.
 
 ## Supabase setup (required)
 
@@ -67,6 +78,17 @@ npm run dev
 Open the printed local URL in multiple browser tabs/devices (or over the internet) to test
 multiplayer — everyone just needs to reach the same Supabase project.
 
+Useful checks before shipping changes:
+
+```
+npm run format
+npm run test
+npm run lint
+npm run build
+```
+
+`npm run coverage` prints the Vitest coverage report.
+
 ## Build & deploy (GitHub Pages)
 
 ```
@@ -82,8 +104,13 @@ branch (or configure a GitHub Actions workflow to build and deploy automatically
 
 - No peer-to-peer networking, so no NAT/firewall connectivity issues — everyone just needs a normal
   internet connection to reach Supabase.
-- The original host's browser tab must stay open for new players to join; once a game has started,
-  host authority migrates automatically if the current host disconnects.
+- Game state is held by connected browsers, not a database. At least one current/recent player needs
+  enough local state to keep or restore the game.
+- The original host's browser tab normally acts as the rendezvous point for the game code, but host
+  authority migrates automatically if the current host disconnects.
+- Mobile browsers and installed web apps can suspend realtime connections when backgrounded. The app
+  attempts to reconnect and surfaces connection failures, but a live game still depends on Supabase
+  Realtime being reachable.
 - Requires a free Supabase account (see setup above) — this is the one external dependency this
   app has, since some relay point is unavoidable for a code-based multiplayer join flow.
 - Supabase's free tier includes generous Realtime limits (concurrent connections and messages/month)

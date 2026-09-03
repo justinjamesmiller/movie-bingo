@@ -2,16 +2,25 @@
 // trope count and wagered-trope hit rate, using data already fully
 // replicated to every client (no protocol changes needed beyond the
 // gameOver flag itself).
-export default function GameOverModal({ players, onClose }) {
+import ModalShell from './ModalShell.jsx';
+
+export default function GameOverModal({ players, bingoCounts = {}, onClose }) {
   const withStats = players.map((p) => {
     const wageredHit = p.wagered.filter((i) => p.marked.includes(i)).length;
-    return { ...p, markedCount: p.marked.length, wageredHit, wageredTotal: p.wagered.length };
+    return {
+      ...p,
+      markedCount: p.marked.length,
+      bingoCount: bingoCounts[p.id] || 0,
+      wageredHit,
+      wageredTotal: p.wagered.length,
+    };
   });
   const topMarked = Math.max(0, ...withStats.map((p) => p.markedCount));
+  const topBingos = Math.max(0, ...withStats.map((p) => p.bingoCount));
   const topWagered = Math.max(0, ...withStats.map((p) => p.wageredHit));
 
   return (
-    <div className="modal">
+    <ModalShell onClose={onClose}>
       <div className="modal-content">
         <h3>🏁 Game Over — Recap</h3>
         <ul className="recap-list">
@@ -21,19 +30,21 @@ export default function GameOverModal({ players, onClose }) {
                 {p.avatar ? `${p.avatar} ` : ''}
                 {p.name}
                 {topMarked > 0 && p.markedCount === topMarked && ' 🏆'}
+                {topBingos > 0 && p.bingoCount === topBingos && ' 🎉'}
                 {topWagered > 0 && p.wageredHit === topWagered && ' 🎯'}
               </div>
               <div className="hint">
-                {p.markedCount} tropes marked · {p.wageredHit}/{p.wageredTotal} wagers hit
+                {p.markedCount} tropes marked · {p.bingoCount} bingo{p.bingoCount === 1 ? '' : 's'} · {p.wageredHit}/
+                {p.wageredTotal} wagers hit
               </div>
             </li>
           ))}
         </ul>
-        <p className="hint">🏆 most tropes marked · 🎯 most wagers hit</p>
+        <p className="hint">🏆 most tropes marked · 🎉 most bingos · 🎯 most wagers hit</p>
         <button className="btn cancel-claim-btn" onClick={onClose}>
           Close
         </button>
       </div>
-    </div>
+    </ModalShell>
   );
 }

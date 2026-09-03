@@ -28,6 +28,7 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const CHANNEL_PREFIX = 'bingo-';
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I
 const CLAIM_TIMEOUT_MS = 20000;
+const CONNECT_TIMEOUT_MS = 10000;
 const JOIN_TIMEOUT_MS = 10000;
 // A phone that backgrounds for a moment (answering a text, locking the screen)
 // drops its websocket almost immediately, so presence "leave" alone is far too
@@ -587,6 +588,19 @@ export class GameClient {
       channel.on('broadcast', { event: 'msg' }, ({ payload }) => this._onMessage(payload));
       channel.on('presence', { event: 'leave' }, ({ key }) => this._onPeerLeft(key));
 
+      const timeout = setTimeout(() => {
+        if (this._destroyed || this.channel !== channel) return;
+        this.onEvent({ type: 'connectionStatus', status: 'disconnected' });
+        this.supabase.removeChannel(channel);
+        if (this.channel === channel) this.channel = null;
+        reject(new Error('Could not connect to the relay. Check your connection and try again.'));
+      }, CONNECT_TIMEOUT_MS);
+
+      const finish = (callback) => {
+        clearTimeout(timeout);
+        callback();
+      };
+
       channel.subscribe((status, err) => {
         // Ignore status events from a channel that's already been replaced
         // (e.g. its own CLOSED callback firing after a code-rotation
@@ -597,17 +611,19 @@ export class GameClient {
         // teardown can still fire a CLOSED status well after the fact).
         if (this._destroyed || this.channel !== channel) return;
         if (status === 'SUBSCRIBED') {
-          channel.track({ id: this.myId });
-          this._reconnectAttempts = 0;
-          this.onEvent({ type: 'connectionStatus', status: 'connected' });
-          resolve();
+          finish(() => {
+            channel.track({ id: this.myId });
+            this._reconnectAttempts = 0;
+            this.onEvent({ type: 'connectionStatus', status: 'connected' });
+            resolve();
+          });
         } else {
           this.onEvent({ type: 'connectionStatus', status: 'disconnected' });
           if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
             this._scheduleReconnect();
           }
           if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-            reject(err || new Error('Could not connect to the relay.'));
+            finish(() => reject(err || new Error('Could not connect to the relay.')));
           }
         }
       });
@@ -967,8 +983,13 @@ export class GameClient {
   }
 
   _handleJoin(newId, name, forceNew) {
-    if (this.state.players[newId]) return;
-    const disconnected = Object.values(this.state.players).filter((p) => !p.connected);
+    if (this.state.players[newId]) {
+      if (!forceNew) this._handleRejoin(newId, name);
+      return;
+    }
+    const disconnected = Object.values(this.state.players).filter(
+      (p) => !p.connected || this._pendingDisconnects.has(p.id),
+    );
     if (!forceNew && disconnected.length > 0) {
       this._send({
         t: 'claimOffer',
@@ -1119,9 +1140,9 @@ export class GameClient {
       const pc = state.pendingClaim;
       if (!pc || pc.claimId !== action.claimId || fromId === pc.byId) return;
       pc.votes[fromId] = !!action.agree;
+      if (this._maybeAutoResolve()) return;
       this._emitState();
       this._send({ t: 'state', state: this.state });
-      this._maybeAutoResolve();
       return;
     }
 
@@ -1315,11 +1336,11 @@ export class GameClient {
       votes: { [fromId]: true },
       totalPlayers: this._connectedCount(),
     };
-    this._emitState();
-    this._send({ t: 'state', state: this.state });
     clearTimeout(this.claimTimeout);
     this.claimTimeout = setTimeout(() => this._resolveClaim(claimId), CLAIM_TIMEOUT_MS);
-    this._maybeAutoResolve();
+    if (this._maybeAutoResolve()) return;
+    this._emitState();
+    this._send({ t: 'state', state: this.state });
   }
 
   _majorityNeeded(total) {
@@ -1338,14 +1359,16 @@ export class GameClient {
 
   _maybeAutoResolve() {
     const pc = this.state.pendingClaim;
-    if (!pc) return;
+    if (!pc) return false;
     const { agree, disagree } = this._tally(pc);
     const needed = this._majorityNeeded(pc.totalPlayers);
     const impossible = disagree > pc.totalPlayers - needed;
     const allVoted = Object.keys(pc.votes).length >= pc.totalPlayers;
     if (agree >= needed || impossible || allVoted) {
       this._resolveClaim(pc.claimId);
+      return true;
     }
+    return false;
   }
 
   _resolveClaim(claimId) {

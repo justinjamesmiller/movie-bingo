@@ -1,6 +1,8 @@
-export default function AllWagersModal({ players, acceptedTropes, onClose }) {
+import ModalShell from './ModalShell.jsx';
+
+export default function AllWagersModal({ players, acceptedTropes, onTropeClick, onClose }) {
   return (
-    <div className="modal">
+    <ModalShell onClose={onClose}>
       <div className="modal-content">
         <h3>All Wagers</h3>
         {players.every((p) => p.wagered.length === 0) ? (
@@ -23,7 +25,12 @@ export default function AllWagersModal({ players, acceptedTropes, onClose }) {
                       const accepted = acceptedTropes.includes(text);
                       return (
                         <li key={index} className={accepted ? 'accepted' : ''}>
-                          {text}
+                          <button
+                            className={`btn challenge-item${accepted ? ' accepted' : ''}`}
+                            onClick={() => onTropeClick(text, accepted)}
+                          >
+                            {text}
+                          </button>
                         </li>
                       );
                     })}
@@ -37,6 +44,6 @@ export default function AllWagersModal({ players, acceptedTropes, onClose }) {
           Close
         </button>
       </div>
-    </div>
+    </ModalShell>
   );
 }

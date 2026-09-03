@@ -2,139 +2,139 @@
 export default {
   'Jump Scare': {
     what: 'A sudden loud noise or fast movement timed to make the audience flinch, usually after a quiet build-up.',
-    example: 'The bus screeching into frame in Final Destination, or Halloween\u2019s closet reveal.',
+    example: 'A silent hallway holds for a beat, then a shape slams into frame with a sharp sound cue.',
   },
   '"I\'ll be right back."': {
     what: 'Someone announces they are stepping away for a moment. They are usually wrong.',
-    example: 'Randy says it in Scream immediately after explaining that saying it gets you killed.',
+    example: 'A character promises to check the noise alone and come straight back, then disappears from view.',
   },
   '"What was that?"': {
     what: 'A character hears something off-screen and says it out loud instead of leaving.',
-    example: 'Said constantly in The Blair Witch Project as noises circle the tent.',
+    example: 'Branches crack outside the tent and someone whispers it instead of staying quiet.',
   },
   'Power goes out': {
     what: 'The electricity cuts out, plunging the location into darkness at the worst possible time.',
-    example: 'The blackout during the storm in Hush.',
+    example: 'A storm hits, the lights die, and the house drops into total silence.',
   },
   'Phone has no signal': {
     what: 'A character tries to call for help and finds no bars, no dial tone, or a dead battery.',
-    example: 'Practically mandatory once the cabin is reached in The Evil Dead.',
+    example: 'The phone shows no service the moment the cabin door closes behind them.',
   },
   "Car won't start": {
     what: 'The engine turns over and refuses to catch while something approaches.',
-    example: 'The escape attempt in Jeepers Creepers.',
+    example: 'The key turns again and again while headlights appear at the end of the road.',
   },
   'Investigates a strange noise': {
     what: 'Rather than leaving, a character walks toward the unexplained sound, often alone and unarmed.',
-    example: 'Every basement descent in A Quiet Place.',
+    example: 'A scraping sound comes from downstairs, so someone grabs a torch and heads toward it.',
   },
   'A warning is ignored': {
     what: 'Someone is explicitly told not to go somewhere or do something, and does it anyway.',
-    example: 'The locals warning the teens away in The Texas Chain Saw Massacre.',
+    example: 'A local tells the group not to take the old road, and they take it anyway.',
   },
   'Dog barks at nothing': {
     what: 'A pet reacts to something the humans cannot see, sensing the threat before anyone else.',
-    example: 'The dog refusing to enter the house in The Amityville Horror.',
+    example: 'The dog freezes at the doorway, growling at an empty corner of the room.',
   },
   'Creepy basement': {
     what: 'A dark, cluttered cellar becomes a location characters have to enter.',
-    example: 'The basement in The Conjuring.',
+    example: 'A pull-chain bulb swings over boxes, pipes and one door that should stay shut.',
   },
   'The group splits up': {
     what: 'Characters decide to cover more ground separately, immediately becoming easier to pick off.',
-    example: 'The gang splitting in Scooby-Doo, played straight in Cabin in the Woods.',
+    example: 'Two search upstairs, two check outside, and nobody can hear anyone else scream.',
   },
   'Lights flicker or go out': {
     what: 'Bulbs stutter or die, often signalling a presence nearby.',
-    example: 'The flickering hallway lights in Insidious.',
+    example: 'Each hallway bulb blinks out one at a time as the footsteps get closer.',
   },
   'Someone trips while running': {
     what: 'A fleeing character falls over for no good reason, letting the threat catch up.',
-    example: 'The classic stumble in Friday the 13th.',
+    example: 'A runner looks back, catches their foot on nothing, and hits the ground hard.',
   },
   'Breaking the one rule': {
     what: 'The story establishes a single clear rule for survival, and a character breaks it.',
-    example: 'Feeding the Mogwai after midnight in Gremlins.',
+    example: 'Everyone is told not to open the sealed room after dark; someone opens it anyway.',
   },
   'A thunderstorm': {
     what: 'Rain, thunder and lightning arrive to cover noise and cut the power.',
-    example: 'The storm that traps everyone in The Old Dark House.',
+    example: 'Thunder covers the sound outside, then lightning reveals a figure near the trees.',
   },
   'Babysitter left alone': {
     what: 'A young caretaker is left in an empty house with children asleep upstairs.',
-    example: 'The opening of When a Stranger Calls.',
+    example: 'The parents leave, the children are asleep, and the phone starts ringing from an unknown number.',
   },
   'No one believes the victim': {
     what: 'A character reports what they saw and is dismissed as hysterical, drunk or imagining it.',
-    example: 'Nancy trying to warn the adults in A Nightmare on Elm Street.',
+    example: 'The victim describes the attack and the adults decide it was stress or a nightmare.',
   },
   'Hiding in a closet': {
     what: 'A character conceals themselves in a wardrobe, cupboard or under a bed while the threat searches.',
-    example: 'Laurie in the closet in Halloween.',
+    example: 'Someone crouches behind hanging coats while the killer opens doors one by one.',
   },
   'Cat causes a fake scare': {
     what: 'A sudden noise turns out to be harmless \u2014 an animal, a falling object \u2014 releasing tension before the real scare.',
-    example: 'The cat leaping from the locker in Alien.',
+    example: 'A locker bangs open and a cat launches itself out instead of the monster.',
   },
   'A locked door fails': {
     what: 'A door someone is relying on gives way, or the lock proves useless.',
-    example: 'The bathroom door splintering in The Shining.',
+    example: 'The lock holds for one hit, then the wood around it starts to split.',
   },
   'A family secret': {
     what: 'A hidden piece of family history is revealed and explains the haunting or the killer.',
-    example: 'The revelation about the grandmother in Hereditary.',
+    example: 'An old letter reveals the family knew about the curse all along.',
   },
   'An abandoned building': {
     what: 'A derelict house, hospital, asylum or hotel that characters explore.',
-    example: 'The abandoned asylum in Session 9.',
+    example: 'The group enters a boarded-up hospital with patient files still scattered on the floor.',
   },
   'An omen is ignored': {
     what: 'A clear supernatural sign or bad portent appears and is brushed off.',
-    example: 'The nanny\u2019s warning and the dogs in The Omen.',
+    example: 'A warning, a dead animal and a cracked mirror all get dismissed as coincidence.',
   },
   'Odd security footage': {
     what: 'CCTV, a baby monitor or a camera feed shows something that should not be there.',
-    example: 'The nightly camera footage in Paranormal Activity.',
+    example: 'A bedroom camera catches a door opening by itself at 3:00 a.m.',
   },
   'The car breaks down': {
     what: 'The vehicle fails mid-journey, stranding the characters somewhere remote.',
-    example: 'The van dying in The Texas Chain Saw Massacre.',
+    example: 'The engine dies on an empty road with no houses in sight.',
   },
   'Letting a stranger in': {
     what: 'Someone opens the door to an unknown person who should not have been let in.',
-    example: 'The knock at the door in The Strangers.',
+    example: 'A polite knock at midnight turns into an unlocked front door.',
   },
   'Odd townspeople': {
     what: 'The locals behave strangely, watch the outsiders, or are clearly hiding something.',
-    example: 'The villagers in The Wicker Man, or the residents of Midsommar\u2019s H\u00e5rga.',
+    example: 'Everyone in town stops talking when the outsiders walk into the diner.',
   },
   'A scream lures them in': {
     what: 'A cry for help draws characters toward the danger instead of away from it.',
-    example: 'The bait-and-trap screams in Wrong Turn.',
+    example: 'A distant scream pulls the group off the path and toward the dark tree line.',
   },
   'Teamwork saves the day': {
     what: 'The survivors stop bickering and cooperate, and it actually works.',
-    example: 'The final stand in Tremors.',
+    example: 'One survivor distracts the creature while another gets the door open.',
   },
   'A "safe" scene isn\'t': {
     what: 'A calm, resolved-feeling moment turns out to still be dangerous.',
-    example: 'The false ending before Carrie\u2019s hand bursts from the grave.',
+    example: 'The music softens, everyone exhales, and then a hand shoots up from below.',
   },
   '"Hello?" into the dark': {
     what: 'A character calls out into an unlit space, announcing their position to whatever is there.',
-    example: 'Standard practice in Lights Out.',
+    example: 'Someone stands at the top of a black stairwell and calls down instead of leaving.',
   },
   'A door closes itself': {
     what: 'A door swings shut or opens with no one touching it.',
-    example: 'The cupboard doors in Poltergeist.',
+    example: 'Every cupboard door in the kitchen swings open at once.',
   },
   'Blood splatter': {
     what: 'Blood sprays across a wall, floor, camera lens or another character.',
-    example: 'The elevator in The Shining.',
+    example: 'A white wall is suddenly streaked with blood from just out of frame.',
   },
   'Gratuitous shower scene': {
     what: 'A character showers or bathes in a scene that exists mainly for vulnerability or titillation.',
-    example: 'The original, in Psycho.',
+    example: 'A shower curtain, running water and a camera angle that makes the character feel exposed.',
   },
   'Terrible decision-making': {
     what: 'A character makes a choice so obviously bad the audience yells at the screen.',
@@ -142,43 +142,43 @@ export default {
   },
   'A body falls suddenly': {
     what: 'A corpse drops into frame from above, out of a cupboard, or onto a character.',
-    example: 'The body dropping from the ceiling in Scream.',
+    example: 'A corpse drops from above and lands in front of the person searching the room.',
   },
   'Creepy attic': {
     what: 'A loft or crawlspace full of old belongings that someone has to go up into.',
-    example: 'The attic in The Conjuring.',
+    example: 'A dusty attic hatch opens onto boxes, portraits and something scraping behind the wall.',
   },
   'Flashlight stops working': {
     what: 'The torch flickers, dies or is dropped at the critical moment.',
-    example: 'The failing lights in The Descent.',
+    example: 'The torch beam flickers out just as something moves at the edge of it.',
   },
   'Conveniently unlocked door': {
     what: 'A door that should be locked opens easily, letting someone in or out exactly when the plot needs it.',
-    example: 'The unlocked back door in Halloween.',
+    example: 'The back door opens without resistance even though everyone swore it was locked.',
   },
   'Backs into danger': {
     what: 'A character retreats away from one threat and directly into another, usually behind them.',
-    example: 'Backing into the killer in Friday the 13th.',
+    example: 'Someone backs away from a noise ahead and bumps into the killer behind them.',
   },
   '"It\'s probably nothing"': {
     what: 'Someone explicitly dismisses a genuine warning sign.',
-    example: 'Said before every investigation in Paranormal Activity.',
+    example: 'The door opens by itself and someone insists it was only the wind.',
   },
   'Dragged off-screen': {
     what: 'A character is yanked out of frame by something unseen, often mid-scream.',
-    example: 'The tent attack in The Descent.',
+    example: 'A hand grabs an ankle and pulls someone out of the shot mid-scream.',
   },
   'Gratuitous nudity or sex': {
     what: 'A sex or nude scene that exists mainly to mark characters as victims-in-waiting.',
-    example: 'The couple in the van in Friday the 13th.',
+    example: 'A couple sneaks away to a parked van while danger moves closer outside.',
   },
   'Drenched in blood': {
     what: 'A character ends up completely covered in blood, usually the survivor.',
-    example: 'The prom scene in Carrie.',
+    example: 'The survivor stands shaking, soaked head to toe in blood that is not all theirs.',
   },
   'Police arrive too late': {
     what: 'Authorities show up after the danger has passed, or are useless when they do arrive.',
-    example: 'The squad cars pulling up at the end of Scream.',
+    example: 'Squad cars finally pull up after the killer is gone and the survivors are already outside.',
   },
 
   // Slasher

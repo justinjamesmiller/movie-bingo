@@ -1,6 +1,8 @@
+import ModalShell from './ModalShell.jsx';
+
 export default function HelpModal({ onClose }) {
   return (
-    <div className="modal">
+    <ModalShell onClose={onClose}>
       <div className="modal-content help-modal-content">
         <h3>❓ How to Play</h3>
 
@@ -21,8 +23,8 @@ export default function HelpModal({ onClose }) {
 
         <h4>💰 Wagering (before the game starts)</h4>
         <p className="hint">
-          Click up to 5 spaces you think are extra likely to happen. Click again to un-wager. Once the host starts the
-          game, wagers lock in.
+          Click a space to see what that trope means, then add it to your wager picks. Click an already-wagered space to
+          read it and remove the wager. You can pick up to 5, and wagers lock once the host starts the game.
         </p>
 
         <h4>👆 Tapping a space (once the game has started)</h4>
@@ -75,9 +77,9 @@ export default function HelpModal({ onClose }) {
 
         <h4>🏁 Ending the game &amp; recap</h4>
         <p className="hint">
-          The host can hit "End Game" anytime from the menu. Everyone gets a recap showing each player's tropes marked
-          and wagers hit, with 🏆 for the most tropes marked and 🎯 for the most wagers hit. You can reopen the recap
-          later from the menu's "View Recap" option.
+          The host can hit "End Game" anytime from the menu. Everyone gets a recap showing each player's tropes marked,
+          bingos, and wagers hit, with 🏆 for the most tropes marked, 🎉 for the most bingos, and 🎯 for the most wagers
+          hit. You can reopen the recap later from the menu's "View Recap" option.
         </p>
 
         <h4>🧑‍🎤 Avatars</h4>
@@ -122,6 +124,7 @@ export default function HelpModal({ onClose }) {
             🚪 <strong>Leave Game</strong> — asks you to confirm, then heads back to the home screen.
           </li>
         </ul>
+        <p className="hint">Most pop-up windows can also be closed by tapping outside the window.</p>
 
         <h4>👑 Host-only</h4>
         <ul className="help-list">
@@ -161,6 +164,6 @@ export default function HelpModal({ onClose }) {
           Close
         </button>
       </div>
-    </div>
+    </ModalShell>
   );
 }

@@ -1,11 +1,13 @@
 // Chronological log of notable approved events (marks, replaces, wager
 // changes, resets, etc.) -- replicated via `state.activityLog` so everyone
 // sees the exact same feed, including anyone who looked away mid-game.
+import ModalShell from './ModalShell.jsx';
+
 export default function ActivityFeedModal({ activityLog, onClose }) {
   const items = [...activityLog].reverse();
 
   return (
-    <div className="modal">
+    <ModalShell onClose={onClose}>
       <div className="modal-content">
         <h3>📜 Activity Feed</h3>
         {items.length === 0 ? (
@@ -26,6 +28,6 @@ export default function ActivityFeedModal({ activityLog, onClose }) {
           Close
         </button>
       </div>
-    </div>
+    </ModalShell>
   );
 }

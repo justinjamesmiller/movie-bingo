@@ -1,5 +1,7 @@
 // Generic yes/no confirmation dialog, reused for actions that deserve a
 // confirm step but don't need any custom input (e.g. Leave Game).
+import ModalShell from './ModalShell.jsx';
+
 export default function ConfirmModal({
   title,
   message,
@@ -9,7 +11,7 @@ export default function ConfirmModal({
   onCancel,
 }) {
   return (
-    <div className="modal">
+    <ModalShell onClose={onCancel}>
       <div className="modal-content">
         <h3>{title}</h3>
         <p className="hint">{message}</p>
@@ -22,6 +24,6 @@ export default function ConfirmModal({
           </button>
         </div>
       </div>
-    </div>
+    </ModalShell>
   );
 }

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { AVATAR_OPTIONS } from '../data/avatars.js';
+import ModalShell from './ModalShell.jsx';
 
 export default function ChangeNameModal({ currentName, currentAvatar, onConfirm, onCancel }) {
   const [name, setName] = useState(currentName || '');
@@ -7,7 +8,7 @@ export default function ChangeNameModal({ currentName, currentAvatar, onConfirm,
   const trimmed = name.trim();
 
   return (
-    <div className="modal">
+    <ModalShell onClose={onCancel}>
       <div className="modal-content">
         <h3>Change your name &amp; avatar</h3>
         <label htmlFor="change-name-input">New name</label>
@@ -41,6 +42,6 @@ export default function ChangeNameModal({ currentName, currentAvatar, onConfirm,
           </button>
         </div>
       </div>
-    </div>
+    </ModalShell>
   );
 }

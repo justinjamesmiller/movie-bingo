@@ -101,8 +101,8 @@ describe('getMovieDetails', () => {
       Poster: 'N/A',
     });
     const details = await getMovieDetails('tt0000000');
-    expect(details.genres).toEqual(['horror', 'comedy', 'romance']);
-    expect(details.unmapped).toEqual(['Musical']);
+    expect(details.genres).toEqual(['horror', 'comedy', 'romance', 'musical']);
+    expect(details.unmapped).toEqual([]);
     expect(details.director).toBe('Caroline Lindy');
     expect(details.poster).toBeNull();
   });
@@ -122,6 +122,33 @@ describe('getMovieDetails', () => {
     expect(details.genres).toEqual(['thriller', 'drama']);
     expect(details.type).toBe('series');
     expect(details.director).toBeNull();
+  });
+
+  it('maps broader movie and TV genres to internal genre ids', async () => {
+    const { getMovieDetails } = await freshMovieLookup('test-key');
+    mockFetchOnce({
+      Response: 'True',
+      Title: 'Broad Coverage',
+      Year: '2026',
+      Type: 'series',
+      Genre: 'Adventure, Animation, Biography, Family, History, Music, Sport, War, Western, Reality-TV, Game-Show',
+      Director: 'N/A',
+      Actors: 'N/A',
+    });
+    const details = await getMovieDetails('tt0000001');
+    expect(details.genres).toEqual([
+      'adventure',
+      'animation',
+      'biography',
+      'family',
+      'history',
+      'music',
+      'sport',
+      'war',
+      'western',
+      'tv',
+    ]);
+    expect(details.unmapped).toEqual([]);
   });
 
   it('throws when the title id is not found', async () => {

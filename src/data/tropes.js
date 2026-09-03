@@ -3,6 +3,8 @@
 // always eligible regardless of which sub-genre the host picks within that
 // genre; sub-genre-specific tropes are only added on top of the general pool
 // when that sub-genre is selected.
+import { EXPANDED_GENRES, EXPANDED_SUBGENRES_BY_GENRE, EXPANDED_TROPES } from './expandedGenres.js';
+
 export const GENRES = [
   { id: 'horror', label: 'Horror' },
   { id: 'comedy', label: 'Comedy' },
@@ -13,6 +15,7 @@ export const GENRES = [
   { id: 'romance', label: 'Romance' },
   { id: 'drama', label: 'Drama' },
   { id: 'documentary', label: 'Documentary' },
+  ...EXPANDED_GENRES,
 ];
 
 export const SUBGENRES_BY_GENRE = {
@@ -69,6 +72,7 @@ export const SUBGENRES_BY_GENRE = {
     { id: 'true-crime', label: 'True Crime' },
     { id: 'nature', label: 'Nature & Wildlife' },
   ],
+  ...EXPANDED_SUBGENRES_BY_GENRE,
 };
 
 const DEFAULT_GENRE = 'horror';
@@ -80,7 +84,7 @@ function t(text, genre, subgenres) {
   return { text, genre, subgenres };
 }
 
-export const TROPES = [
+const RAW_TROPES = [
   // =====================================================================
   // HORROR
   // =====================================================================
@@ -1584,7 +1588,51 @@ export const TROPES = [
   t('Weather-beaten researcher on camera', 'documentary', ['nature']),
   t('Final "circle of life" narration', 'documentary', ['nature']),
   t('Stunning sunset over landscape', 'documentary', ['nature']),
+  ...EXPANDED_TROPES,
 ];
+
+function consolidateTropes(tropes) {
+  const byText = new Map();
+  for (const trope of tropes) {
+    let existing = byText.get(trope.text);
+    if (!existing) {
+      existing = {
+        text: trope.text,
+        genre: trope.genre,
+        subgenres: [],
+        genres: [],
+        subgenresByGenre: {},
+      };
+      byText.set(trope.text, existing);
+    }
+    if (!existing.genres.includes(trope.genre)) existing.genres.push(trope.genre);
+    const subs = existing.subgenresByGenre[trope.genre] || [];
+    for (const subgenre of trope.subgenres) {
+      if (!subs.includes(subgenre)) subs.push(subgenre);
+    }
+    existing.subgenresByGenre[trope.genre] = subs;
+  }
+
+  return Array.from(byText.values()).map((trope) => ({
+    ...trope,
+    subgenres: trope.subgenresByGenre[trope.genre] || [],
+    genreTags: trope.genres.map((genre) => ({ genre, subgenres: trope.subgenresByGenre[genre] || [] })),
+  }));
+}
+
+export const TROPES = consolidateTropes(RAW_TROPES);
+
+export function tropeHasGenre(trope, genre) {
+  return !!trope.subgenresByGenre?.[genre];
+}
+
+export function tropeHasSubgenre(trope, genre, subgenre) {
+  return !!trope.subgenresByGenre?.[genre]?.includes(subgenre);
+}
+
+export function getTropeSubgenres(trope, genre) {
+  return trope.subgenresByGenre?.[genre] || [];
+}
 
 export const CENTER_INDEX = 12; // middle of a 5x5 grid (0-indexed)
 export const FREE_SPACE_TEXT = 'FREE SPACE';
@@ -1618,9 +1666,9 @@ function shuffle(arr) {
 // draw a replacement trope from a specific sub-genre when a swap-out is
 // approved (see GameClient proposeReplace / _resolveClaim).
 export function getEligibleTropeTexts(genre, subgenre) {
-  return TROPES.filter(
-    (tr) => tr.genre === genre && (tr.subgenres.includes('general') || tr.subgenres.includes(subgenre)),
-  ).map((tr) => tr.text);
+  return TROPES.filter((tr) => tropeHasSubgenre(tr, genre, 'general') || tropeHasSubgenre(tr, genre, subgenre)).map(
+    (tr) => tr.text,
+  );
 }
 
 // Picks `totalTropes` distinct trope texts for a game's shared pool. Supports
@@ -1650,13 +1698,11 @@ export function pickTropePool(genres, subgenreSelections, generalPercents, total
     if (remainder > 0) remainder--;
 
     const pct = generalPercents[genre] ?? DEFAULT_GENERAL_PERCENT;
-    const generalPool = shuffle(
-      TROPES.filter((tr) => tr.genre === genre && tr.subgenres.includes('general')).map((tr) => tr.text),
-    );
+    const generalPool = shuffle(TROPES.filter((tr) => tropeHasSubgenre(tr, genre, 'general')).map((tr) => tr.text));
     const specificPool = shuffle(
-      TROPES.filter((tr) => subgenreSelections.some((s) => s.genre === genre && tr.subgenres.includes(s.subgenre))).map(
-        (tr) => tr.text,
-      ),
+      TROPES.filter((tr) =>
+        subgenreSelections.some((s) => s.genre === genre && tropeHasSubgenre(tr, genre, s.subgenre)),
+      ).map((tr) => tr.text),
     );
 
     const desiredGeneral = Math.round((allocation * pct) / 100);

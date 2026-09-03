@@ -10,6 +10,7 @@ import horror from './horror.js';
 import romance from './romance.js';
 import sciFi from './sci-fi.js';
 import thriller from './thriller.js';
+import { EXPANDED_DESCRIPTIONS } from '../expandedGenres.js';
 
 export default {
   ...horror,
@@ -21,4 +22,5 @@ export default {
   ...romance,
   ...drama,
   ...documentary,
+  ...EXPANDED_DESCRIPTIONS,
 };

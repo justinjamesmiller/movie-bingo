@@ -6,22 +6,34 @@
 const OMDB_API_KEY = import.meta.env.VITE_OMDB_API_KEY;
 
 // OMDb/IMDb genre strings mapped to this app's internal genre ids. Genres
-// IMDb reports that this app doesn't (yet) model (Animation, Family, War,
-// Western, Musical, Sport, Biography, History, Music) are left unmapped --
-// surfaced to the caller as `unmapped` so the UI can say so.
+// IMDb reports that this app doesn't model are left unmapped -- surfaced to
+// the caller as `unmapped` so the UI can say so.
 const GENRE_MAP = {
   Action: 'action',
-  Adventure: 'action',
+  Adventure: 'adventure',
+  Animation: 'animation',
+  Biography: 'biography',
   Comedy: 'comedy',
   Crime: 'thriller',
   Documentary: 'documentary',
   Drama: 'drama',
+  Family: 'family',
   Fantasy: 'fantasy',
+  'Game-Show': 'tv',
+  History: 'history',
   Horror: 'horror',
+  Music: 'music',
+  Musical: 'musical',
   Mystery: 'thriller',
+  News: 'tv',
+  'Reality-TV': 'tv',
   Romance: 'romance',
   'Sci-Fi': 'sci-fi',
+  Sport: 'sport',
+  'Talk-Show': 'tv',
   Thriller: 'thriller',
+  War: 'war',
+  Western: 'western',
 };
 
 export function isMovieLookupAvailable() {

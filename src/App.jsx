@@ -12,14 +12,7 @@ import {
   playGameOverSound,
   playPersonalMarkSound,
 } from './utils/sound.js';
-import {
-  isVibrationMuted,
-  setVibrationMuted,
-  vibrate,
-  VIBRATE_PATTERN_MARK,
-  VIBRATE_PATTERN_BINGO,
-  VIBRATE_PATTERN_VOTE_NEEDED,
-} from './utils/haptics.js';
+import { vibrate, VIBRATE_PATTERN_MARK, VIBRATE_PATTERN_BINGO, VIBRATE_PATTERN_VOTE_NEEDED } from './utils/haptics.js';
 import { clearTabAlert, setTabAlert } from './utils/tabAlert.js';
 import { loadTropeDescriptions } from './data/tropeDescriptions.js';
 import ThemeToggle from './components/ThemeToggle.jsx';
@@ -48,6 +41,9 @@ import KickConfirmModal from './components/KickConfirmModal.jsx';
 import ChangeNameModal from './components/ChangeNameModal.jsx';
 import HelpModal from './components/HelpModal.jsx';
 import GameMenu from './components/GameMenu.jsx';
+import InviteQrModal from './components/InviteQrModal.jsx';
+import WagerIntroModal from './components/WagerIntroModal.jsx';
+import HostTransferModal from './components/HostTransferModal.jsx';
 
 const MAX_WAGERS = 5;
 
@@ -55,6 +51,7 @@ function App() {
   const clientRef = useRef(null);
   const [screen, setScreen] = useState('landing');
   const [busy, setBusy] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState('');
   const [error, setError] = useState('');
   const [gameState, setGameState] = useState(null);
   const [myId, setMyId] = useState(null);
@@ -65,6 +62,9 @@ function App() {
   const [allWagersModalOpen, setAllWagersModalOpen] = useState(false);
   const [replaceProposal, setReplaceProposal] = useState(null);
   const [manageWagersOpen, setManageWagersOpen] = useState(false);
+  const [wagerIntroOpen, setWagerIntroOpen] = useState(false);
+  const [wageringEnabled, setWageringEnabled] = useState(false);
+  const [advancedGameplay, setAdvancedGameplay] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
   const [savedSession, setSavedSession] = useState(() => GameClient.getSavedSession());
   const [joinChoice, setJoinChoice] = useState(null);
@@ -76,9 +76,11 @@ function App() {
   const [activityFeedOpen, setActivityFeedOpen] = useState(false);
   const [gameOverModalOpen, setGameOverModalOpen] = useState(false);
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
+  const [hostTransferOpen, setHostTransferOpen] = useState(false);
+  const [hostTransferLeaves, setHostTransferLeaves] = useState(false);
   const [endGameConfirmOpen, setEndGameConfirmOpen] = useState(false);
+  const [inviteQrOpen, setInviteQrOpen] = useState(false);
   const [soundMuted, setSoundMutedState] = useState(() => isSoundMuted());
-  const [vibrationMuted, setVibrationMutedState] = useState(() => isVibrationMuted());
   const [customTropeModalOpen, setCustomTropeModalOpen] = useState(false);
   const [boardSwapConfirmOpen, setBoardSwapConfirmOpen] = useState(false);
   const [tropeInfo, setTropeInfo] = useState(null);
@@ -210,12 +212,6 @@ function App() {
     setSoundMutedState(next);
   }
 
-  function toggleVibrationMuted() {
-    const next = !vibrationMuted;
-    setVibrationMuted(next);
-    setVibrationMutedState(next);
-  }
-
   function handleSendReaction(emoji) {
     clientRef.current.sendReaction(emoji);
   }
@@ -229,23 +225,18 @@ function App() {
     setCustomTropeModalOpen(false);
   }
 
-  async function handleCopyCode() {
-    try {
-      await navigator.clipboard.writeText(gameState.code);
-      showToast('Code copied to clipboard!');
-    } catch {
-      showToast('Could not copy — please copy it manually.');
-    }
-  }
-
   async function handleCopyInviteLink() {
-    const url = `${window.location.origin}${window.location.pathname}?code=${gameState.code}`;
+    const url = inviteUrl;
     try {
       await navigator.clipboard.writeText(url);
       showToast('Invite link copied to clipboard!');
     } catch {
       showToast('Could not copy — please copy it manually.');
     }
+  }
+
+  function handleShowInviteQr() {
+    setInviteQrOpen(true);
   }
 
   function handleEndGame() {
@@ -259,6 +250,34 @@ function App() {
 
   function handleConfirmLeave() {
     setLeaveConfirmOpen(false);
+    const remainingPlayers = Object.values(gameState?.players || {}).filter(
+      (player) => player.id !== myId && player.connected,
+    );
+    if (isHost && remainingPlayers.length > 0) {
+      setHostTransferLeaves(true);
+      setHostTransferOpen(true);
+    } else {
+      handleLeaveGame();
+    }
+  }
+
+  async function handleAssignHostAndLeave(targetId) {
+    await clientRef.current?.addHost(targetId);
+    setHostTransferOpen(false);
+    handleLeaveGame();
+  }
+
+  async function handleAssignHost(targetId) {
+    await clientRef.current?.addHost(targetId);
+    setHostTransferOpen(false);
+  }
+
+  function handleResignHost() {
+    clientRef.current?.resignHost();
+  }
+
+  function handleLeaveWithoutHostAssignment() {
+    setHostTransferOpen(false);
     handleLeaveGame();
   }
 
@@ -343,9 +362,12 @@ function App() {
         } else if (evt.type === 'gameReset') {
           showToast('The host reset the game — new boards have been dealt.');
           setGameOverModalOpen(false);
+          setWageringEnabled(false);
+          setAdvancedGameplay(false);
         } else if (evt.type === 'gameRestored') {
           showToast('Nobody else was still connected — your game was restored from where you left off.');
         } else if (evt.type === 'gameOver') {
+          setSavedSession(null);
           playGameOverSound();
           showToast('🏁 The game has ended — check out the recap!');
           setGameOverModalOpen(true);
@@ -382,27 +404,54 @@ function App() {
     setConnectionStatus('connected');
   }
 
-  async function handleHost(name, genres, subgenreSelections, freeSpace, generalPercents, totalTropes, customTropes) {
+  async function handleHost(
+    name,
+    genres,
+    subgenreSelections,
+    freeSpace,
+    generalPercents,
+    totalTropes,
+    customTropes,
+    genrePercents,
+    subgenrePercents,
+  ) {
     setError('');
+    setWageringEnabled(false);
+    setAdvancedGameplay(false);
+    setLoadingMessage('Creating game...');
     setBusy(true);
     try {
       const client = makeClient();
-      await client.hostGame(name, genres, subgenreSelections, freeSpace, generalPercents, totalTropes, customTropes);
+      await client.hostGame(
+        name,
+        genres,
+        subgenreSelections,
+        freeSpace,
+        generalPercents,
+        totalTropes,
+        customTropes,
+        genrePercents,
+        subgenrePercents,
+      );
       setScreen('game');
     } catch (err) {
       discardClient();
       setError(err.message || 'Could not host a game.');
     } finally {
       setBusy(false);
+      setLoadingMessage('');
     }
   }
 
   async function handleJoin(name, code) {
     setError('');
+    setWageringEnabled(false);
+    setAdvancedGameplay(false);
     if (code.length !== 4) {
       setError('Enter the 4-character game code.');
       return;
     }
+    setLoadingMessage('Joining game...');
     setBusy(true);
     try {
       const client = makeClient();
@@ -419,6 +468,7 @@ function App() {
       setError(err.message || 'Could not join that game.');
     } finally {
       setBusy(false);
+      setLoadingMessage('');
     }
   }
 
@@ -474,6 +524,7 @@ function App() {
 
   async function handleRejoin() {
     setError('');
+    setLoadingMessage('Reconnecting to game...');
     setBusy(true);
     try {
       const client = makeClient();
@@ -485,6 +536,7 @@ function App() {
       setSavedSession(GameClient.getSavedSession());
     } finally {
       setBusy(false);
+      setLoadingMessage('');
     }
   }
 
@@ -498,12 +550,14 @@ function App() {
       setTropeInfo({
         text: me.board[index],
         marked: false,
-        title: wagered ? 'Remove this wager?' : 'Wager this trope?',
-        actionHint: wagered
-          ? 'This removes the space from your wager picks before the game starts.'
-          : `This adds the space to your wager picks before the game starts. You can wager up to ${MAX_WAGERS} spaces.`,
-        confirmLabel: wagered ? '🎯 Remove wager' : '🎯 Wager this trope',
-        onConfirm: () => handleTogglePregameWager(index),
+        title: wageringEnabled ? (wagered ? 'Remove this wager?' : 'Wager this trope?') : 'Trope',
+        actionHint: wageringEnabled
+          ? wagered
+            ? 'This removes the space from your wager picks before the game starts.'
+            : `This adds the space to your wager picks before the game starts. You can wager up to ${MAX_WAGERS} spaces.`
+          : 'You can read about this trope or propose swapping it out before the game starts.',
+        confirmLabel: wageringEnabled ? (wagered ? '🎯 Remove wager' : '🎯 Wager this trope') : undefined,
+        onConfirm: wageringEnabled ? () => handleTogglePregameWager(index) : null,
         onProposeSwap: () => handleProposeSwapFromInfo(me.board[index]),
       });
       return;
@@ -515,6 +569,16 @@ function App() {
       onConfirm: () => handleConfirmTropeClaim(index),
       onProposeSwap: () => handleProposeSwapFromInfo(me.board[index]),
     });
+  }
+
+  function handleStartWagering() {
+    setWagerIntroOpen(false);
+    setWageringEnabled(true);
+  }
+
+  function handleSkipWagering() {
+    setWagerIntroOpen(false);
+    setWageringEnabled(false);
   }
 
   function handleTogglePregameWager(index) {
@@ -728,13 +792,6 @@ function App() {
             <button className="btn" onClick={toggleSoundMuted} aria-label={soundMuted ? 'Unmute sound' : 'Mute sound'}>
               {soundMuted ? '🔇' : '🔊'}
             </button>
-            <button
-              className="btn"
-              onClick={toggleVibrationMuted}
-              aria-label={vibrationMuted ? 'Unmute vibration' : 'Mute vibration'}
-            >
-              {vibrationMuted ? '📴' : '📳'}
-            </button>
             <button className="btn" onClick={() => setHelpModalOpen(true)}>
               ❓ Help
             </button>
@@ -747,6 +804,7 @@ function App() {
             onJoin={handleJoin}
             error={error}
             busy={busy}
+            loadingMessage={loadingMessage}
             savedSession={savedSession}
             onRejoin={handleRejoin}
           />
@@ -772,8 +830,8 @@ function App() {
   if (!me) return null;
   const players = Object.values(gameState.players).sort((a, b) => a.seat - b.seat);
   const bingoCounts = Object.fromEntries(players.map((p) => [p.id, getCompletedLines(p.marked).length]));
-  const hostId = gameState.seatOrder.find((id) => gameState.players[id]?.connected);
-  const isHost = hostId === myId;
+  const hostIds = gameState.hostIds?.length ? gameState.hostIds : [gameState.seatOrder[0]];
+  const isHost = hostIds.includes(myId);
   const genreLabels = gameState.genres.map((id) => GENRES.find((g) => g.id === id)?.label || id).join(', ');
   const subgenreLabels = gameState.subgenreSelections.length
     ? gameState.subgenreSelections
@@ -781,8 +839,10 @@ function App() {
         .join(', ')
     : 'Classic / Mixed only';
   const generalMixLabels = gameState.genres
+    .filter((id) => gameState.subgenreSelections.some((selection) => selection.genre === id))
     .map((id) => `${GENRES.find((g) => g.id === id)?.label || id} ${gameState.generalPercents[id]}%`)
     .join(', ');
+  const inviteUrl = `${window.location.origin}${window.location.pathname}?code=${gameState.code}`;
 
   return (
     <>
@@ -795,13 +855,6 @@ function App() {
           <div className="header-actions">
             <button className="btn" onClick={toggleSoundMuted} aria-label={soundMuted ? 'Unmute sound' : 'Mute sound'}>
               {soundMuted ? '🔇' : '🔊'}
-            </button>
-            <button
-              className="btn"
-              onClick={toggleVibrationMuted}
-              aria-label={vibrationMuted ? 'Unmute vibration' : 'Mute vibration'}
-            >
-              {vibrationMuted ? '📴' : '📳'}
             </button>
             <button className="btn" onClick={() => setHelpModalOpen(true)}>
               ❓ Help
@@ -824,7 +877,7 @@ function App() {
               <div className="game-status">
                 {gameState.started
                   ? 'Game in progress — click a space when it happens on screen!'
-                  : 'Waiting for players — pick your 5 wagered spaces, then the host starts the game.'}
+                  : 'Waiting for players — the host can start when everyone is ready.'}
               </div>
               {!gameState.started && isHost && (
                 <button className="btn primary" onClick={() => clientRef.current.startGame()}>
@@ -850,12 +903,20 @@ function App() {
                 onShowActivityFeed={() => setActivityFeedOpen(true)}
                 onBoardFocus={() => setFocusMode(true)}
                 onChangeName={() => setChangeNameModalOpen(true)}
+                onAssignHost={() => {
+                  setHostTransferLeaves(false);
+                  setHostTransferOpen(true);
+                }}
+                onResignHost={handleResignHost}
+                hostCount={hostIds.length}
                 onResetGame={handleResetGame}
                 onEndGame={() => setEndGameConfirmOpen(true)}
                 onViewRecap={() => setGameOverModalOpen(true)}
                 onLeaveGame={() => setLeaveConfirmOpen(true)}
-                onCopyCode={handleCopyCode}
                 onCopyInviteLink={handleCopyInviteLink}
+                onShowInviteQr={handleShowInviteQr}
+                advancedGameplay={advancedGameplay}
+                onToggleAdvancedGameplay={() => setAdvancedGameplay((enabled) => !enabled)}
                 onSubmitCustomTrope={() => setCustomTropeModalOpen(true)}
                 onRequestBoardSwap={handleRequestBoardSwap}
               />
@@ -868,7 +929,7 @@ function App() {
             {!focusMode && (
               <PlayersPanel
                 players={players}
-                hostId={hostId}
+                hostIds={hostIds}
                 myId={myId}
                 isHost={isHost}
                 wagerCount={me.wagered.length}
@@ -876,6 +937,9 @@ function App() {
                 started={gameState.started}
                 bingoCounts={bingoCounts}
                 onKick={handleKickPlayer}
+                onEditSelf={() => setChangeNameModalOpen(true)}
+                wageringEnabled={wageringEnabled}
+                onOpenWagerIntro={() => setWagerIntroOpen(true)}
               />
             )}
             <div className="board-wrap">
@@ -902,6 +966,8 @@ function App() {
         onCancel={() => clientRef.current.cancelClaim(gameState.pendingClaim.claimId)}
       />
 
+      {wagerIntroOpen && <WagerIntroModal onAddWagers={handleStartWagering} onSkip={handleSkipWagering} />}
+
       {resetModalOpen && (
         <ResetModal
           currentGenres={gameState.genres}
@@ -913,6 +979,8 @@ function App() {
           onCancel={() => setResetModalOpen(false)}
         />
       )}
+
+      {inviteQrOpen && <InviteQrModal inviteUrl={inviteUrl} onClose={() => setInviteQrOpen(false)} />}
 
       {tropesModalOpen && (
         <AcceptedTropesModal
@@ -1003,6 +1071,15 @@ function App() {
           confirmLabel="🚪 Leave"
           onConfirm={handleConfirmLeave}
           onCancel={() => setLeaveConfirmOpen(false)}
+        />
+      )}
+
+      {hostTransferOpen && (
+        <HostTransferModal
+          players={players.filter((player) => player.id !== myId && player.connected && !hostIds.includes(player.id))}
+          onAssign={hostTransferLeaves ? handleAssignHostAndLeave : handleAssignHost}
+          onLeaveWithoutAssign={hostTransferLeaves ? handleLeaveWithoutHostAssignment : undefined}
+          onCancel={() => setHostTransferOpen(false)}
         />
       )}
 

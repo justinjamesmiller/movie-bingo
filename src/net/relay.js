@@ -88,8 +88,14 @@ function isValidSubgenre(genre, subgenre) {
   return (SUBGENRES_BY_GENRE[genre] || []).some((s) => s.id === subgenre);
 }
 
-function defaultAvatarForSeat(seat) {
-  return AVATAR_OPTIONS[seat % AVATAR_OPTIONS.length];
+// Picks a random avatar, preferring one not already in use by another
+// connected/seated player (falls back to the full pool once every avatar is
+// taken, e.g. more players than AVATAR_OPTIONS entries).
+function randomAvatar(usedAvatars = []) {
+  const used = new Set(usedAvatars.filter(Boolean));
+  const available = AVATAR_OPTIONS.filter((a) => !used.has(a));
+  const pool = available.length > 0 ? available : AVATAR_OPTIONS;
+  return pool[Math.floor(Math.random() * pool.length)];
 }
 
 // Pre-marks any board spaces that match tropes already accepted before this
@@ -246,6 +252,10 @@ export class GameClient {
 
   _saveSnapshot() {
     if (!this.state || !this.code) return;
+    if (this.state.gameOver) {
+      removeStore(localStore(), SNAPSHOT_KEY);
+      return;
+    }
     writeStore(localStore(), SNAPSHOT_KEY, { code: this.code, savedAt: Date.now(), state: this.state });
   }
 
@@ -256,7 +266,7 @@ export class GameClient {
   _restoreFromSnapshot(code, name) {
     const snapshot = GameClient.getSavedSnapshot(code);
     const me = snapshot?.state?.players?.[this.myId];
-    if (!me) return false;
+    if (!me || snapshot.state.gameOver) return false;
 
     this.state = snapshot.state;
     if (name) me.name = name;
@@ -272,7 +282,17 @@ export class GameClient {
 
   // ---------- Public API ----------
 
-  async hostGame(name, genres, subgenreSelections, freeSpace, generalPercents, totalTropes, customTropes) {
+  async hostGame(
+    name,
+    genres,
+    subgenreSelections,
+    freeSpace,
+    generalPercents,
+    totalTropes,
+    customTropes,
+    genrePercents,
+    subgenrePercents,
+  ) {
     const trimmedName = (name || '').trim();
     if (!trimmedName) throw new Error('Please enter your name.');
     const safe = sanitizeGenreSelection(genres, subgenreSelections);
@@ -291,6 +311,8 @@ export class GameClient {
       safeGeneralPercents,
       safeTotalTropes,
       safeCustomTropes,
+      genrePercents,
+      subgenrePercents,
     );
     this._saveSession(code, trimmedName);
     this._emitState();
@@ -566,13 +588,27 @@ export class GameClient {
     this._dispatch({ t: 'denyJoin', rotateCode: !!rotateCode });
   }
 
+  addHost(targetId) {
+    return this._dispatch({ t: 'addHost', targetId });
+  }
+
+  transferHost(targetId) {
+    return this.addHost(targetId);
+  }
+
+  resignHost() {
+    return this._dispatch({ t: 'resignHost' });
+  }
+
   leaveGame() {
     GameClient.clearSavedSession();
     this.destroy();
   }
 
   isHost() {
-    return !!this.state && this._currentHostId() === this.myId;
+    if (!this.state) return false;
+    const activeHostIds = this._hostIds().filter((id) => this.state.players[id]?.connected);
+    return activeHostIds.length > 0 ? activeHostIds.includes(this.myId) : this._authorityId() === this.myId;
   }
 
   // ---------- Channel plumbing ----------
@@ -675,7 +711,7 @@ export class GameClient {
   _announceSelf() {
     const me = this.state?.players?.[this.myId];
     if (!me) return;
-    if (me.connected && this.isHost()) {
+    if (me.connected && this._currentHostId() === this.myId) {
       this._send({ t: 'state', state: this.state });
       return;
     }
@@ -689,7 +725,7 @@ export class GameClient {
   // can tell a fresher snapshot from a staler one.
   _send(msg) {
     if (msg.t === 'state' && this.state) this.state.rev = (this.state.rev || 0) + 1;
-    this.channel?.send({ type: 'broadcast', event: 'msg', payload: { ...msg, sender: this.myId } });
+    return this.channel?.send({ type: 'broadcast', event: 'msg', payload: { ...msg, sender: this.myId } });
   }
 
   // Transparently swaps the transport channel to a new code (used after a
@@ -705,15 +741,35 @@ export class GameClient {
 
   _dispatch(action) {
     if (!this.state) return;
-    if (this.isHost()) {
-      this._applyAction(this.myId, action);
+    if (this._currentHostId() === this.myId) {
+      return this._applyAction(this.myId, action);
     } else {
-      this._send({ t: 'action', from: this.myId, action });
+      return this._send({ t: 'action', from: this.myId, action });
     }
   }
 
   _currentHostId() {
-    return this._authorityId();
+    if (!this.state) return null;
+    const hostIds = this._hostIds();
+    return (
+      this.state.seatOrder.find((id) => hostIds.includes(id) && this.state.players[id]?.connected) ||
+      this._authorityId()
+    );
+  }
+
+  _hostIds() {
+    return Array.isArray(this.state?.hostIds) && this.state.hostIds.length > 0
+      ? this.state.hostIds
+      : [this.state?.seatOrder[0]];
+  }
+
+  _isHostId(id) {
+    return this._hostIds().includes(id);
+  }
+
+  _isActiveHostId(id) {
+    const activeHostIds = this._hostIds().filter((hostId) => this.state.players[hostId]?.connected);
+    return activeHostIds.length > 0 ? activeHostIds.includes(id) : this._authorityId() === id;
   }
 
   // The lowest-seat connected player, optionally ignoring one seat. Excluding a
@@ -765,7 +821,7 @@ export class GameClient {
     if (!player || player.connected) return;
     player.connected = true;
     this._emitState();
-    if (this.isHost()) this._send({ t: 'state', state: this.state });
+    if (this._currentHostId() === this.myId) this._send({ t: 'state', state: this.state });
   }
 
   _markDisconnected(peerId) {
@@ -796,7 +852,7 @@ export class GameClient {
     const incomingRev = data.state?.rev || 0;
     const myRev = this.state.rev || 0;
     if (incomingRev > myRev) return true;
-    if (!this.isHost()) return true;
+    if (this._currentHostId() !== this.myId) return true;
     const mySeat = this.state.players[this.myId]?.seat;
     const theirSeat = this.state.players[data.sender]?.seat ?? data.state?.players?.[data.sender]?.seat;
     if (mySeat == null || theirSeat == null || theirSeat < mySeat) return true;
@@ -825,7 +881,7 @@ export class GameClient {
     this._notePeerAlive(data.sender);
     switch (data.t) {
       case 'join':
-        if (this.isHost()) this._handleJoin(data.from, data.name, data.forceNew);
+        if (this._currentHostId() === this.myId) this._handleJoin(data.from, data.name, data.forceNew);
         break;
       case 'rejoin':
         // Answered by whoever holds authority *ignoring the requester* -- when
@@ -910,6 +966,7 @@ export class GameClient {
         this.onEvent({ type: 'gameReset' });
         break;
       case 'gameOverAnnounced':
+        GameClient.clearSavedSession();
         this.onEvent({ type: 'gameOver' });
         break;
       case 'migrate':
@@ -927,7 +984,7 @@ export class GameClient {
         this._migrateToCode(data.newCode).catch(() => {});
         break;
       case 'action':
-        if (this.isHost()) this._applyAction(data.from, data.action);
+        if (this._currentHostId() === this.myId) this._applyAction(data.from, data.action);
         break;
       default:
         break;
@@ -936,9 +993,23 @@ export class GameClient {
 
   // ---------- Host-side game state management ----------
 
-  _initHostState(code, name, genres, subgenreSelections, freeSpace, generalPercents, totalTropes, customTropes = []) {
+  _initHostState(
+    code,
+    name,
+    genres,
+    subgenreSelections,
+    freeSpace,
+    generalPercents,
+    totalTropes,
+    customTropes = [],
+    genrePercents = {},
+    subgenrePercents = {},
+  ) {
     const tropePool = Array.from(
-      new Set([...pickTropePool(genres, subgenreSelections, generalPercents, totalTropes), ...customTropes]),
+      new Set([
+        ...pickTropePool(genres, subgenreSelections, generalPercents, totalTropes, genrePercents, subgenrePercents),
+        ...customTropes,
+      ]),
     );
     const board = buildPlayerBoard(tropePool, freeSpace);
     const marked = freeSpace ? [CENTER_INDEX] : [];
@@ -949,6 +1020,8 @@ export class GameClient {
       subgenreSelections,
       freeSpace,
       generalPercents,
+      genrePercents,
+      subgenrePercents,
       totalTropes,
       tropePool,
       players: {
@@ -957,13 +1030,14 @@ export class GameClient {
           name,
           seat: 0,
           connected: true,
-          avatar: defaultAvatarForSeat(0),
+          avatar: randomAvatar(),
           board,
           wagered: [],
           marked,
         },
       },
       seatOrder: [this.myId],
+      hostIds: [this.myId],
       started: false,
       gameOver: false,
       pendingClaim: null,
@@ -1022,7 +1096,7 @@ export class GameClient {
       name: safeName,
       seat,
       connected: true,
-      avatar: defaultAvatarForSeat(seat),
+      avatar: randomAvatar(Object.values(this.state.players).map((p) => p.avatar)),
       board,
       wagered: [],
       marked,
@@ -1047,7 +1121,13 @@ export class GameClient {
     player.connected = true;
     const trimmed = (name || '').trim();
     if (trimmed) player.name = trimmed;
-    if (!player.avatar) player.avatar = defaultAvatarForSeat(player.seat);
+    if (!player.avatar) {
+      player.avatar = randomAvatar(
+        Object.values(this.state.players)
+          .filter((p) => p.id !== id)
+          .map((p) => p.avatar),
+      );
+    }
 
     this._send({ t: 'welcome', to: id, state: this.state });
     this._emitState();
@@ -1111,7 +1191,7 @@ export class GameClient {
     }
 
     if (action.t === 'start') {
-      if (fromId !== this._currentHostId()) return;
+      if (!this._isActiveHostId(fromId)) return;
       state.started = true;
       this._logActivity('🎬 The host started the game.');
       this._emitState();
@@ -1158,7 +1238,7 @@ export class GameClient {
     }
 
     if (action.t === 'reset') {
-      if (fromId !== this._currentHostId()) return;
+      if (!this._isActiveHostId(fromId)) return;
       clearTimeout(this.claimTimeout);
       const safe = sanitizeGenreSelection(action.genres, action.subgenreSelections);
       state.genres = safe.genres;
@@ -1237,24 +1317,44 @@ export class GameClient {
     }
 
     if (action.t === 'gameOver') {
-      if (fromId !== this._currentHostId()) return;
+      if (!this._isActiveHostId(fromId)) return;
       if (!state.started || state.gameOver || state.pendingClaim) return;
       state.gameOver = true;
       this._logActivity('🏁 The game has ended.');
       this._send({ t: 'gameOverAnnounced' });
+      GameClient.clearSavedSession();
       this.onEvent({ type: 'gameOver' });
       this._emitState();
       this._send({ t: 'state', state: this.state });
       return;
     }
 
+    if (action.t === 'addHost') {
+      if (!this._isActiveHostId(fromId)) return;
+      const targetId = action.targetId;
+      if (!state.players[targetId]?.connected || this._isHostId(targetId)) return;
+      state.hostIds = [...this._hostIds(), targetId];
+      this._logActivity(`👑 ${state.players[targetId].name} is now a host.`);
+      this._emitState();
+      return this._send({ t: 'state', state: this.state });
+    }
+
+    if (action.t === 'resignHost') {
+      if (!this._isHostId(fromId) || this._hostIds().length < 2) return;
+      state.hostIds = this._hostIds().filter((id) => id !== fromId);
+      this._logActivity(`👑 ${state.players[fromId].name} resigned as host.`);
+      this._emitState();
+      return this._send({ t: 'state', state: this.state });
+    }
+
     if (action.t === 'kick') {
-      if (fromId !== this._currentHostId()) return;
+      if (!this._isActiveHostId(fromId)) return;
       const targetId = action.targetId;
       if (targetId === fromId || !state.players[targetId]) return;
       const removedName = state.players[targetId].name;
       delete state.players[targetId];
       state.seatOrder = state.seatOrder.filter((id) => id !== targetId);
+      state.hostIds = this._hostIds().filter((id) => id !== targetId);
       if (state.pendingClaim && state.pendingClaim.byId === targetId) {
         clearTimeout(this.claimTimeout);
         state.pendingClaim = null;
@@ -1264,7 +1364,7 @@ export class GameClient {
     }
 
     if (action.t === 'approveJoin') {
-      if (fromId !== this._currentHostId()) return;
+      if (!this._isActiveHostId(fromId)) return;
       const req = state.pendingJoinRequest;
       if (!req) return;
       const board = buildPlayerBoard(state.tropePool, state.freeSpace);
@@ -1276,7 +1376,7 @@ export class GameClient {
         name: req.name,
         seat,
         connected: true,
-        avatar: defaultAvatarForSeat(seat),
+        avatar: randomAvatar(Object.values(state.players).map((p) => p.avatar)),
         board,
         wagered: [],
         marked,
@@ -1291,7 +1391,7 @@ export class GameClient {
     }
 
     if (action.t === 'denyJoin') {
-      if (fromId !== this._currentHostId()) return;
+      if (!this._isActiveHostId(fromId)) return;
       const req = state.pendingJoinRequest;
       if (!req) return;
       state.pendingJoinRequest = null;

@@ -15,16 +15,20 @@ export default function HelpModal({ onClose }) {
 
         <h4>🎬 Hosting &amp; Joining</h4>
         <p className="hint">
-          The host picks genre(s)/sub-genre(s) (or looks up a real movie or TV show to auto-fill them — search results
-          show 🎬/📺 so you can tell them apart), an optional free center space, and how many unique tropes are in play,
-          then shares the 4-character game code. Everyone else just enters their name and that code to join — or use the
-          menu's "Copy Invite Link" once hosting, which pre-fills the code for whoever opens it.
+          The host starts with genres only, then can choose sub-genres or open Advanced Host Setup for more options.
+          Looking up a real movie or TV show can auto-fill genres — search results show 🎬/📺 so you can tell them
+          apart. Everyone else just enters their name and the 4-character game code to join — or uses the menu's invite
+          link or QR code.
+        </p>
+        <p className="hint">
+          The menu begins with simple details. Use Advanced Details to view selected sub-genres and their general mix,
+          or Advanced Gameplay to reveal the less-common game controls.
         </p>
 
         <h4>💰 Wagering (before the game starts)</h4>
         <p className="hint">
-          Click a space to see what that trope means, then add it to your wager picks. Click an already-wagered space to
-          read it and remove the wager. You can pick up to 5, and wagers lock once the host starts the game.
+          Wagers are optional. Before the game starts, choose Optional Wagers to pick up to 5 tropes you feel especially
+          confident will happen. They lock once the host starts the game.
         </p>
 
         <h4>👆 Tapping a space (once the game has started)</h4>
@@ -50,6 +54,12 @@ export default function HelpModal({ onClose }) {
             if it&apos;s not on your own board), or to propose replacing it.
           </li>
         </ul>
+
+        <h4>⚙️ Advanced gameplay</h4>
+        <p className="hint">
+          The menu begins in Simple Gameplay mode. Open Advanced Gameplay when you want access to tools such as all
+          tropes, wager management, activity history, board swapping, and name or avatar changes.
+        </p>
 
         <h4>🎯 Managing wagers mid-game</h4>
         <p className="hint">
@@ -77,9 +87,10 @@ export default function HelpModal({ onClose }) {
 
         <h4>🏁 Ending the game &amp; recap</h4>
         <p className="hint">
-          The host can hit "End Game" anytime from the menu. Everyone gets a recap showing each player's tropes marked,
-          bingos, and wagers hit, with 🏆 for the most tropes marked, 🎉 for the most bingos, and 🎯 for the most wagers
-          hit. You can reopen the recap later from the menu's "View Recap" option.
+          Once the game has started, the host can hit "End Game" from the menu. Everyone gets a recap showing each
+          player's tropes marked, bingos, and wagers hit, with 🏆 for the most tropes marked, 🎉 for the most bingos,
+          and 🎯 for the most wagers hit. You can reopen the recap later from the menu's "View Recap" option. Ending a
+          game clears reconnect data.
         </p>
 
         <h4>🧑‍🎤 Avatars</h4>
@@ -101,12 +112,10 @@ export default function HelpModal({ onClose }) {
           as any other claim, and joins the pool if approved.
         </p>
 
-        <h4>🔊 Sound, 📳 Vibration &amp; 🔌 Connection</h4>
+        <h4>🔊 Sound &amp; 🔌 Connection</h4>
         <p className="hint">
-          The speaker and vibration icons in the header independently mute/unmute notification sounds and mobile
-          vibration (new claims, approvals, bingos) — these settings persist even through a game reset or leaving to
-          join a new game. If your connection drops, a red banner appears at the top of the screen so you know to check
-          your network.
+          The speaker icon in the header mutes/unmutes notification sounds. If your connection drops, a red banner
+          appears at the top of the screen so you know to check your network.
         </p>
 
         <h4>🧰 Other buttons</h4>
@@ -118,10 +127,11 @@ export default function HelpModal({ onClose }) {
             ✏️ <strong>Change Name and Avatar</strong> — rename and re-pick your avatar anytime.
           </li>
           <li>
-            📋 <strong>Copy Code</strong> / 🔗 <strong>Copy Invite Link</strong> — share the game with others.
+            🔗 <strong>Copy Invite Link</strong> / <strong>QR Code</strong> — share the game with others.
           </li>
           <li>
-            🚪 <strong>Leave Game</strong> — asks you to confirm, then heads back to the home screen.
+            🚪 <strong>Leave Game</strong> — asks you to confirm, then heads back to the home screen. A host leaving
+            while others are connected can add a host first.
           </li>
         </ul>
         <p className="hint">Most pop-up windows can also be closed by tapping outside the window.</p>
@@ -136,6 +146,10 @@ export default function HelpModal({ onClose }) {
           </li>
           <li>
             <strong>Reset Game</strong> — deals fresh boards, lets you re-pick genres/settings.
+          </li>
+          <li>
+            <strong>Add Host</strong> — give another connected player host permissions while you remain in the game.
+            Hosts have the same controls, can add more hosts, and can resign as host once another host remains.
           </li>
           <li>
             <strong>Remove</strong> (in the Players list) — kicks a player and rotates the game code for security.
@@ -155,9 +169,10 @@ export default function HelpModal({ onClose }) {
 
         <h4>🔌 Disconnects</h4>
         <p className="hint">
-          If you get disconnected (including the host), reopening the app will offer a "Reconnect" option to resume your
-          same board and progress. If that's not available, joining again with your name and the code will let you pick
-          your old seat back up.
+          If you get disconnected (including the host), reopening the app offers a "Reconnect" option to resume your
+          same board and progress. This is unavailable after ending or deliberately leaving a game. If reconnect is
+          available but you prefer a fresh tab, joining again with your name and the code lets you pick your old seat
+          back up.
         </p>
 
         <button className="btn cancel-claim-btn" onClick={onClose}>

@@ -3,10 +3,16 @@ import { GENRES, SUBGENRES_BY_GENRE } from '../data/tropes.js';
 // Shared multi-select genre + sub-genre picker used by both the Host card
 // (Landing.jsx) and the Reset modal (ResetModal.jsx) -- lets a game span
 // several genres/sub-genres at once (e.g. a movie that's Horror/Comedy/Romance).
-export default function GenreSubgenrePicker({ genres, subgenreSelections, onChange }) {
+export default function GenreSubgenrePicker({
+  genres,
+  subgenreSelections,
+  onChange,
+  showSubgenres = true,
+  allowEmptyGenres = false,
+}) {
   function toggleGenre(id) {
     const nextGenres = genres.includes(id) ? genres.filter((g) => g !== id) : [...genres, id];
-    if (nextGenres.length === 0) return; // always keep at least one genre selected
+    if (nextGenres.length === 0 && !allowEmptyGenres) return;
     const nextSelections = nextGenres.includes(id)
       ? subgenreSelections
       : subgenreSelections.filter((s) => s.genre !== id);
@@ -32,26 +38,30 @@ export default function GenreSubgenrePicker({ genres, subgenreSelections, onChan
           </label>
         ))}
       </div>
-      <label>Sub-genres (optional, layered on top of each genre's general pool)</label>
-      <div className="subgenre-groups">
-        {genres.map((gid) => (
-          <div key={gid} className="subgenre-group">
-            <div className="subgenre-group-label">{GENRES.find((g) => g.id === gid)?.label}</div>
-            {SUBGENRES_BY_GENRE[gid]
-              .filter((s) => s.id !== 'general')
-              .map((sg) => (
-                <label key={sg.id} className="checkbox-label inline">
-                  <input
-                    type="checkbox"
-                    checked={subgenreSelections.some((s) => s.genre === gid && s.subgenre === sg.id)}
-                    onChange={() => toggleSubgenre(gid, sg.id)}
-                  />
-                  {sg.label}
-                </label>
-              ))}
+      {showSubgenres && (
+        <>
+          <label>Sub-genres (optional, layered on top of each genre's general pool)</label>
+          <div className="subgenre-groups">
+            {genres.map((gid) => (
+              <div key={gid} className="subgenre-group">
+                <div className="subgenre-group-label">{GENRES.find((g) => g.id === gid)?.label}</div>
+                {SUBGENRES_BY_GENRE[gid]
+                  .filter((s) => s.id !== 'general')
+                  .map((sg) => (
+                    <label key={sg.id} className="checkbox-label inline">
+                      <input
+                        type="checkbox"
+                        checked={subgenreSelections.some((s) => s.genre === gid && s.subgenre === sg.id)}
+                        onChange={() => toggleSubgenre(gid, sg.id)}
+                      />
+                      {sg.label}
+                    </label>
+                  ))}
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </>
+      )}
     </>
   );
 }

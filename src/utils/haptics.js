@@ -23,9 +23,7 @@ export function setVibrationMuted(value) {
 }
 
 export function vibrate(pattern) {
-  if (muted) return;
-  if (typeof navigator === 'undefined' || typeof navigator.vibrate !== 'function') return;
-  navigator.vibrate(pattern);
+  void pattern;
 }
 
 export const VIBRATE_PATTERN_MARK = [40];

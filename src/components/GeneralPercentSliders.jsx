@@ -1,39 +1,57 @@
-import { GENRES, GENERAL_PERCENT_OPTIONS, DEFAULT_GENERAL_PERCENT } from '../data/tropes.js';
+import { GENRES, SUBGENRES_BY_GENRE } from '../data/tropes.js';
+import { balancedRatios, updateRatio } from '../utils/ratios.js';
+import RatioSliders from './RatioSliders.jsx';
 
-// One "general tropes %" slider per selected genre that has at least one
-// sub-genre chosen -- with no sub-genre selected there's nothing to mix
-// against (it's 100% general either way), so the slider is meaningless.
-export default function GeneralPercentSliders({ genres, subgenreSelections, generalPercents, onChange }) {
-  const genresWithSubgenres = genres.filter((genreId) => subgenreSelections.some((s) => s.genre === genreId));
+export default function GeneralPercentSliders({
+  genres,
+  subgenreSelections,
+  genrePercents = {},
+  subgenrePercents = {},
+  onChange,
+}) {
+  const genreEntries = genres.map((id) => ({ id, label: GENRES.find((genre) => genre.id === id)?.label || id }));
+
+  function updateGenreRatio(genreId, value) {
+    const keys = genres;
+    onChange(updateRatio(genrePercents, keys, genreId, value), subgenrePercents);
+  }
+
+  function updateSubgenreRatio(genreId, ratioId, value) {
+    const selections = subgenreSelections.filter((selection) => selection.genre === genreId);
+    const keys = ['general', ...selections.map((selection) => selection.subgenre)];
+    onChange(genrePercents, {
+      ...subgenrePercents,
+      [genreId]: updateRatio(subgenrePercents[genreId] || balancedRatios(keys), keys, ratioId, value),
+    });
+  }
+
   return (
-    <>
-      {genresWithSubgenres.map((genreId) => {
-        const label = GENRES.find((g) => g.id === genreId)?.label || genreId;
-        const value = generalPercents[genreId] ?? DEFAULT_GENERAL_PERCENT;
-        const inputId = `general-percent-${genreId}`;
+    <section className="ratio-controls">
+      {genres.length > 1 && (
+        <RatioSliders title="Genre mix" entries={genreEntries} values={genrePercents} onChange={updateGenreRatio} />
+      )}
+      {genres.map((genreId) => {
+        const selections = subgenreSelections.filter((selection) => selection.genre === genreId);
+        if (selections.length === 0) return null;
+        const entries = [
+          { id: 'general', label: 'General' },
+          ...selections.map((selection) => ({
+            id: selection.subgenre,
+            label:
+              SUBGENRES_BY_GENRE[genreId].find((subgenre) => subgenre.id === selection.subgenre)?.label ||
+              selection.subgenre,
+          })),
+        ];
         return (
-          <div key={genreId}>
-            <label htmlFor={inputId}>
-              {label} general tropes: {value}%
-            </label>
-            <input
-              id={inputId}
-              type="range"
-              min={0}
-              max={100}
-              step={10}
-              list="general-percent-ticks"
-              value={value}
-              onChange={(e) => onChange(genreId, Number(e.target.value))}
-            />
-          </div>
+          <RatioSliders
+            key={genreId}
+            title={`${GENRES.find((genre) => genre.id === genreId)?.label || genreId} trope mix`}
+            entries={entries}
+            values={subgenrePercents[genreId] || balancedRatios(entries.map((entry) => entry.id))}
+            onChange={(ratioId, value) => updateSubgenreRatio(genreId, ratioId, value)}
+          />
         );
       })}
-      <datalist id="general-percent-ticks">
-        {GENERAL_PERCENT_OPTIONS.map((p) => (
-          <option key={p} value={p} />
-        ))}
-      </datalist>
-    </>
+    </section>
   );
 }

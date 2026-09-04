@@ -39,12 +39,12 @@ describe('haptics', () => {
     expect(navigator.vibrate).not.toHaveBeenCalled();
   });
 
-  it('calls navigator.vibrate with the given pattern while unmuted', async () => {
+  it('does not call navigator.vibrate while haptic feedback is disabled', async () => {
     const { setVibrationMuted, vibrate } = await freshHaptics();
     navigator.vibrate = vi.fn();
     setVibrationMuted(false);
     vibrate([50, 20]);
-    expect(navigator.vibrate).toHaveBeenCalledWith([50, 20]);
+    expect(navigator.vibrate).not.toHaveBeenCalled();
   });
 
   it('does nothing if navigator.vibrate is unavailable', async () => {

@@ -620,6 +620,83 @@ describe('GameClient connection stability', () => {
     expect(returning.client.isHost()).toBe(true);
   });
 
+  it('clears reconnect data for every player when the host ends the game', async () => {
+    const { host, guest } = await twoPlayerGame();
+
+    host.client.declareGameOver();
+    await flush();
+
+    expect(host.state.gameOver).toBe(true);
+    expect(guest.state.gameOver).toBe(true);
+    expect(GameClient.getSavedSession()).toBeNull();
+    expect(GameClient.getSavedSnapshot()).toBeNull();
+  });
+
+  it('lets a host add another connected player as a host', async () => {
+    const { host, guest } = await twoPlayerGame();
+
+    host.client.addHost(guest.myId);
+    await flush();
+
+    expect(host.client.isHost()).toBe(true);
+    expect(guest.client.isHost()).toBe(true);
+    expect(guest.state.hostIds).toEqual([host.myId, guest.myId]);
+  });
+
+  it('lets a host resign while another host remains', async () => {
+    const { host, guest } = await twoPlayerGame();
+    host.client.addHost(guest.myId);
+    await flush();
+
+    host.client.resignHost();
+    await flush();
+
+    expect(host.client.isHost()).toBe(false);
+    expect(guest.client.isHost()).toBe(true);
+    expect(guest.state.hostIds).toEqual([guest.myId]);
+  });
+
+  it('lets a newly added host add another host', async () => {
+    const host = makeTrackedClient();
+    const code = await host.client.hostGame('Alice', ['horror'], [], false, { horror: 50 }, 25);
+    const firstGuest = makeTrackedClient();
+    await firstGuest.client.joinGame(code, 'Bob');
+    const secondGuest = makeTrackedClient();
+    await secondGuest.client.joinGame(code, 'Charlie');
+    await flush();
+
+    host.client.addHost(firstGuest.myId);
+    await flush();
+    firstGuest.client.addHost(secondGuest.myId);
+    await flush();
+
+    expect(secondGuest.state.hostIds).toEqual([host.myId, firstGuest.myId, secondGuest.myId]);
+    expect(secondGuest.client.isHost()).toBe(true);
+  });
+
+  it('allows a non-coordinator host to perform host-only actions', async () => {
+    const { host, guest } = await twoPlayerGame();
+    host.client.addHost(guest.myId);
+    await flush();
+
+    guest.client.resetGame(['comedy'], [], false, { comedy: 50 }, 25);
+    await flush();
+
+    expect(host.state.genres).toEqual(['comedy']);
+    expect(guest.state.genres).toEqual(['comedy']);
+    expect(host.state.started).toBe(false);
+  });
+
+  it('does not allow the final host to resign', async () => {
+    const { host } = await twoPlayerGame();
+
+    host.client.resignHost();
+    await flush();
+
+    expect(host.state.hostIds).toEqual([host.myId]);
+    expect(host.client.isHost()).toBe(true);
+  });
+
   it('lets a disconnected player recover their same seat by using Join instead of Reconnect', async () => {
     const { host, guest, code } = await twoPlayerGame();
     const guestId = guest.myId;

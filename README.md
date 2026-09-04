@@ -10,27 +10,35 @@ free on GitHub Pages.
 
 ## How it works
 
-- The first player **hosts** a game, picks one or more genres/sub-genres, and gets a 4-character code.
+- The first player **hosts** a game, picks one or more genres, and gets a 4-character code. Sub-genres and other
+  settings are available through optional setup controls.
 - Others **join** with that code. Everyone gets a random 5x5 board of movie/TV tropes, all spaces
   drawn from the same host-configured trope pool.
-- Before starting, each player picks up to 5 **wagered** spaces (tropes they think are extra likely).
-  Tapping a trope shows its description first, then lets the player add/remove the wager.
+- Before starting, each player can optionally enable **wagers** and pick up to 5 spaces they think are extra likely.
+  Tapping a trope always shows its description; opting in also adds an action to add or remove that wager.
 - During the game, tapping a space shows the trope description, then lets the player claim that trope happened; other players vote to confirm.
   A majority is required to mark it — and it marks that same trope on every board that has it.
-- Players can view accepted tropes, the full trope pool, and everyone's wagers; most trope list items open the same description window and can be used to propose swapping a trope out.
-- Mid-game changes such as custom trope submissions, wager changes, and whole-board swaps go through the same majority-vote flow.
+- Players can view accepted tropes; Advanced Gameplay additionally exposes the full trope pool, everyone's wagers,
+  activity history, whole-board swaps, and profile changes. Most trope list items open the same description window
+  and can be used to propose swapping a trope out.
+- Mid-game changes such as custom trope submissions, wager changes, and whole-board swaps go through the same
+  majority-vote flow.
 - Bingos are detected automatically. Everyone sees the celebration banner, and the player list/final recap show each player's bingo count.
 - Everyone subscribes to the same Supabase Realtime channel (named after the game code) and
-  broadcasts messages to it; Supabase relays messages to everyone else on the channel. If the host
-  disconnects, authority automatically passes to the next-longest-connected player.
+  broadcasts messages to it; Supabase relays messages to everyone else on the channel. One or more players can hold
+  host permissions; a deterministic connected host coordinates relay messages to prevent duplicate updates.
 
 ## Player features
 
-- **Reconnect / seat reclaim:** returning players can use the Reconnect card, or join with the code and reclaim a disconnected seat.
-- **Invite sharing:** the in-game menu can copy the code or a join link with the code pre-filled.
+- **Reconnect / seat reclaim:** returning players can use the Reconnect card, or join with the code and reclaim a
+  disconnected seat. Reconnect is not offered after the host ends a game or after a player deliberately leaves.
+- **Invite sharing:** the in-game menu can copy a join link with the code pre-filled or show the same link as a QR
+  code. Both reflect the current code after a rotation.
 - **Activity feed:** approved marks, swaps, wager changes, resets, and other notable events are logged for anyone who looked away.
 - **Reactions:** quick emoji reactions broadcast briefly to everyone without starting a vote.
 - **Recap:** the host can end the game to show everyone final marked counts, bingo counts, and wager hits.
+- **Co-hosts:** a host can add other connected players as hosts. Every host has the same host controls, can add more
+  hosts, and can resign once another host remains.
 - **PWA support:** the site includes a web app manifest and service worker so it can be installed via "Add to Home Screen" / browser install prompts. The app still needs network access for live multiplayer relay traffic.
 
 ## Supabase setup (required)
@@ -106,8 +114,10 @@ branch (or configure a GitHub Actions workflow to build and deploy automatically
   internet connection to reach Supabase.
 - Game state is held by connected browsers, not a database. At least one current/recent player needs
   enough local state to keep or restore the game.
-- The original host's browser tab normally acts as the rendezvous point for the game code, but host
-  authority migrates automatically if the current host disconnects.
+- Host permissions can be held by multiple players. If every designated host disconnects, authority falls back to the
+  next connected player. A host who deliberately leaves while others remain can add a host before departing.
+- Ending a game clears its reconnect data. Deliberately leaving also clears that player's reconnect data, so a game
+  cannot be restored after every player has chosen Leave Game.
 - Mobile browsers and installed web apps can suspend realtime connections when backgrounded. The app
   attempts to reconnect and surfaces connection failures, but a live game still depends on Supabase
   Realtime being reachable.

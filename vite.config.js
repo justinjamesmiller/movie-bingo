@@ -16,4 +16,15 @@ export default defineConfig({
       exclude: ['src/main.jsx', 'src/test/**'],
     },
   },
+  build: {
+    rolldownOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('@supabase/supabase-js')) return 'supabase';
+          if (id.includes('qrcode.react')) return 'qrcode';
+          return undefined;
+        },
+      },
+    },
+  },
 });

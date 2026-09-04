@@ -1,6 +1,6 @@
 export default function PlayersPanel({
   players,
-  hostId,
+  hostIds = [],
   myId,
   isHost,
   wagerCount,
@@ -8,6 +8,9 @@ export default function PlayersPanel({
   started,
   bingoCounts,
   onKick,
+  onEditSelf,
+  wageringEnabled,
+  onOpenWagerIntro,
 }) {
   return (
     <aside className="players-panel">
@@ -19,13 +22,21 @@ export default function PlayersPanel({
           return (
             <li key={p.id}>
               <div className="player-row">
+                {p.id === myId ? (
+                  <button className="player-profile-button" onClick={onEditSelf} aria-label="Edit name and avatar">
+                    {p.avatar ? `${p.avatar} ` : ''}
+                    {p.name}
+                    {!p.connected ? ' (disconnected)' : ''}
+                  </button>
+                ) : (
+                  <span>
+                    {p.avatar ? `${p.avatar} ` : ''}
+                    {p.name}
+                    {!p.connected ? ' (disconnected)' : ''}
+                  </span>
+                )}
                 <span>
-                  {p.avatar ? `${p.avatar} ` : ''}
-                  {p.name}
-                  {!p.connected ? ' (disconnected)' : ''}
-                </span>
-                <span>
-                  {p.id === hostId && <span className="tag">HOST</span>}{' '}
+                  {hostIds.includes(p.id) && <span className="tag">HOST</span>}{' '}
                   {wagerLocked && <span className="tag">READY</span>}
                   {isHost && p.id !== myId && (
                     <button className="btn disagree kick-btn" onClick={() => onKick(p.id, p.name)}>
@@ -35,8 +46,8 @@ export default function PlayersPanel({
                 </span>
               </div>
               <div className="hint player-stats">
-                {p.marked.length} marked · {bingoCounts[p.id] || 0} bingo{(bingoCounts[p.id] || 0) === 1 ? '' : 's'} ·{' '}
-                {wageredMarked}/{p.wagered.length} wagered marked
+                {p.marked.length} marked · {bingoCounts[p.id] || 0} bingo{(bingoCounts[p.id] || 0) === 1 ? '' : 's'}
+                {p.wagered.length > 0 && ` · ${wageredMarked}/${p.wagered.length} wagered marked`}
               </div>
             </li>
           );
@@ -44,13 +55,20 @@ export default function PlayersPanel({
       </ul>
       {!started && (
         <>
-          <p className="hint">
-            Pick 5 spaces to <strong>wager</strong> — you think these tropes are extra likely to happen. Wagers lock
-            once the game starts.
-          </p>
-          <p className="hint">
-            Wagered: {wagerCount} / {maxWagers}
-          </p>
+          <button className="btn" onClick={onOpenWagerIntro}>
+            🎯 {wageringEnabled ? 'Choose Wagers' : 'Optional Wagers'}
+          </button>
+          {wageringEnabled && (
+            <>
+              <p className="hint">
+                Pick 5 spaces to <strong>wager</strong> — you think these tropes are extra likely to happen. Wagers lock
+                once the game starts.
+              </p>
+              <p className="hint">
+                Wagered: {wagerCount} / {maxWagers}
+              </p>
+            </>
+          )}
         </>
       )}
     </aside>

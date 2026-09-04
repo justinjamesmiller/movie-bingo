@@ -11,7 +11,7 @@ function renderPanel(overrides = {}) {
   return render(
     <PlayersPanel
       players={players}
-      hostId="p1"
+      hostIds={['p1']}
       myId="p1"
       isHost
       wagerCount={3}
@@ -19,6 +19,8 @@ function renderPanel(overrides = {}) {
       started={false}
       bingoCounts={{ p1: 1, p2: 0 }}
       onKick={vi.fn()}
+      wageringEnabled
+      onOpenWagerIntro={vi.fn()}
       {...overrides}
     />,
   );
@@ -43,6 +45,33 @@ describe('PlayersPanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
     expect(onKick).toHaveBeenCalledWith('p2', 'Bob');
+  });
+
+  it('always offers optional wagers but hides wager copy until the player opts in', () => {
+    const onOpenWagerIntro = vi.fn();
+    renderPanel({ wageringEnabled: false, onOpenWagerIntro });
+
+    expect(screen.getByRole('button', { name: '🎯 Optional Wagers' })).toBeInTheDocument();
+    expect(screen.queryByText(/Pick 5 spaces/)).toBeNull();
+    expect(screen.queryByText(/Wagered:/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '🎯 Optional Wagers' }));
+    expect(onOpenWagerIntro).toHaveBeenCalledTimes(1);
+  });
+
+  it('hides wager-hit stats only for players without wagers', () => {
+    renderPanel({ players: [{ ...players[0], wagered: [] }, players[1]] });
+
+    expect(screen.getByText('2 marked · 1 bingo')).toBeInTheDocument();
+    expect(screen.queryByText(/2 marked · 1 bingo ·/)).toBeNull();
+    expect(screen.getByText('0 marked · 0 bingos · 0/1 wagered marked')).toBeInTheDocument();
+  });
+
+  it('opens the profile editor when the current player clicks their name or avatar', () => {
+    const onEditSelf = vi.fn();
+    renderPanel({ onEditSelf });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit name and avatar' }));
+    expect(onEditSelf).toHaveBeenCalledTimes(1);
   });
 
   it('hides host-only remove controls and pre-game copy when appropriate', () => {

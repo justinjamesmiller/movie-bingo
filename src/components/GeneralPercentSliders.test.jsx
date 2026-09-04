@@ -3,32 +3,37 @@ import { describe, expect, it, vi } from 'vitest';
 import GeneralPercentSliders from './GeneralPercentSliders.jsx';
 
 describe('GeneralPercentSliders', () => {
-  it('only renders sliders for genres with selected sub-genres', () => {
+  it('shows genre sliders only for multiple genres and subgenre sliders only when selected', () => {
+    const onChange = vi.fn();
     render(
       <GeneralPercentSliders
         genres={['horror', 'comedy']}
         subgenreSelections={[{ genre: 'horror', subgenre: 'slasher' }]}
-        generalPercents={{ horror: 30, comedy: 70 }}
-        onChange={vi.fn()}
+        genrePercents={{ horror: 40, comedy: 60 }}
+        subgenrePercents={{ horror: { general: 50, slasher: 50 } }}
+        onChange={onChange}
       />,
     );
 
-    expect(screen.getByLabelText('Horror general tropes: 30%')).toBeInTheDocument();
-    expect(screen.queryByLabelText('Comedy general tropes: 70%')).toBeNull();
+    expect(screen.getByLabelText('Horror: 40%')).toBeInTheDocument();
+    expect(screen.getByLabelText('Comedy: 60%')).toBeInTheDocument();
+    expect(screen.getByLabelText('General: 50%')).toBeInTheDocument();
+    expect(screen.getByLabelText('Slasher: 50%')).toBeInTheDocument();
   });
 
-  it('reports slider changes with the genre id and numeric value', () => {
+  it('keeps a two-slider subgenre mix at 100%', () => {
     const onChange = vi.fn();
     render(
       <GeneralPercentSliders
         genres={['horror']}
         subgenreSelections={[{ genre: 'horror', subgenre: 'slasher' }]}
-        generalPercents={{ horror: 30 }}
+        genrePercents={{ horror: 100 }}
+        subgenrePercents={{ horror: { general: 50, slasher: 50 } }}
         onChange={onChange}
       />,
     );
 
-    fireEvent.change(screen.getByLabelText('Horror general tropes: 30%'), { target: { value: '60' } });
-    expect(onChange).toHaveBeenCalledWith('horror', 60);
+    fireEvent.change(screen.getByLabelText('General: 50%'), { target: { value: '60' } });
+    expect(onChange).toHaveBeenCalledWith({ horror: 100 }, { horror: { general: 60, slasher: 40 } });
   });
 });

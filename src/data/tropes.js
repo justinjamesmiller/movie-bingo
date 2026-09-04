@@ -1685,31 +1685,47 @@ export function getEligibleTropeTexts(genre, subgenre) {
 // other selected genre's) if a genre's exact allocation/mix can't be met --
 // gracefully degrades to however many unique tropes actually exist overall if
 // fewer than `totalTropes` in total.
-export function pickTropePool(genres, subgenreSelections, generalPercents, totalTropes) {
-  const perGenreBase = Math.floor(totalTropes / genres.length);
-  let remainder = totalTropes - perGenreBase * genres.length;
-
+export function pickTropePool(
+  genres,
+  subgenreSelections,
+  generalPercents,
+  totalTropes,
+  genrePercents = {},
+  subgenrePercents = {},
+) {
   const chosen = [];
   const used = new Set();
   const leftoverPool = [];
 
   for (const genre of genres) {
-    const allocation = perGenreBase + (remainder > 0 ? 1 : 0);
-    if (remainder > 0) remainder--;
-
-    const pct = generalPercents[genre] ?? DEFAULT_GENERAL_PERCENT;
+    const allocation = Math.round((totalTropes * (genrePercents[genre] ?? 100 / genres.length)) / 100);
     const generalPool = shuffle(TROPES.filter((tr) => tropeHasSubgenre(tr, genre, 'general')).map((tr) => tr.text));
-    const specificPool = shuffle(
-      TROPES.filter((tr) =>
-        subgenreSelections.some((s) => s.genre === genre && tropeHasSubgenre(tr, genre, s.subgenre)),
-      ).map((tr) => tr.text),
-    );
-
-    const desiredGeneral = Math.round((allocation * pct) / 100);
-    const generalCount = Math.min(desiredGeneral, generalPool.length, allocation);
-    const specificCount = Math.min(allocation - generalCount, specificPool.length);
-
-    const genreChosen = [...generalPool.slice(0, generalCount), ...specificPool.slice(0, specificCount)];
+    const selectedSubgenres = subgenreSelections.filter((s) => s.genre === genre).map((s) => s.subgenre);
+    const legacyGeneralPercent = generalPercents[genre] ?? DEFAULT_GENERAL_PERCENT;
+    const ratios =
+      subgenrePercents[genre] ||
+      (selectedSubgenres.length === 0
+        ? { general: 100 }
+        : {
+            general: legacyGeneralPercent,
+            ...Object.fromEntries(
+              selectedSubgenres.map((subgenre) => [subgenre, (100 - legacyGeneralPercent) / selectedSubgenres.length]),
+            ),
+          });
+    const pools = [{ key: 'general', texts: generalPool }];
+    for (const subgenre of selectedSubgenres) {
+      pools.push({
+        key: subgenre,
+        texts: shuffle(TROPES.filter((tr) => tropeHasSubgenre(tr, genre, subgenre)).map((tr) => tr.text)),
+      });
+    }
+    const totalRatio = Object.values(ratios).reduce((sum, value) => sum + value, 0) || 100;
+    const genreChosen = [];
+    for (const pool of pools) {
+      const count = Math.round((allocation * (ratios[pool.key] ?? 0)) / totalRatio);
+      genreChosen.push(...pool.texts.slice(0, count));
+    }
+    const specificPool = pools.slice(1).flatMap((pool) => pool.texts);
     if (genreChosen.length < allocation) {
       const usedLocal = new Set(genreChosen);
       for (const text of [...generalPool, ...specificPool]) {

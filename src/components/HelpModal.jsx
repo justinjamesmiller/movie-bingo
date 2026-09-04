@@ -152,6 +152,10 @@ export default function HelpModal({ onClose }) {
             Hosts have the same controls, can add more hosts, and can resign as host once another host remains.
           </li>
           <li>
+            <strong>Manage a player</strong> — click another player&apos;s name or avatar to add them as a host or
+            propose a new name and avatar. They must accept a profile proposal before it takes effect.
+          </li>
+          <li>
             <strong>Remove</strong> (in the Players list) — kicks a player and rotates the game code for security.
             Connected players stay connected automatically.
           </li>

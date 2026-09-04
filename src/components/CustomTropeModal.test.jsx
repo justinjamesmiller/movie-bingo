@@ -23,4 +23,11 @@ describe('CustomTropeModal', () => {
     fireEvent.mouseDown(document.querySelector('.modal'));
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
+
+  it('uses direct submission wording in a solo game', () => {
+    render(<CustomTropeModal playerCount={1} onSubmit={vi.fn()} onCancel={vi.fn()} />);
+
+    expect(screen.getByText(/added to the trope pool right away/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Submit' })).toBeDisabled();
+  });
 });

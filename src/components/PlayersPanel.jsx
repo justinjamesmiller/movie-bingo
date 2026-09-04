@@ -9,6 +9,7 @@ export default function PlayersPanel({
   bingoCounts,
   onKick,
   onEditSelf,
+  onManagePlayer,
   wageringEnabled,
   onOpenWagerIntro,
 }) {
@@ -24,6 +25,12 @@ export default function PlayersPanel({
               <div className="player-row">
                 {p.id === myId ? (
                   <button className="player-profile-button" onClick={onEditSelf} aria-label="Edit name and avatar">
+                    {p.avatar ? `${p.avatar} ` : ''}
+                    {p.name}
+                    {!p.connected ? ' (disconnected)' : ''}
+                  </button>
+                ) : isHost ? (
+                  <button className="player-profile-button" onClick={() => isHost && onManagePlayer(p)}>
                     {p.avatar ? `${p.avatar} ` : ''}
                     {p.name}
                     {!p.connected ? ' (disconnected)' : ''}

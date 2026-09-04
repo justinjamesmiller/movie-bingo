@@ -7,7 +7,16 @@ import CustomTropesEditor from './CustomTropesEditor.jsx';
 import { balancedRatios } from '../utils/ratios.js';
 import ModalShell from './ModalShell.jsx';
 
-export default function Landing({ onHost, onJoin, error, busy, loadingMessage, savedSession, onRejoin }) {
+export default function Landing({
+  onHost,
+  onJoin,
+  error,
+  busy,
+  loadingMessage,
+  onCancelLoading,
+  savedSession,
+  onRejoin,
+}) {
   const [hostName, setHostName] = useState('');
   const [hostGenres, setHostGenres] = useState([GENRES[0].id]);
   const [hostSubgenreSelections, setHostSubgenreSelections] = useState([]);
@@ -67,17 +76,7 @@ export default function Landing({ onHost, onJoin, error, busy, loadingMessage, s
     });
   }
 
-  function handleHostClick() {
-    const name = hostName.trim();
-    if (hostGenres.length === 0) {
-      setHostSetupIssues({ missingName: false, missingGenres: true });
-      return;
-    }
-    if (!name) {
-      setModalHostName(hostName);
-      setHostSetupIssues({ missingName: true, missingGenres: false });
-      return;
-    }
+  function submitHost(name) {
     const resolvedSubgenrePercents = { ...hostSubgenrePercents };
     for (const genre of hostGenres) {
       const keys = ['general', ...hostSubgenreSelections.filter((s) => s.genre === genre).map((s) => s.subgenre)];
@@ -97,15 +96,26 @@ export default function Landing({ onHost, onJoin, error, busy, loadingMessage, s
     );
   }
 
+  function handleHostClick() {
+    const name = hostName.trim();
+    if (hostGenres.length === 0) {
+      setHostSetupIssues({ missingName: false, missingGenres: true });
+      return;
+    }
+    if (!name) {
+      setModalHostName(hostName);
+      setHostSetupIssues({ missingName: true, missingGenres: false });
+      return;
+    }
+    submitHost(name);
+  }
+
   function handleSaveModalName() {
     const name = modalHostName.trim();
     if (!name) return;
     setHostName(name);
-    if (hostSetupIssues.missingGenres) {
-      setHostSetupIssues({ missingName: false, missingGenres: true });
-    } else {
-      setHostSetupIssues(null);
-    }
+    setHostSetupIssues(null);
+    submitHost(name);
   }
 
   function handleJoinClick() {
@@ -139,6 +149,9 @@ export default function Landing({ onHost, onJoin, error, busy, loadingMessage, s
         <div className="landing-loader" role="status" aria-live="polite">
           <span className="loading-spinner" aria-hidden="true" />
           {loadingMessage}
+          <button className="btn" onClick={onCancelLoading}>
+            Cancel
+          </button>
         </div>
       )}
       {savedSession && (
@@ -189,7 +202,9 @@ export default function Landing({ onHost, onJoin, error, busy, loadingMessage, s
           value={hostName}
           onChange={(e) => setHostName(e.target.value)}
         />
-        <MovieLookup onFound={handleMovieFound} />
+        <button className="btn primary" disabled={busy} onClick={handleHostClick}>
+          Host Game
+        </button>
         <GenreSubgenrePicker
           genres={hostGenres}
           subgenreSelections={hostSubgenreSelections}
@@ -246,9 +261,7 @@ export default function Landing({ onHost, onJoin, error, busy, loadingMessage, s
             <CustomTropesEditor customTropes={hostCustomTropes} onChange={setHostCustomTropes} />
           </>
         )}
-        <button className="btn primary" disabled={busy} onClick={handleHostClick}>
-          Host Game
-        </button>
+        <MovieLookup onFound={handleMovieFound} />
       </div>
       {(localError || error) && <p className="error-text">{localError || error}</p>}
       {hostSetupIssues && (
@@ -257,7 +270,7 @@ export default function Landing({ onHost, onJoin, error, busy, loadingMessage, s
             <h3>Before You Host</h3>
             {hostSetupIssues.missingName && (
               <>
-                <label htmlFor="modal-host-name">Host name</label>
+                <label htmlFor="modal-host-name">Your name</label>
                 <input
                   id="modal-host-name"
                   type="text"

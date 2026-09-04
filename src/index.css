@@ -110,6 +110,7 @@ body {
   align-items: center;
   justify-content: center;
   gap: 0.75rem;
+  flex-wrap: wrap;
   background: color-mix(in srgb, var(--bg) 78%, transparent);
   color: var(--text);
   font-weight: 600;
@@ -798,6 +799,31 @@ select {
   overflow-y: auto;
   box-shadow: var(--shadow);
   text-align: left;
+}
+
+.modal-content.list-modal {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.modal-scroll-area {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.list-modal .challenge-list,
+.list-modal .wager-list,
+.list-modal .activity-list {
+  max-height: none;
+  overflow: visible;
+}
+
+.modal-footer {
+  flex: 0 0 auto;
+  margin: 0.75rem 0 0;
 }
 
 .help-modal-content {

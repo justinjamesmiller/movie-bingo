@@ -10,6 +10,7 @@ function renderLanding(overrides = {}) {
       error=""
       busy={false}
       loadingMessage=""
+      onCancelLoading={vi.fn()}
       savedSession={null}
       onRejoin={vi.fn()}
       {...overrides}
@@ -45,11 +46,22 @@ describe('Landing', () => {
     expect(screen.queryByLabelText('Total unique tropes in play')).toBeNull();
   });
 
-  it('shows an accessible loader for a pending landing operation', () => {
+  it('places Host Game immediately after the host name field', () => {
     vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
-    renderLanding({ busy: true, loadingMessage: 'Joining game...' });
+    renderLanding();
+
+    const hostName = screen.getByPlaceholderText('e.g. Ashley');
+    expect(hostName.nextElementSibling).toHaveTextContent('Host Game');
+  });
+
+  it('shows an accessible loader for a pending landing operation', () => {
+    const onCancelLoading = vi.fn();
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    renderLanding({ busy: true, loadingMessage: 'Joining game...', onCancelLoading });
 
     expect(screen.getByRole('status')).toHaveTextContent('Joining game...');
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(onCancelLoading).toHaveBeenCalledTimes(1);
   });
 
   it('allows the host to clear all genres but blocks hosting until one is selected', () => {
@@ -63,20 +75,31 @@ describe('Landing', () => {
 
     expect(screen.getByRole('heading', { name: 'Before You Host' })).toBeInTheDocument();
     expect(screen.getByText('Choose at least one genre before hosting a game.')).toBeInTheDocument();
-    expect(screen.queryByLabelText('Host name')).toBeNull();
+    expect(document.querySelector('#modal-host-name')).toBeNull();
     expect(onHost).not.toHaveBeenCalled();
   });
 
   it('lets a host supply their missing name in the setup modal', () => {
+    const onHost = vi.fn();
     vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
-    renderLanding();
+    renderLanding({ onHost });
 
     fireEvent.click(screen.getByRole('button', { name: 'Host Game' }));
-    fireEvent.change(screen.getByLabelText('Host name'), { target: { value: 'Ashley' } });
+    fireEvent.change(document.querySelector('#modal-host-name'), { target: { value: 'Ashley' } });
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
 
     expect(screen.queryByRole('heading', { name: 'Before You Host' })).toBeNull();
-    expect(screen.getByPlaceholderText('e.g. Ashley')).toHaveValue('Ashley');
+    expect(onHost).toHaveBeenCalledWith(
+      'Ashley',
+      ['horror'],
+      [],
+      false,
+      { horror: 50 },
+      40,
+      [],
+      { horror: 100 },
+      { horror: { general: 100 } },
+    );
   });
 
   it('asks for only the missing join fields and submits them', () => {

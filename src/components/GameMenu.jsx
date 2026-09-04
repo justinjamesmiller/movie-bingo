@@ -21,7 +21,6 @@ export default function GameMenu({
   onShowActivityFeed,
   onBoardFocus,
   onChangeName,
-  onAssignHost,
   onResignHost,
   hostCount,
   onResetGame,
@@ -122,11 +121,6 @@ export default function GameMenu({
               {advancedGameplay && (
                 <button className="btn" onClick={() => pick(onChangeName)}>
                   ✏️ Change Name and Avatar
-                </button>
-              )}
-              {advancedGameplay && isHost && (
-                <button className="btn" onClick={() => pick(onAssignHost)}>
-                  👑 Add Host
                 </button>
               )}
               {advancedGameplay && isHost && hostCount > 1 && (

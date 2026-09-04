@@ -37,4 +37,20 @@ describe('ProposeReplaceModal', () => {
     fireEvent.mouseDown(document.querySelector('.modal'));
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
+
+  it('uses direct wording for a solo game', () => {
+    render(
+      <ProposeReplaceModal
+        text="Jump Scare"
+        defaultGenre="horror"
+        defaultSubgenre="general"
+        playerCount={1}
+        onConfirm={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(/immediately swaps it out/i)).toBeInTheDocument();
+    expect(screen.queryByText(/asks the group/i)).toBeNull();
+  });
 });

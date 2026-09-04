@@ -674,6 +674,36 @@ describe('GameClient connection stability', () => {
     expect(secondGuest.client.isHost()).toBe(true);
   });
 
+  it('applies a host-proposed profile change only when the target accepts it', async () => {
+    const { host, guest } = await twoPlayerGame();
+
+    host.client.proposeProfileChange(guest.myId, 'Robert', '🎬');
+    await flush();
+    expect(guest.state.pendingProfileChanges[guest.myId]).toEqual({ name: 'Robert', avatar: '🎬' });
+    expect(guest.state.players[guest.myId].name).toBe('Bob');
+
+    guest.client.respondToProfileChange(true);
+    await flush();
+    expect(host.state.players[guest.myId]).toMatchObject({ name: 'Robert', avatar: '🎬' });
+    expect(host.state.pendingProfileChanges[guest.myId]).toBeUndefined();
+  });
+
+  it('leaves a player profile unchanged when they decline a host proposal', async () => {
+    const { host, guest } = await twoPlayerGame();
+    const originalProfile = {
+      name: host.state.players[guest.myId].name,
+      avatar: host.state.players[guest.myId].avatar,
+    };
+
+    host.client.proposeProfileChange(guest.myId, 'Robert', '🎬');
+    await flush();
+    guest.client.respondToProfileChange(false);
+    await flush();
+
+    expect(host.state.players[guest.myId]).toMatchObject(originalProfile);
+    expect(host.state.pendingProfileChanges[guest.myId]).toBeUndefined();
+  });
+
   it('allows a non-coordinator host to perform host-only actions', async () => {
     const { host, guest } = await twoPlayerGame();
     host.client.addHost(guest.myId);

@@ -8,23 +8,25 @@ export default function ActivityFeedModal({ activityLog, onClose }) {
 
   return (
     <ModalShell onClose={onClose}>
-      <div className="modal-content">
+      <div className="modal-content list-modal">
         <h3>📜 Activity Feed</h3>
-        {items.length === 0 ? (
-          <p className="hint">Nothing has happened yet.</p>
-        ) : (
-          <ul className="activity-list">
-            {items.map((item) => (
-              <li key={item.id}>
-                <span className="activity-time">
-                  {new Date(item.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </span>
-                <span className="activity-text">{item.text}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-        <button className="btn cancel-claim-btn" onClick={onClose}>
+        <div className="modal-scroll-area">
+          {items.length === 0 ? (
+            <p className="hint">Nothing has happened yet.</p>
+          ) : (
+            <ul className="activity-list">
+              {items.map((item) => (
+                <li key={item.id}>
+                  <span className="activity-time">
+                    {new Date(item.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                  <span className="activity-text">{item.text}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <button className="btn modal-footer" onClick={onClose}>
           Close
         </button>
       </div>

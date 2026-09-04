@@ -600,6 +600,14 @@ export class GameClient {
     return this._dispatch({ t: 'resignHost' });
   }
 
+  proposeProfileChange(targetId, name, avatar) {
+    return this._dispatch({ t: 'proposeProfileChange', targetId, name, avatar });
+  }
+
+  respondToProfileChange(accept) {
+    return this._dispatch({ t: 'respondToProfileChange', accept: !!accept });
+  }
+
   leaveGame() {
     GameClient.clearSavedSession();
     this.destroy();
@@ -1042,6 +1050,7 @@ export class GameClient {
       gameOver: false,
       pendingClaim: null,
       pendingJoinRequest: null,
+      pendingProfileChanges: {},
       acceptedTropes: [],
       activityLog: [],
     };
@@ -1262,6 +1271,7 @@ export class GameClient {
       state.gameOver = false;
       state.pendingClaim = null;
       state.pendingJoinRequest = null;
+      state.pendingProfileChanges = {};
       state.acceptedTropes = [];
       state.activityLog = [];
       this._logActivity('🔄 The host reset the game.');
@@ -1284,6 +1294,31 @@ export class GameClient {
     if (action.t === 'changeAvatar') {
       if (typeof action.avatar !== 'string' || !AVATAR_OPTIONS.includes(action.avatar)) return;
       player.avatar = action.avatar;
+      this._emitState();
+      this._send({ t: 'state', state: this.state });
+      return;
+    }
+
+    if (action.t === 'proposeProfileChange') {
+      if (!this._isActiveHostId(fromId)) return;
+      const target = state.players[action.targetId];
+      const name = typeof action.name === 'string' ? action.name.trim().slice(0, 20) : '';
+      if (!target || !target.connected || !name || !AVATAR_OPTIONS.includes(action.avatar)) return;
+      state.pendingProfileChanges ||= {};
+      state.pendingProfileChanges[target.id] = { name, avatar: action.avatar };
+      this._emitState();
+      this._send({ t: 'state', state: this.state });
+      return;
+    }
+
+    if (action.t === 'respondToProfileChange') {
+      const proposal = state.pendingProfileChanges?.[fromId];
+      if (!proposal || !player) return;
+      if (action.accept) {
+        player.name = proposal.name;
+        player.avatar = proposal.avatar;
+      }
+      delete state.pendingProfileChanges[fromId];
       this._emitState();
       this._send({ t: 'state', state: this.state });
       return;
@@ -1355,6 +1390,7 @@ export class GameClient {
       delete state.players[targetId];
       state.seatOrder = state.seatOrder.filter((id) => id !== targetId);
       state.hostIds = this._hostIds().filter((id) => id !== targetId);
+      delete state.pendingProfileChanges?.[targetId];
       if (state.pendingClaim && state.pendingClaim.byId === targetId) {
         clearTimeout(this.claimTimeout);
         state.pendingClaim = null;

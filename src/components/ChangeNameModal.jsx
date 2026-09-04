@@ -2,7 +2,14 @@ import { useState } from 'react';
 import { AVATAR_OPTIONS } from '../data/avatars.js';
 import ModalShell from './ModalShell.jsx';
 
-export default function ChangeNameModal({ currentName, currentAvatar, onConfirm, onCancel }) {
+export default function ChangeNameModal({
+  currentName,
+  currentAvatar,
+  onConfirm,
+  onCancel,
+  title = 'Change your name & avatar',
+  confirmLabel = 'Save',
+}) {
   const [name, setName] = useState(currentName || '');
   const [avatar, setAvatar] = useState(currentAvatar || AVATAR_OPTIONS[0]);
   const trimmed = name.trim();
@@ -10,7 +17,7 @@ export default function ChangeNameModal({ currentName, currentAvatar, onConfirm,
   return (
     <ModalShell onClose={onCancel}>
       <div className="modal-content">
-        <h3>Change your name &amp; avatar</h3>
+        <h3>{title}</h3>
         <label htmlFor="change-name-input">New name</label>
         <input
           id="change-name-input"
@@ -35,7 +42,7 @@ export default function ChangeNameModal({ currentName, currentAvatar, onConfirm,
         </div>
         <div className="claim-vote-buttons cancel-claim-btn">
           <button className="btn agree" disabled={!trimmed} onClick={() => onConfirm(trimmed, avatar)}>
-            Save
+            {confirmLabel}
           </button>
           <button className="btn" onClick={onCancel}>
             Cancel

@@ -48,4 +48,11 @@ describe('ManageWagersModal', () => {
       confirmLabel: '☑ Add wager',
     });
   });
+
+  it('uses direct submission wording in a solo game', () => {
+    renderModal({ playerCount: 1 });
+
+    expect(screen.queryByText(/group to approve/i)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Submit changes' })).toBeDisabled();
+  });
 });

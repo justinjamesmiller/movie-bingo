@@ -21,27 +21,29 @@ export default function GameOverModal({ players, bingoCounts = {}, onClose }) {
 
   return (
     <ModalShell onClose={onClose}>
-      <div className="modal-content">
+      <div className="modal-content list-modal">
         <h3>🏁 Game Over — Recap</h3>
-        <ul className="recap-list">
-          {withStats.map((p) => (
-            <li key={p.id} className="recap-player">
-              <div className="recap-player-name">
-                {p.avatar ? `${p.avatar} ` : ''}
-                {p.name}
-                {topMarked > 0 && p.markedCount === topMarked && ' 🏆'}
-                {topBingos > 0 && p.bingoCount === topBingos && ' 🎉'}
-                {topWagered > 0 && p.wageredHit === topWagered && ' 🎯'}
-              </div>
-              <div className="hint">
-                {p.markedCount} tropes marked · {p.bingoCount} bingo{p.bingoCount === 1 ? '' : 's'} · {p.wageredHit}/
-                {p.wageredTotal} wagers hit
-              </div>
-            </li>
-          ))}
-        </ul>
+        <div className="modal-scroll-area">
+          <ul className="recap-list">
+            {withStats.map((p) => (
+              <li key={p.id} className="recap-player">
+                <div className="recap-player-name">
+                  {p.avatar ? `${p.avatar} ` : ''}
+                  {p.name}
+                  {topMarked > 0 && p.markedCount === topMarked && ' 🏆'}
+                  {topBingos > 0 && p.bingoCount === topBingos && ' 🎉'}
+                  {topWagered > 0 && p.wageredHit === topWagered && ' 🎯'}
+                </div>
+                <div className="hint">
+                  {p.markedCount} tropes marked · {p.bingoCount} bingo{p.bingoCount === 1 ? '' : 's'} · {p.wageredHit}/
+                  {p.wageredTotal} wagers hit
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
         <p className="hint">🏆 most tropes marked · 🎉 most bingos · 🎯 most wagers hit</p>
-        <button className="btn cancel-claim-btn" onClick={onClose}>
+        <button className="btn modal-footer" onClick={onClose}>
           Close
         </button>
       </div>

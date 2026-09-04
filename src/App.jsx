@@ -44,6 +44,8 @@ import GameMenu from './components/GameMenu.jsx';
 import InviteQrModal from './components/InviteQrModal.jsx';
 import WagerIntroModal from './components/WagerIntroModal.jsx';
 import HostTransferModal from './components/HostTransferModal.jsx';
+import PlayerManagementModal from './components/PlayerManagementModal.jsx';
+import ProfileChangeProposalModal from './components/ProfileChangeProposalModal.jsx';
 
 const MAX_WAGERS = 5;
 
@@ -71,6 +73,8 @@ function App() {
   const [joinApprovalPending, setJoinApprovalPending] = useState(false);
   const [kickTarget, setKickTarget] = useState(null);
   const [changeNameModalOpen, setChangeNameModalOpen] = useState(false);
+  const [managedPlayer, setManagedPlayer] = useState(null);
+  const [profileProposalTarget, setProfileProposalTarget] = useState(null);
   const [helpModalOpen, setHelpModalOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [activityFeedOpen, setActivityFeedOpen] = useState(false);
@@ -89,6 +93,7 @@ function App() {
   const [browserOffline, setBrowserOffline] = useState(() => !navigator.onLine);
   const [bingoBanner, setBingoBanner] = useState(null);
   const [highlightedCells, setHighlightedCells] = useState(new Set());
+  const loadingRequestRef = useRef(0);
   const prevClaimIdRef = useRef(null);
   const prevJoinRequestIdRef = useRef(null);
   const gameStateRef = useRef(null);
@@ -415,6 +420,7 @@ function App() {
     genrePercents,
     subgenrePercents,
   ) {
+    const requestId = ++loadingRequestRef.current;
     setError('');
     setWageringEnabled(false);
     setAdvancedGameplay(false);
@@ -433,13 +439,17 @@ function App() {
         genrePercents,
         subgenrePercents,
       );
+      if (loadingRequestRef.current !== requestId) return;
       setScreen('game');
     } catch (err) {
+      if (loadingRequestRef.current !== requestId) return;
       discardClient();
       setError(err.message || 'Could not host a game.');
     } finally {
-      setBusy(false);
-      setLoadingMessage('');
+      if (loadingRequestRef.current === requestId) {
+        setBusy(false);
+        setLoadingMessage('');
+      }
     }
   }
 
@@ -451,11 +461,13 @@ function App() {
       setError('Enter the 4-character game code.');
       return;
     }
+    const requestId = ++loadingRequestRef.current;
     setLoadingMessage('Joining game...');
     setBusy(true);
     try {
       const client = makeClient();
       const result = await client.joinGame(code, name);
+      if (loadingRequestRef.current !== requestId) return;
       if (result.needsChoice) {
         setJoinChoice({ name: result.name, options: result.options, allowNew: result.allowNew });
       } else if (result.needsApproval) {
@@ -464,11 +476,14 @@ function App() {
         setScreen('game');
       }
     } catch (err) {
+      if (loadingRequestRef.current !== requestId) return;
       discardClient();
       setError(err.message || 'Could not join that game.');
     } finally {
-      setBusy(false);
-      setLoadingMessage('');
+      if (loadingRequestRef.current === requestId) {
+        setBusy(false);
+        setLoadingMessage('');
+      }
     }
   }
 
@@ -523,21 +538,33 @@ function App() {
   }
 
   async function handleRejoin() {
+    const requestId = ++loadingRequestRef.current;
     setError('');
     setLoadingMessage('Reconnecting to game...');
     setBusy(true);
     try {
       const client = makeClient();
       await client.rejoinGame();
+      if (loadingRequestRef.current !== requestId) return;
       setScreen('game');
     } catch (err) {
+      if (loadingRequestRef.current !== requestId) return;
       discardClient();
       setError(err.message || 'Could not reconnect to that game.');
       setSavedSession(GameClient.getSavedSession());
     } finally {
-      setBusy(false);
-      setLoadingMessage('');
+      if (loadingRequestRef.current === requestId) {
+        setBusy(false);
+        setLoadingMessage('');
+      }
     }
+  }
+
+  function handleCancelLoading() {
+    loadingRequestRef.current++;
+    discardClient();
+    setBusy(false);
+    setLoadingMessage('');
   }
 
   function handleCellClick(index) {
@@ -679,8 +706,6 @@ function App() {
   function handleChallenge(text) {
     clientRef.current.challengeTrope(text);
     setTropeInfo(null);
-    setTropesModalOpen(false);
-    setAllTropesModalOpen(false);
   }
 
   function handleRequestReplace(text) {
@@ -696,8 +721,6 @@ function App() {
     clientRef.current.proposeReplace(replaceProposal.text, genre, subgenre);
     setReplaceProposal(null);
     setTropeInfo(null);
-    setTropesModalOpen(false);
-    setAllTropesModalOpen(false);
   }
 
   function handleCancelReplace() {
@@ -712,7 +735,6 @@ function App() {
     }
     clientRef.current.proposeAccept(text);
     setTropeInfo(null);
-    setAllTropesModalOpen(false);
   }
 
   function handleProposeSwapFromInfo(text) {
@@ -770,6 +792,25 @@ function App() {
     setChangeNameModalOpen(false);
   }
 
+  function handleManagePlayer(player) {
+    if (isHost && player.id !== myId) setManagedPlayer(player);
+  }
+
+  function handleAddManagedHost() {
+    clientRef.current?.addHost(managedPlayer.id);
+    setManagedPlayer(null);
+  }
+
+  function handleOpenProfileProposal() {
+    setProfileProposalTarget(managedPlayer);
+    setManagedPlayer(null);
+  }
+
+  function handleProposeProfileChange(name, avatar) {
+    clientRef.current?.proposeProfileChange(profileProposalTarget.id, name, avatar);
+    setProfileProposalTarget(null);
+  }
+
   function handleLeaveGame() {
     clientRef.current?.leaveGame();
     clientRef.current = null;
@@ -805,6 +846,7 @@ function App() {
             error={error}
             busy={busy}
             loadingMessage={loadingMessage}
+            onCancelLoading={handleCancelLoading}
             savedSession={savedSession}
             onRejoin={handleRejoin}
           />
@@ -829,6 +871,7 @@ function App() {
   const me = gameState.players[myId];
   if (!me) return null;
   const players = Object.values(gameState.players).sort((a, b) => a.seat - b.seat);
+  const activePlayerCount = players.filter((player) => player.connected).length;
   const bingoCounts = Object.fromEntries(players.map((p) => [p.id, getCompletedLines(p.marked).length]));
   const hostIds = gameState.hostIds?.length ? gameState.hostIds : [gameState.seatOrder[0]];
   const isHost = hostIds.includes(myId);
@@ -903,10 +946,6 @@ function App() {
                 onShowActivityFeed={() => setActivityFeedOpen(true)}
                 onBoardFocus={() => setFocusMode(true)}
                 onChangeName={() => setChangeNameModalOpen(true)}
-                onAssignHost={() => {
-                  setHostTransferLeaves(false);
-                  setHostTransferOpen(true);
-                }}
                 onResignHost={handleResignHost}
                 hostCount={hostIds.length}
                 onResetGame={handleResetGame}
@@ -938,6 +977,7 @@ function App() {
                 bingoCounts={bingoCounts}
                 onKick={handleKickPlayer}
                 onEditSelf={() => setChangeNameModalOpen(true)}
+                onManagePlayer={handleManagePlayer}
                 wageringEnabled={wageringEnabled}
                 onOpenWagerIntro={() => setWagerIntroOpen(true)}
               />
@@ -1013,6 +1053,7 @@ function App() {
           text={replaceProposal.text}
           defaultGenre={gameState.genres[0]}
           defaultSubgenre="general"
+          playerCount={activePlayerCount}
           onConfirm={handleConfirmReplace}
           onCancel={handleCancelReplace}
         />
@@ -1024,6 +1065,7 @@ function App() {
           wagered={me.wagered}
           marked={me.marked}
           freeSpaceIndex={gameState.freeSpace ? CENTER_INDEX : -1}
+          playerCount={activePlayerCount}
           onSubmit={handleSubmitWagerChange}
           onTropeClick={handleManagedWagerInfo}
           onCancel={() => setManageWagersOpen(false)}
@@ -1053,6 +1095,35 @@ function App() {
           currentAvatar={me.avatar}
           onConfirm={handleConfirmChangeName}
           onCancel={() => setChangeNameModalOpen(false)}
+        />
+      )}
+
+      {managedPlayer && (
+        <PlayerManagementModal
+          player={managedPlayer}
+          isHost={hostIds.includes(managedPlayer.id)}
+          onAddHost={handleAddManagedHost}
+          onProposeProfile={handleOpenProfileProposal}
+          onCancel={() => setManagedPlayer(null)}
+        />
+      )}
+
+      {profileProposalTarget && (
+        <ChangeNameModal
+          currentName={profileProposalTarget.name}
+          currentAvatar={profileProposalTarget.avatar}
+          title={`Propose a name & avatar for ${profileProposalTarget.name}`}
+          confirmLabel="Send Proposal"
+          onConfirm={handleProposeProfileChange}
+          onCancel={() => setProfileProposalTarget(null)}
+        />
+      )}
+
+      {gameState.pendingProfileChanges?.[myId] && (
+        <ProfileChangeProposalModal
+          proposal={gameState.pendingProfileChanges[myId]}
+          onAccept={() => clientRef.current?.respondToProfileChange(true)}
+          onDecline={() => clientRef.current?.respondToProfileChange(false)}
         />
       )}
 
@@ -1094,7 +1165,11 @@ function App() {
       )}
 
       {customTropeModalOpen && (
-        <CustomTropeModal onSubmit={handleSubmitCustomTrope} onCancel={() => setCustomTropeModalOpen(false)} />
+        <CustomTropeModal
+          playerCount={activePlayerCount}
+          onSubmit={handleSubmitCustomTrope}
+          onCancel={() => setCustomTropeModalOpen(false)}
+        />
       )}
 
       {tropeInfo && (
@@ -1104,6 +1179,7 @@ function App() {
           title={tropeInfo.title}
           actionHint={tropeInfo.actionHint}
           confirmLabel={tropeInfo.confirmLabel}
+          playerCount={activePlayerCount}
           onConfirm={tropeInfo.onConfirm}
           onCancel={handleCloseTropeInfo}
           onProposeSwap={tropeInfo.onProposeSwap}
@@ -1112,9 +1188,13 @@ function App() {
 
       {boardSwapConfirmOpen && (
         <ConfirmModal
-          title="Ask for a fresh board?"
-          message="The other players vote on this. If they agree, your 25 spaces are re-dealt from the same trope pool — tropes the group already accepted stay marked, and your current wagers are cleared so you can re-place them."
-          confirmLabel="🔀 Ask the group"
+          title={activePlayerCount === 1 ? 'Swap for a fresh board?' : 'Ask for a fresh board?'}
+          message={
+            activePlayerCount === 1
+              ? 'This re-deals your 25 spaces from the same trope pool. Tropes already accepted stay marked, and your current wagers are cleared so you can re-place them.'
+              : 'The other players vote on this. If they agree, your 25 spaces are re-dealt from the same trope pool — tropes the group already accepted stay marked, and your current wagers are cleared so you can re-place them.'
+          }
+          confirmLabel={activePlayerCount === 1 ? '🔀 Confirm' : '🔀 Ask the group'}
           onConfirm={handleConfirmBoardSwap}
           onCancel={() => setBoardSwapConfirmOpen(false)}
         />

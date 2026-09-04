@@ -12,7 +12,9 @@ export default function ManageWagersModal({
   onSubmit,
   onTropeClick,
   onCancel,
+  playerCount = 2,
 }) {
+  const isSolo = playerCount === 1;
   const [toRemove, setToRemove] = useState([]);
   const [toAdd, setToAdd] = useState([]);
 
@@ -48,7 +50,9 @@ export default function ManageWagersModal({
       title: removing ? 'Keep this wager?' : 'Remove this wager?',
       actionHint: removing
         ? 'This keeps the space in your wager picks for now.'
-        : 'This marks the wager for removal. The group approves all staged wager changes together.',
+        : isSolo
+          ? 'This marks the wager for removal.'
+          : 'This marks the wager for removal. The group approves all staged wager changes together.',
       confirmLabel: removing ? '🎯 Keep wager' : '🗑️ Remove wager',
       onConfirm: () => toggleRemove(index),
     });
@@ -62,7 +66,9 @@ export default function ManageWagersModal({
       title: adding ? 'Drop this new wager?' : 'Add this wager?',
       actionHint: adding
         ? 'This removes the space from your staged wager additions.'
-        : 'This stages the space as a new wager. The group approves all staged wager changes together.',
+        : isSolo
+          ? 'This stages the space as a new wager.'
+          : 'This stages the space as a new wager. The group approves all staged wager changes together.',
       confirmLabel: adding ? '☐ Drop staged wager' : '☑ Add wager',
       onConfirm: () => toggleAdd(index),
     });
@@ -72,56 +78,58 @@ export default function ManageWagersModal({
 
   return (
     <ModalShell onClose={onCancel}>
-      <div className="modal-content">
+      <div className="modal-content list-modal">
         <h3>Manage Your Wagers</h3>
         <p className="hint">
           Remove and/or add wagered spaces below, then submit — all your changes go out together as a single proposal
-          for the group to approve.
+          {isSolo ? '.' : ' for the group to approve.'}
         </p>
-        <h4>Your current wagers</h4>
-        {currentWagers.length === 0 ? (
-          <p className="hint">You have no wagers yet.</p>
-        ) : (
-          <ul className="challenge-list">
-            {currentWagers.map(({ text, index }) => (
-              <li key={index}>
-                <button
-                  className={`btn challenge-item${marked.includes(index) ? ' accepted' : ''}${
-                    toRemove.includes(index) ? ' selected' : ''
-                  }`}
-                  onClick={() => previewRemoval(text, index)}
-                >
-                  {toRemove.includes(index) ? '🗑️ ' : ''}
-                  {text}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        <h4>
-          Add new wager(s) ({openSlots} open slot{openSlots === 1 ? '' : 's'})
-        </h4>
-        {eligibleToAdd.length === 0 ? (
-          <p className="hint">No open spaces left to wager on.</p>
-        ) : (
-          <ul className="challenge-list">
-            {eligibleToAdd.map(({ text, index }) => (
-              <li key={index}>
-                <button
-                  className={`btn challenge-item${toAdd.includes(index) ? ' selected' : ''}`}
-                  disabled={!toAdd.includes(index) && toAdd.length >= openSlots}
-                  onClick={() => previewAddition(text, index)}
-                >
-                  {toAdd.includes(index) ? '☑ ' : '☐ '}
-                  {text}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        <div className="claim-vote-buttons cancel-claim-btn">
+        <div className="modal-scroll-area">
+          <h4>Your current wagers</h4>
+          {currentWagers.length === 0 ? (
+            <p className="hint">You have no wagers yet.</p>
+          ) : (
+            <ul className="challenge-list">
+              {currentWagers.map(({ text, index }) => (
+                <li key={index}>
+                  <button
+                    className={`btn challenge-item${marked.includes(index) ? ' accepted' : ''}${
+                      toRemove.includes(index) ? ' selected' : ''
+                    }`}
+                    onClick={() => previewRemoval(text, index)}
+                  >
+                    {toRemove.includes(index) ? '🗑️ ' : ''}
+                    {text}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <h4>
+            Add new wager(s) ({openSlots} open slot{openSlots === 1 ? '' : 's'})
+          </h4>
+          {eligibleToAdd.length === 0 ? (
+            <p className="hint">No open spaces left to wager on.</p>
+          ) : (
+            <ul className="challenge-list">
+              {eligibleToAdd.map(({ text, index }) => (
+                <li key={index}>
+                  <button
+                    className={`btn challenge-item${toAdd.includes(index) ? ' selected' : ''}`}
+                    disabled={!toAdd.includes(index) && toAdd.length >= openSlots}
+                    onClick={() => previewAddition(text, index)}
+                  >
+                    {toAdd.includes(index) ? '☑ ' : '☐ '}
+                    {text}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <div className="claim-vote-buttons modal-footer">
           <button className="btn agree" disabled={!hasChanges} onClick={() => onSubmit(toAdd, toRemove)}>
-            Submit for approval
+            {isSolo ? 'Submit changes' : 'Submit for approval'}
           </button>
           <button className="btn" onClick={onCancel}>
             Not now

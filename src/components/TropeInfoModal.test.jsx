@@ -27,6 +27,13 @@ describe('TropeInfoModal', () => {
     expect(screen.getByRole('button', { name: /Submit to the group/i })).toBeInTheDocument();
   });
 
+  it('uses direct submit wording for a solo game', () => {
+    render(<TropeInfoModal text="Jump Scare" marked={false} playerCount={1} onConfirm={vi.fn()} onCancel={vi.fn()} />);
+
+    expect(screen.getByRole('button', { name: '✅ Submit' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Submit to the group/i })).toBeNull();
+  });
+
   it('switches to undo wording for a space that is already marked', () => {
     render(<TropeInfoModal text="Jump Scare" marked onConfirm={vi.fn()} onCancel={vi.fn()} />);
     expect(screen.getByRole('heading', { name: /Undo this space/i })).toBeInTheDocument();

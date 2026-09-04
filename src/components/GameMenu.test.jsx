@@ -50,7 +50,6 @@ describe('GameMenu', () => {
     expect(screen.queryByText('Sub-genres: Slasher')).toBeNull();
     expect(screen.getByRole('button', { name: 'Accepted Tropes (2)' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '🎯 Manage Wagers' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '👑 Add Host' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Resign as Host' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '🏁 End Game' })).toBeInTheDocument();
   });
@@ -106,6 +105,5 @@ describe('GameMenu', () => {
     expect(screen.getByRole('button', { name: 'Advanced Gameplay' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'All Tropes (40)' })).toBeNull();
     expect(screen.queryByRole('button', { name: '🎯 Manage Wagers' })).toBeNull();
-    expect(screen.queryByRole('button', { name: '👑 Add Host' })).toBeNull();
   });
 });

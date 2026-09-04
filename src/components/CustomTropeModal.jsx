@@ -5,7 +5,8 @@ const MAX_LENGTH = 60;
 
 // Lets a player submit a brand-new free-text trope mid-game for majority
 // approval -- reuses the same claim/vote pipeline as regular claims.
-export default function CustomTropeModal({ onSubmit, onCancel }) {
+export default function CustomTropeModal({ onSubmit, onCancel, playerCount = 2 }) {
+  const isSolo = playerCount === 1;
   const [text, setText] = useState('');
   const trimmed = text.trim();
 
@@ -14,8 +15,10 @@ export default function CustomTropeModal({ onSubmit, onCancel }) {
       <div className="modal-content">
         <h3>📝 Submit a Custom Trope</h3>
         <p className="hint">
-          Not covered by the board? Type it in — the group votes on approving it just like any other claim, and it's
-          added to the trope pool if approved.
+          Not covered by the board? Type it in —{' '}
+          {isSolo
+            ? "it's added to the trope pool right away."
+            : "the group votes on approving it just like any other claim, and it's added to the trope pool if approved."}
         </p>
         <label htmlFor="custom-trope-input">Trope description</label>
         <input
@@ -32,7 +35,7 @@ export default function CustomTropeModal({ onSubmit, onCancel }) {
         </p>
         <div className="claim-vote-buttons cancel-claim-btn">
           <button className="btn agree" disabled={!trimmed} onClick={() => onSubmit(trimmed)}>
-            Submit for approval
+            {isSolo ? 'Submit' : 'Submit for approval'}
           </button>
           <button className="btn" onClick={onCancel}>
             Cancel

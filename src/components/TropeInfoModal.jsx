@@ -12,15 +12,23 @@ export default function TropeInfoModal({
   onConfirm,
   onCancel,
   onProposeSwap,
+  playerCount = 2,
 }) {
+  const isSolo = playerCount === 1;
   const { description, ready } = useTropeDescription(text);
   const heading = title || (marked ? 'Undo this space?' : 'Claim this trope?');
   const hint =
     actionHint ||
     (marked
-      ? 'The group votes on whether to undo this. A majority has to agree.'
-      : 'The group votes on whether this really happened. A majority has to agree.');
-  const primaryLabel = confirmLabel || (marked ? '↩️ Ask to undo it' : '✅ Submit to the group');
+      ? isSolo
+        ? 'This removes the mark from your board.'
+        : 'The group votes on whether to undo this. A majority has to agree.'
+      : isSolo
+        ? 'This marks the trope as happened on your board.'
+        : 'The group votes on whether this really happened. A majority has to agree.');
+  const primaryLabel =
+    confirmLabel ||
+    (marked ? (isSolo ? '↩️ Undo it' : '↩️ Ask to undo it') : isSolo ? '✅ Submit' : '✅ Submit to the group');
 
   return (
     <ModalShell onClose={onCancel}>
@@ -37,7 +45,9 @@ export default function TropeInfoModal({
             </p>
           </>
         ) : (
-          <p className="hint">No explanation written for this one yet — go with the group&apos;s reading of it.</p>
+          <p className="hint">
+            No explanation written for this one yet — go with {isSolo ? 'your' : 'the group&apos;s'} reading of it.
+          </p>
         )}
         <p className="hint">{hint}</p>
         <div className="claim-vote-buttons">
@@ -52,7 +62,7 @@ export default function TropeInfoModal({
         </div>
         {onProposeSwap && (
           <button className="btn secondary-action" onClick={onProposeSwap}>
-            🔁 Propose swapping this trope out
+            🔁 {isSolo ? 'Swap this trope out' : 'Propose swapping this trope out'}
           </button>
         )}
       </div>

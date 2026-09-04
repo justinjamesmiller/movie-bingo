@@ -5,7 +5,10 @@ export default function ProfileChangeProposalModal({ proposal, onAccept, onDecli
     <ModalShell onClose={onDecline}>
       <div className="modal-content">
         <h3>Accept Profile Change?</h3>
-        <p className="hint">A host proposed this name and avatar for you:</p>
+        <p className="hint">
+          {proposal.proposedByAvatar ? `${proposal.proposedByAvatar} ` : ''}
+          {proposal.proposedBy || 'A host'} proposed this name and avatar for you:
+        </p>
         <p className="claim-text">
           {proposal.avatar} {proposal.name}
         </p>

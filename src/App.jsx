@@ -46,6 +46,7 @@ import WagerIntroModal from './components/WagerIntroModal.jsx';
 import HostTransferModal from './components/HostTransferModal.jsx';
 import PlayerManagementModal from './components/PlayerManagementModal.jsx';
 import ProfileChangeProposalModal from './components/ProfileChangeProposalModal.jsx';
+import HostPromotionModal from './components/HostPromotionModal.jsx';
 
 const MAX_WAGERS = 5;
 
@@ -75,6 +76,7 @@ function App() {
   const [changeNameModalOpen, setChangeNameModalOpen] = useState(false);
   const [managedPlayer, setManagedPlayer] = useState(null);
   const [profileProposalTarget, setProfileProposalTarget] = useState(null);
+  const [hostPromotion, setHostPromotion] = useState(null);
   const [helpModalOpen, setHelpModalOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [activityFeedOpen, setActivityFeedOpen] = useState(false);
@@ -364,6 +366,8 @@ function App() {
           showToast(`"${evt.text}" claim was cancelled.`);
         } else if (evt.type === 'promotedToHost') {
           showToast('The host disconnected — you are now the host.');
+        } else if (evt.type === 'hostAdded') {
+          setHostPromotion({ byName: evt.byName, byAvatar: evt.byAvatar });
         } else if (evt.type === 'gameReset') {
           showToast('The host reset the game — new boards have been dealt.');
           setGameOverModalOpen(false);
@@ -844,6 +848,7 @@ function App() {
             onHost={handleHost}
             onJoin={handleJoin}
             error={error}
+            onDismissError={() => setError('')}
             busy={busy}
             loadingMessage={loadingMessage}
             onCancelLoading={handleCancelLoading}
@@ -1124,6 +1129,14 @@ function App() {
           proposal={gameState.pendingProfileChanges[myId]}
           onAccept={() => clientRef.current?.respondToProfileChange(true)}
           onDecline={() => clientRef.current?.respondToProfileChange(false)}
+        />
+      )}
+
+      {hostPromotion && (
+        <HostPromotionModal
+          promotedBy={hostPromotion.byName}
+          promotedByAvatar={hostPromotion.byAvatar}
+          onClose={() => setHostPromotion(null)}
         />
       )}
 

@@ -8,6 +8,7 @@ function renderLanding(overrides = {}) {
       onHost={vi.fn()}
       onJoin={vi.fn()}
       error=""
+      onDismissError={vi.fn()}
       busy={false}
       loadingMessage=""
       onCancelLoading={vi.fn()}

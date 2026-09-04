@@ -641,6 +641,9 @@ describe('GameClient connection stability', () => {
     expect(host.client.isHost()).toBe(true);
     expect(guest.client.isHost()).toBe(true);
     expect(guest.state.hostIds).toEqual([host.myId, guest.myId]);
+    expect(guest.events).toContainEqual(
+      expect.objectContaining({ type: 'hostAdded', byName: 'Alice', byAvatar: host.state.players[host.myId].avatar }),
+    );
   });
 
   it('lets a host resign while another host remains', async () => {
@@ -679,7 +682,11 @@ describe('GameClient connection stability', () => {
 
     host.client.proposeProfileChange(guest.myId, 'Robert', '🎬');
     await flush();
-    expect(guest.state.pendingProfileChanges[guest.myId]).toEqual({ name: 'Robert', avatar: '🎬' });
+    expect(guest.state.pendingProfileChanges[guest.myId]).toMatchObject({
+      name: 'Robert',
+      avatar: '🎬',
+      proposedBy: 'Alice',
+    });
     expect(guest.state.players[guest.myId].name).toBe('Bob');
 
     guest.client.respondToProfileChange(true);

@@ -977,6 +977,11 @@ export class GameClient {
         GameClient.clearSavedSession();
         this.onEvent({ type: 'gameOver' });
         break;
+      case 'hostAdded':
+        if (data.to === this.myId) {
+          this.onEvent({ type: 'hostAdded', byName: data.byName, byAvatar: data.byAvatar });
+        }
+        break;
       case 'migrate':
         if (!this.state) break;
         if (!data.state.players[this.myId]) {
@@ -1305,7 +1310,12 @@ export class GameClient {
       const name = typeof action.name === 'string' ? action.name.trim().slice(0, 20) : '';
       if (!target || !target.connected || !name || !AVATAR_OPTIONS.includes(action.avatar)) return;
       state.pendingProfileChanges ||= {};
-      state.pendingProfileChanges[target.id] = { name, avatar: action.avatar };
+      state.pendingProfileChanges[target.id] = {
+        name,
+        avatar: action.avatar,
+        proposedBy: player.name,
+        proposedByAvatar: player.avatar,
+      };
       this._emitState();
       this._send({ t: 'state', state: this.state });
       return;
@@ -1370,6 +1380,7 @@ export class GameClient {
       if (!state.players[targetId]?.connected || this._isHostId(targetId)) return;
       state.hostIds = [...this._hostIds(), targetId];
       this._logActivity(`👑 ${state.players[targetId].name} is now a host.`);
+      this._send({ t: 'hostAdded', to: targetId, byName: player.name, byAvatar: player.avatar });
       this._emitState();
       return this._send({ t: 'state', state: this.state });
     }

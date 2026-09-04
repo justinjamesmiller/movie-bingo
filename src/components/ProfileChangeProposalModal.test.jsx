@@ -8,13 +8,14 @@ describe('ProfileChangeProposalModal', () => {
     const onDecline = vi.fn();
     render(
       <ProfileChangeProposalModal
-        proposal={{ name: 'Robert', avatar: '🎬' }}
+        proposal={{ name: 'Robert', avatar: '🎬', proposedBy: 'Ashley', proposedByAvatar: '👻' }}
         onAccept={onAccept}
         onDecline={onDecline}
       />,
     );
 
     expect(screen.getByText('🎬 Robert')).toBeInTheDocument();
+    expect(screen.getByText('👻 Ashley proposed this name and avatar for you:')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Accept' }));
     fireEvent.click(screen.getByRole('button', { name: 'Decline' }));
     expect(onAccept).toHaveBeenCalledTimes(1);

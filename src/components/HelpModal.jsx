@@ -149,7 +149,8 @@ export default function HelpModal({ onClose }) {
           </li>
           <li>
             <strong>Add Host</strong> — give another connected player host permissions while you remain in the game.
-            Hosts have the same controls, can add more hosts, and can resign as host once another host remains.
+            They receive a notice explaining their new controls. Hosts have the same controls, can add more hosts, and
+            can resign as host once another host remains.
           </li>
           <li>
             <strong>Manage a player</strong> — click another player&apos;s name or avatar to add them as a host or

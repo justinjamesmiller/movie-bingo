@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { isMovieLookupAvailable, searchMovies, getMovieDetails } from '../net/movieLookup.js';
 import { getSuggestedSubgenres } from '../net/wikidataLookup.js';
 import { SUBGENRES_BY_GENRE } from '../data/tropes.js';
+import ErrorModal from './ErrorModal.jsx';
 
 export default function MovieLookup({ onFound }) {
   const [query, setQuery] = useState('');
@@ -73,7 +74,7 @@ export default function MovieLookup({ onFound }) {
           {busy ? 'Searching…' : 'Search'}
         </button>
       </div>
-      {error && <p className="error-text">{error}</p>}
+      <ErrorModal message={error} onClose={() => setError('')} />
 
       {results && (
         <ul className="movie-result-list">

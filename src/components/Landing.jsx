@@ -6,11 +6,13 @@ import GeneralPercentSliders from './GeneralPercentSliders.jsx';
 import CustomTropesEditor from './CustomTropesEditor.jsx';
 import { balancedRatios } from '../utils/ratios.js';
 import ModalShell from './ModalShell.jsx';
+import ErrorModal from './ErrorModal.jsx';
 
 export default function Landing({
   onHost,
   onJoin,
   error,
+  onDismissError,
   busy,
   loadingMessage,
   onCancelLoading,
@@ -263,7 +265,7 @@ export default function Landing({
         )}
         <MovieLookup onFound={handleMovieFound} />
       </div>
-      {(localError || error) && <p className="error-text">{localError || error}</p>}
+      <ErrorModal message={localError || error} onClose={() => (localError ? setLocalError('') : onDismissError())} />
       {hostSetupIssues && (
         <ModalShell onClose={() => setHostSetupIssues(null)}>
           <div className="modal-content">

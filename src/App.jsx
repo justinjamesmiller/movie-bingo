@@ -50,6 +50,19 @@ import HostPromotionModal from './components/HostPromotionModal.jsx';
 
 const MAX_WAGERS = 5;
 
+function formatNameList(names) {
+  if (names.length <= 1) return names[0] || '';
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names.slice(0, -1).join(', ')}, and ${names[names.length - 1]}`;
+}
+
+function formatApprovedBy(approvedBy) {
+  const names = (approvedBy || [])
+    .map((player) => (typeof player === 'string' ? player : player?.name))
+    .filter(Boolean);
+  return names.length > 0 ? ` Approved by ${formatNameList(names)}.` : '';
+}
+
 function App() {
   const clientRef = useRef(null);
   const [screen, setScreen] = useState('landing');
@@ -250,6 +263,10 @@ function App() {
     clientRef.current.declareGameOver();
   }
 
+  function handleResumeGame() {
+    clientRef.current.resumeGame();
+  }
+
   function handleConfirmEndGame() {
     setEndGameConfirmOpen(false);
     handleEndGame();
@@ -313,6 +330,7 @@ function App() {
           const me = state && myIdRef.current ? state.players[myIdRef.current] : null;
           const affectsMe = mark && !!me && (evt.byId === myIdRef.current || me.board.includes(evt.text));
           if (evt.approved) {
+            const approvedByText = formatApprovedBy(evt.approvedBy);
             if (mark && affectsMe) {
               playPersonalMarkSound();
               vibrate(VIBRATE_PATTERN_MARK);
@@ -322,23 +340,27 @@ function App() {
             if (replace) {
               showToast(
                 evt.wagerFreed
-                  ? `✅ "${evt.text}" was swapped out for a new trope! Your wager on it was freed up — pick a new space to wager.`
-                  : `✅ "${evt.text}" was swapped out for a new trope!`,
+                  ? `✅ "${evt.text}" was swapped out for a new trope!${approvedByText} Your wager on it was freed up — pick a new space to wager.`
+                  : `✅ "${evt.text}" was swapped out for a new trope!${approvedByText}`,
               );
               if (evt.wagerFreed) setManageWagersOpen(true);
             } else if (wagerChange) {
-              showToast('✅ Wager changes approved!');
+              showToast(`✅ Wager changes approved!${approvedByText}`);
             } else if (reroll) {
               showToast(
                 evt.byId === myIdRef.current
-                  ? '🔀 Approved — here is your fresh board!'
-                  : '🔀 A player was dealt a fresh board.',
+                  ? `🔀 Approved — here is your fresh board!${approvedByText}`
+                  : `🔀 A player was dealt a fresh board.${approvedByText}`,
               );
               if (evt.wagerFreed) setManageWagersOpen(true);
             } else if (mark && evt.custom) {
-              showToast(`📝 Custom trope "${evt.text}" was approved and added!`);
+              showToast(`📝 Custom trope "${evt.text}" was approved and added!${approvedByText}`);
             } else {
-              showToast(undo ? `✅ "${evt.text}" was unmarked.` : `✅ "${evt.text}" was confirmed and marked!`);
+              showToast(
+                undo
+                  ? `✅ "${evt.text}" was unmarked.${approvedByText}`
+                  : `✅ "${evt.text}" was confirmed and marked!${approvedByText}`,
+              );
             }
           } else {
             playDeniedSound();
@@ -380,6 +402,10 @@ function App() {
           playGameOverSound();
           showToast('🏁 The game has ended — check out the recap!');
           setGameOverModalOpen(true);
+        } else if (evt.type === 'gameResumed') {
+          setSavedSession(GameClient.getSavedSession());
+          showToast('▶️ The game was resumed — after-credits tropes are back in play.');
+          setGameOverModalOpen(false);
         } else if (evt.type === 'connectionStatus') {
           setConnectionStatus(evt.status);
         } else if (evt.type === 'codeChanged') {
@@ -955,6 +981,7 @@ function App() {
                 hostCount={hostIds.length}
                 onResetGame={handleResetGame}
                 onEndGame={() => setEndGameConfirmOpen(true)}
+                onResumeGame={handleResumeGame}
                 onViewRecap={() => setGameOverModalOpen(true)}
                 onLeaveGame={() => setLeaveConfirmOpen(true)}
                 onCopyInviteLink={handleCopyInviteLink}

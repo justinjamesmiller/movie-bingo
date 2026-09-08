@@ -209,7 +209,11 @@ describe('GameClient', () => {
     const guestIdx = guest.state.players[guest.myId].board.indexOf(claimedText);
     expect(host.state.players[host.myId].marked).toContain(hostIdx);
     expect(guest.state.players[guest.myId].marked).toContain(guestIdx);
-    expect(host.events.some((e) => e.type === 'claimResolved' && e.approved)).toBe(true);
+    const hostResolved = host.events.find((e) => e.type === 'claimResolved' && e.approved);
+    const guestResolved = guest.events.find((e) => e.type === 'claimResolved' && e.approved);
+    expect(hostResolved.approvedBy.map((player) => player.name)).toEqual(['Alice', 'Bob']);
+    expect(guestResolved.approvedBy.map((player) => player.name)).toEqual(['Alice', 'Bob']);
+    expect(host.state.activityLog.at(-1).text).toContain('Approved by Alice and Bob.');
   });
 
   it('does not emit a terminal fully-voted claim as still pending before resolving', async () => {
@@ -630,6 +634,31 @@ describe('GameClient connection stability', () => {
     expect(guest.state.gameOver).toBe(true);
     expect(GameClient.getSavedSession()).toBeNull();
     expect(GameClient.getSavedSnapshot()).toBeNull();
+  });
+
+  it('lets the host resume an ended game for after-credits tropes', async () => {
+    const { host, guest } = await twoPlayerGame();
+
+    host.client.declareGameOver();
+    await flush();
+    expect(host.state.gameOver).toBe(true);
+    expect(GameClient.getSavedSession()).toBeNull();
+
+    host.client.resumeGame();
+    await flush();
+
+    expect(host.state.gameOver).toBe(false);
+    expect(guest.state.gameOver).toBe(false);
+    expect(host.events.some((event) => event.type === 'gameResumed')).toBe(true);
+    expect(guest.events.some((event) => event.type === 'gameResumed')).toBe(true);
+    expect(host.state.activityLog.at(-1).text).toBe('▶️ The game was resumed for extra tropes.');
+    expect(GameClient.getSavedSession()).toMatchObject({ code: host.state.code });
+    expect(GameClient.getSavedSnapshot(host.state.code)?.state.gameOver).toBe(false);
+
+    host.client.claim(0);
+    await flush();
+    expect(host.state.pendingClaim).not.toBeNull();
+    expect(guest.state.pendingClaim?.kind).toBe('mark');
   });
 
   it('lets a host add another connected player as a host', async () => {

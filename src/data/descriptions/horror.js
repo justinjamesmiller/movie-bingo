@@ -128,6 +128,14 @@ export default {
     what: 'A door swings shut or opens with no one touching it.',
     example: 'Every cupboard door in the kitchen swings open at once.',
   },
+  'Door or stairs creak': {
+    what: 'A door, floorboard or staircase makes a slow warning sound before anyone sees the source.',
+    example: 'The bedroom door stays closed, but the stairs creak one step at a time below it.',
+  },
+  'Hiding under blankets': {
+    what: 'A frightened character pulls blankets over themselves as if that could keep the threat away.',
+    example: 'Something moves in the dark room and the child vanishes under the covers, barely breathing.',
+  },
   'Blood splatter': {
     what: 'Blood sprays across a wall, floor, camera lens or another character.',
     example: 'A white wall is suddenly streaked with blood from just out of frame.',
@@ -164,6 +172,10 @@ export default {
     what: 'Someone explicitly dismisses a genuine warning sign.',
     example: 'The door opens by itself and someone insists it was only the wind.',
   },
+  'Chooses to go alone': {
+    what: 'A character refuses backup and heads into danger by themselves.',
+    example: 'Everyone offers to come along, but one person insists they can check the basement faster alone.',
+  },
   'Dragged off-screen': {
     what: 'A character is yanked out of frame by something unseen, often mid-scream.',
     example: 'A hand grabs an ankle and pulls someone out of the shot mid-scream.',
@@ -175,6 +187,14 @@ export default {
   'Drenched in blood': {
     what: 'A character ends up completely covered in blood, usually the survivor.',
     example: 'The survivor stands shaking, soaked head to toe in blood that is not all theirs.',
+  },
+  'Vermin infestation': {
+    what: 'Bugs, rats or other pests swarm somewhere they should not, signalling decay or something unnatural.',
+    example: 'A cupboard opens and roaches pour out around a fresh trail of bite marks.',
+  },
+  "There's no time to explain": {
+    what: 'A character refuses to explain urgent danger because stopping to talk would cost too much time.',
+    example: 'They burst through the door, grab the car keys and only say, "Move. Now."',
   },
   'Police arrive too late': {
     what: 'Authorities show up after the danger has passed, or are useless when they do arrive.',
@@ -432,9 +452,17 @@ export default {
     what: 'A music box, toy or chime plays by itself.',
     example: 'A tinny lullaby starting in an empty nursery.',
   },
+  'A toy activates itself': {
+    what: "A child's toy turns on, speaks, lights up or moves without anyone touching it.",
+    example: 'A plastic train starts circling the bedroom floor after every battery was removed.',
+  },
   'A priest is called in': {
     what: 'A member of clergy or a faith expert is brought to help.',
     example: 'A young priest arriving with a battered case.',
+  },
+  'An expert is brought in': {
+    what: 'A specialist is summoned because ordinary explanations have stopped working.',
+    example: 'The group brings in a paranormal investigator, scientist or consultant who immediately looks worried.',
   },
   'Cold spot in a room': {
     what: 'A sudden localised drop in temperature signals a presence.',
@@ -444,6 +472,10 @@ export default {
     what: 'A radio, TV or phone produces interference or voices.',
     example: 'A word surfacing out of the hiss between stations.',
   },
+  'Radio static': {
+    what: 'A radio signal dissolves into harsh static, sometimes carrying a hidden message or warning.',
+    example: 'The dial lands on dead air, then a voice breaks through the static for one sentence.',
+  },
   'A grandfather clock chimes 13': {
     what: 'A clock strikes an impossible hour.',
     example: 'Counting the chimes and reaching thirteen.',
@@ -451,6 +483,18 @@ export default {
   'Footsteps on the ceiling': {
     what: 'Someone hears movement in a room above them that should be empty.',
     example: 'Pacing overhead while everyone is downstairs.',
+  },
+  'Rotten spot spreads': {
+    what: 'A stain, mould patch or decayed mark appears on a wall, floor or ceiling and seems to grow.',
+    example: 'A damp black circle on the nursery ceiling doubles in size overnight.',
+  },
+  'Ghost detection gear': {
+    what: 'Paranormal investigation equipment is used to prove or track a haunting.',
+    example: 'An EMF meter spikes beside an empty rocking chair while the recorder catches a whisper.',
+  },
+  'Cobwebs everywhere': {
+    what: 'Thick webs cover a neglected space, making it feel abandoned, trapped or untouched for years.',
+    example: 'They push through webbing in the attic and find a fresh footprint in the dust.',
   },
   "A portrait's eyes follow": {
     what: 'A painting or photograph appears to track people around the room.',
@@ -499,6 +543,10 @@ export default {
   'An old photograph changes': {
     what: 'A picture is different from how it was, or from how it is remembered.',
     example: 'The empty chair in the group photo now has someone in it.',
+  },
+  'Mimics a loved one': {
+    what: 'An entity uses the voice, face or likeness of someone trusted to lure or manipulate characters.',
+    example: 'A child hears their mother calling from the hallway, even though she is asleep upstairs.',
   },
   'Doors slam with no wind': {
     what: 'Doors or windows bang shut with no physical cause.',
@@ -842,6 +890,10 @@ export default {
     what: 'A character jolts awake from a bad dream, sometimes into another one.',
     example: 'Sitting up gasping, then noticing the room is wrong.',
   },
+  'Nightmare scene': {
+    what: 'The film drops into a dream sequence built around fear, guilt or a false attack.',
+    example: 'A hallway stretches forever until the character wakes up screaming.',
+  },
   'Questioning their own sanity': {
     what: 'A character begins to doubt whether what they experienced was real.',
     example: 'Asking a friend to confirm a conversation that never happened.',
@@ -890,6 +942,10 @@ export default {
     what: 'A scene from earlier is replayed with new information that changes its meaning.',
     example: 'The same dinner, but now you can see who is not eating.',
   },
+  'Flashback fills in backstory': {
+    what: 'The story jumps into the past to reveal context the audience or characters were missing.',
+    example: 'A childhood birthday party is replayed, finally showing who was in the locked room.',
+  },
   "A therapist doesn't believe them": {
     what: 'A mental-health professional dismisses the character account.',
     example: 'Writing notes while she describes the figure.',
@@ -929,6 +985,10 @@ export default {
   'Sleep paralysis scene': {
     what: 'A character wakes unable to move while something is present.',
     example: 'Eyes open, body locked, weight on the mattress edge.',
+  },
+  'Falls asleep on watch': {
+    what: 'Someone who is supposed to stay alert dozes off at a critical moment.',
+    example: 'The lookout nods off beside the monitor just before the basement door opens.',
   },
   'A dissociative episode': {
     what: 'A character loses their sense of self or place.',

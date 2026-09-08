@@ -64,6 +64,17 @@ describe('GENRES / SUBGENRES_BY_GENRE data integrity', () => {
       }
     }
   });
+
+  it('includes the requested TV subgenres with full trope pools', () => {
+    const requested = ['cooking', 'dating', 'game-show', 'medical'];
+    const tvSubgenres = new Set(SUBGENRES_BY_GENRE.tv.map((subgenre) => subgenre.id));
+
+    for (const subgenre of requested) {
+      expect(tvSubgenres.has(subgenre)).toBe(true);
+      const count = TROPES.filter((trope) => tropeHasSubgenre(trope, 'tv', subgenre)).length;
+      expect(count, `tv/${subgenre} should have >=40 tropes`).toBeGreaterThanOrEqual(40);
+    }
+  });
 });
 
 describe('getSubgenres', () => {

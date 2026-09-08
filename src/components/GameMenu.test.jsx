@@ -27,6 +27,7 @@ function renderMenu(overrides = {}) {
     hostCount: 2,
     onResetGame: vi.fn(),
     onEndGame: vi.fn(),
+    onResumeGame: vi.fn(),
     onViewRecap: vi.fn(),
     onLeaveGame: vi.fn(),
     onCopyInviteLink: vi.fn(),
@@ -95,8 +96,17 @@ describe('GameMenu', () => {
     renderMenu({ gameOver: true });
 
     expect(screen.getByRole('button', { name: '🏁 View Recap' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '▶️ Resume Game' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '🏁 End Game' })).toBeNull();
     expect(screen.queryByRole('button', { name: '📝 Submit Custom Trope' })).toBeNull();
+  });
+
+  it('runs the resume action and closes the menu', () => {
+    const props = renderMenu({ gameOver: true });
+
+    fireEvent.click(screen.getByRole('button', { name: '▶️ Resume Game' }));
+    expect(props.onResumeGame).toHaveBeenCalledTimes(1);
+    expect(props.onClose).toHaveBeenCalledTimes(1);
   });
 
   it('hides advanced actions until advanced gameplay is enabled', () => {

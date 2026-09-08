@@ -89,8 +89,9 @@ export default function HelpModal({ onClose }) {
         <p className="hint">
           Once the game has started, the host can hit "End Game" from the menu. Everyone gets a recap showing each
           player's tropes marked, bingos, and wagers hit, with 🏆 for the most tropes marked, 🎉 for the most bingos,
-          and 🎯 for the most wagers hit. You can reopen the recap later from the menu's "View Recap" option. Ending a
-          game clears reconnect data.
+          and 🎯 for the most wagers hit. You can reopen the recap later from the menu's "View Recap" option. If an
+          after-credits scene adds more tropes, the host can use "Resume Game" to reopen play. Ending a game clears
+          reconnect data until it is resumed.
         </p>
 
         <h4>🧑‍🎤 Avatars</h4>
@@ -143,6 +144,9 @@ export default function HelpModal({ onClose }) {
           </li>
           <li>
             <strong>End Game</strong> — ends play and shows the recap to everyone.
+          </li>
+          <li>
+            <strong>Resume Game</strong> — reopens an ended game for extra late tropes.
           </li>
           <li>
             <strong>Reset Game</strong> — deals fresh boards, lets you re-pick genres/settings.

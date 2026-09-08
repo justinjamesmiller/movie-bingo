@@ -183,6 +183,14 @@ export default {
     what: 'A character transformation changes how others see them.',
     example: 'Glasses off, hair down, the room stops.',
   },
+  'Hair down, glasses off': {
+    what: 'A makeover beat treats loose hair and removed glasses as an instant transformation.',
+    example: 'She takes her hair down, swaps the frames for contacts, and everyone suddenly notices her.',
+  },
+  'Glasses hide their beauty': {
+    what: 'A character is treated as undesirable mainly because they wear glasses.',
+    example: 'The supposedly plain classmate removes their glasses and the room reacts like they became a new person.',
+  },
   'A wedding interrupted for love': {
     what: 'Someone stops a ceremony to declare their feelings.',
     example: 'The objection nobody expected anyone to actually use.',

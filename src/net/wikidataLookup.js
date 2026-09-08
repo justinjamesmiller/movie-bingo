@@ -78,8 +78,16 @@ const LABEL_SUBGENRE_MAP = [
   { match: ['revisionist western'], genre: 'western', subgenre: 'revisionist-western' },
   { match: ['space western'], genre: 'western', subgenre: 'space-western' },
   { match: ['reality television', 'reality tv'], genre: 'tv', subgenre: 'reality-tv' },
+  { match: ['cooking show', 'cookery', 'culinary', 'food reality television'], genre: 'tv', subgenre: 'cooking' },
+  { match: ['dating show', 'dating game show', 'romance reality'], genre: 'tv', subgenre: 'dating' },
   { match: ['game show'], genre: 'tv', subgenre: 'game-show' },
+  { match: ['medical drama', 'medical television', 'hospital drama'], genre: 'tv', subgenre: 'medical' },
   { match: ['talk show'], genre: 'tv', subgenre: 'talk-show' },
+  { match: ['home renovation', 'home improvement', 'property show'], genre: 'tv', subgenre: 'home-renovation' },
+  { match: ['talent show', 'talent competition', 'singing competition'], genre: 'tv', subgenre: 'talent-competition' },
+  { match: ['travel documentary', 'travel show', 'travel television'], genre: 'tv', subgenre: 'travel' },
+  { match: ['lifestyle television', 'lifestyle show'], genre: 'tv', subgenre: 'lifestyle' },
+  { match: ['docuseries', 'documentary series'], genre: 'tv', subgenre: 'docuseries' },
 ];
 
 // Returns a list of `{genre, subgenre}` suggestions for an IMDb id, or an

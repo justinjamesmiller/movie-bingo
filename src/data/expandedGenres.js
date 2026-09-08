@@ -91,9 +91,17 @@ export const EXPANDED_SUBGENRES_BY_GENRE = {
   tv: [
     { id: 'general', label: 'Classic / Mixed TV' },
     { id: 'reality-tv', label: 'Reality TV' },
+    { id: 'cooking', label: 'Cooking' },
+    { id: 'dating', label: 'Dating' },
     { id: 'game-show', label: 'Game Show' },
+    { id: 'medical', label: 'Medical' },
     { id: 'talk-show', label: 'Talk Show' },
     { id: 'news-magazine', label: 'News Magazine' },
+    { id: 'home-renovation', label: 'Home Renovation' },
+    { id: 'talent-competition', label: 'Talent Competition' },
+    { id: 'travel', label: 'Travel' },
+    { id: 'lifestyle', label: 'Lifestyle' },
+    { id: 'docuseries', label: 'Docuseries' },
   ],
 };
 

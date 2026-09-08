@@ -25,6 +25,7 @@ export default function GameMenu({
   hostCount,
   onResetGame,
   onEndGame,
+  onResumeGame,
   onViewRecap,
   onLeaveGame,
   onCopyInviteLink,
@@ -131,6 +132,11 @@ export default function GameMenu({
               {gameOver && (
                 <button className="btn" onClick={() => pick(onViewRecap)}>
                   🏁 View Recap
+                </button>
+              )}
+              {isHost && started && gameOver && (
+                <button className="btn primary" onClick={() => pick(onResumeGame)}>
+                  ▶️ Resume Game
                 </button>
               )}
               {isHost && started && !gameOver && (

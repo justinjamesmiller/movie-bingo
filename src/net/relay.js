@@ -107,6 +107,23 @@ function markAlreadyAcceptedTropes(board, marked, acceptedTropes) {
   });
 }
 
+function approvedPlayersFromVotes(players, votes) {
+  return Object.entries(votes)
+    .filter(([, agree]) => agree)
+    .map(([id]) => ({ id, name: players[id]?.name || 'Unknown player' }));
+}
+
+function formatNameList(names) {
+  if (names.length <= 1) return names[0] || '';
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names.slice(0, -1).join(', ')}, and ${names[names.length - 1]}`;
+}
+
+function approvalSentence(approvedBy) {
+  const names = approvedBy.map((player) => player.name).filter(Boolean);
+  return names.length > 0 ? ` Approved by ${formatNameList(names)}.` : '';
+}
+
 // Sanitizes a list of free-text custom trope submissions (host/reset-time):
 // trims, drops blanks, caps length, dedupes, caps total count.
 function sanitizeCustomTropes(customTropes) {
@@ -248,6 +265,11 @@ export class GameClient {
     const session = { code, myId: this.myId, name };
     writeStore(sessionStore(), SESSION_KEY, session);
     writeStore(localStore(), SESSION_BACKUP_KEY, session);
+  }
+
+  _saveCurrentSession() {
+    const me = this.state?.players?.[this.myId];
+    if (this.code && me) this._saveSession(this.code, me.name);
   }
 
   _saveSnapshot() {
@@ -540,6 +562,12 @@ export class GameClient {
   // everyone (no further claims/wagers can be proposed after this).
   declareGameOver() {
     this._dispatch({ t: 'gameOver' });
+  }
+
+  // Host-only: reopens an ended game so extra late/after-credits tropes can
+  // still be claimed without resetting the board or accepted-trope history.
+  resumeGame() {
+    this._dispatch({ t: 'resumeGame' });
   }
 
   changeName(newName) {
@@ -964,6 +992,7 @@ export class GameClient {
           custom: !!data.custom,
           byId: data.byId,
           approved: data.approved,
+          approvedBy: data.approvedBy || [],
           wagerFreed: !!data.wagerFreedIds?.includes(this.myId),
         });
         break;
@@ -976,6 +1005,10 @@ export class GameClient {
       case 'gameOverAnnounced':
         GameClient.clearSavedSession();
         this.onEvent({ type: 'gameOver' });
+        break;
+      case 'gameResumed':
+        this._saveCurrentSession();
+        this.onEvent({ type: 'gameResumed' });
         break;
       case 'hostAdded':
         if (data.to === this.myId) {
@@ -1374,6 +1407,19 @@ export class GameClient {
       return;
     }
 
+    if (action.t === 'resumeGame') {
+      if (!this._isActiveHostId(fromId)) return;
+      if (!state.started || !state.gameOver || state.pendingClaim) return;
+      state.gameOver = false;
+      this._logActivity('▶️ The game was resumed for extra tropes.');
+      this._send({ t: 'gameResumed' });
+      this._saveCurrentSession();
+      this.onEvent({ type: 'gameResumed' });
+      this._emitState();
+      this._send({ t: 'state', state: this.state });
+      return;
+    }
+
     if (action.t === 'addHost') {
       if (!this._isActiveHostId(fromId)) return;
       const targetId = action.targetId;
@@ -1525,6 +1571,8 @@ export class GameClient {
     const { agree } = this._tally(pc);
     const needed = this._majorityNeeded(pc.totalPlayers);
     const approved = agree >= needed;
+    const approvedBy = approvedPlayersFromVotes(this.state.players, pc.votes);
+    const approvedByText = approvalSentence(approvedBy);
     const wagerFreedIds = [];
 
     if (approved) {
@@ -1546,9 +1594,11 @@ export class GameClient {
             if (this.state.acceptedTropes.includes(newText)) p.marked.push(idx);
           }
           if (!this.state.tropePool.includes(newText)) this.state.tropePool.push(newText);
-          this._logActivity(`🔁 "${pc.text}" was swapped out for "${newText}".`);
+          this._logActivity(`🔁 "${pc.text}" was swapped out for "${newText}".${approvedByText}`);
         } else {
-          this._logActivity(`🔁 "${pc.text}" was approved to be swapped out, but no replacement was available.`);
+          this._logActivity(
+            `🔁 "${pc.text}" was approved to be swapped out, but no replacement was available.${approvedByText}`,
+          );
         }
         this.state.acceptedTropes = this.state.acceptedTropes.filter((t) => t !== pc.text);
       } else if (pc.kind === 'wagerChange') {
@@ -1560,7 +1610,7 @@ export class GameClient {
             if (proposer.wagered.includes(idx) || proposer.marked.includes(idx)) continue;
             proposer.wagered.push(idx);
           }
-          this._logActivity(`🎯 ${proposer.name} updated their wagers.`);
+          this._logActivity(`🎯 ${proposer.name} updated their wagers.${approvedByText}`);
         }
       } else if (pc.kind === 'reroll') {
         const proposer = this.state.players[pc.byId];
@@ -1572,7 +1622,7 @@ export class GameClient {
           // they're cleared and can be re-placed via the usual wager proposal.
           if (proposer.wagered.length > 0) wagerFreedIds.push(proposer.id);
           proposer.wagered = [];
-          this._logActivity(`🔀 ${proposer.name} was dealt a fresh board.`);
+          this._logActivity(`🔀 ${proposer.name} was dealt a fresh board.${approvedByText}`);
         }
       } else {
         for (const p of Object.values(this.state.players)) {
@@ -1587,23 +1637,31 @@ export class GameClient {
         }
         if (pc.kind === 'unmark') {
           this.state.acceptedTropes = this.state.acceptedTropes.filter((t) => t !== pc.text);
-          this._logActivity(`↩️ "${pc.text}" was unmarked.`);
+          this._logActivity(`↩️ "${pc.text}" was unmarked.${approvedByText}`);
         } else {
           if (!this.state.acceptedTropes.includes(pc.text)) {
             this.state.acceptedTropes.push(pc.text);
           }
           if (pc.custom) {
             if (!this.state.tropePool.includes(pc.text)) this.state.tropePool.push(pc.text);
-            this._logActivity(`📝 "${pc.text}" was added as a new custom trope.`);
+            this._logActivity(`📝 "${pc.text}" was added as a new custom trope.${approvedByText}`);
           } else {
-            this._logActivity(`✅ "${pc.text}" was marked as happened.`);
+            this._logActivity(`✅ "${pc.text}" was marked as happened.${approvedByText}`);
           }
         }
       }
     }
 
     this.state.pendingClaim = null;
-    const payload = { text: pc.text, kind: pc.kind, custom: !!pc.custom, byId: pc.byId, approved, wagerFreedIds };
+    const payload = {
+      text: pc.text,
+      kind: pc.kind,
+      custom: !!pc.custom,
+      byId: pc.byId,
+      approved,
+      approvedBy,
+      wagerFreedIds,
+    };
     this.onEvent({ type: 'claimResolved', ...payload, wagerFreed: wagerFreedIds.includes(this.myId) });
     this._send({ t: 'resolved', ...payload });
     this._emitState();

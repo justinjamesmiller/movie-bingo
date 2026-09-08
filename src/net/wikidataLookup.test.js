@@ -29,6 +29,25 @@ describe('wikidataLookup', () => {
     ]);
   });
 
+  it('suggests specific TV subgenres from Wikidata labels', async () => {
+    mockFetch({
+      results: {
+        bindings: [
+          { genreLabel: { value: 'Cooking show' } },
+          { genreLabel: { value: 'Dating game show' } },
+          { genreLabel: { value: 'Medical drama' } },
+        ],
+      },
+    });
+
+    await expect(getSuggestedSubgenres('tt0000002')).resolves.toEqual([
+      { genre: 'tv', subgenre: 'cooking' },
+      { genre: 'tv', subgenre: 'dating' },
+      { genre: 'tv', subgenre: 'game-show' },
+      { genre: 'tv', subgenre: 'medical' },
+    ]);
+  });
+
   it('returns no suggestions for missing ids, failed responses, or malformed results', async () => {
     expect(await getSuggestedSubgenres('')).toEqual([]);
     mockFetch({}, false);

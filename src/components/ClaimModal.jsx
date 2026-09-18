@@ -1,8 +1,11 @@
+import { useEffect, useState } from 'react';
 import { GENRES, SUBGENRES_BY_GENRE } from '../data/tropes.js';
 import { useTropeDescription } from '../hooks/useTropeDescription.js';
 
 export default function ClaimModal({ pendingClaim, myId, players, onAgree, onDisagree, onCancel }) {
+  const [choosingRationale, setChoosingRationale] = useState(false);
   const { description } = useTropeDescription(pendingClaim?.text);
+  useEffect(() => setChoosingRationale(false), [pendingClaim?.claimId]);
   if (!pendingClaim) return null;
 
   const claimant = players.find((p) => p.id === pendingClaim.byId);
@@ -27,10 +30,16 @@ export default function ClaimModal({ pendingClaim, myId, players, onAgree, onDis
       pendingClaim.subgenre
     : null;
   const claimantLabel = claimant ? `${claimant.avatar ? `${claimant.avatar} ` : ''}${claimant.name}` : 'A player';
+  const additionalProposers = (pendingClaim.proposedBy || [])
+    .slice(1)
+    .map((id) => players.find((p) => p.id === id)?.name)
+    .filter(Boolean);
+  const rationaleCounts = pendingClaim.disagreeRationaleCounts || {};
 
   return (
     <div className="modal">
-      <div className="modal-content">
+      <div className={`modal-content${isReplace ? ' swap-claim-modal' : ''}`}>
+        {isReplace && <p className="swap-claim-kicker">TROPE SWAP</p>}
         <h3>
           {claimantLabel}
           {isReplace
@@ -76,6 +85,7 @@ export default function ClaimModal({ pendingClaim, myId, players, onAgree, onDis
         ) : (
           <p className="claim-text">{pendingClaim.text}</p>
         )}
+        {additionalProposers.length > 0 && <p className="hint">Also proposed by: {additionalProposers.join(', ')}</p>}
         {description && !isWagerChange && !isReroll && (
           <p className="hint">
             <em>{description.what}</em>
@@ -89,35 +99,65 @@ export default function ClaimModal({ pendingClaim, myId, players, onAgree, onDis
             </strong>
           </p>
         )}
-        {!isClaimant && !hasVoted && (
-          <div className="claim-vote-buttons">
-            <button className="btn agree" onClick={onAgree}>
-              {isReplace
-                ? '👍 Agree, swap it out'
-                : isWagerChange
-                  ? '👍 Agree, allow it'
-                  : isReroll
-                    ? '👍 Agree, deal a new board'
-                    : isCustom
-                      ? '👍 Agree, add it'
-                      : isUndo
-                        ? '👍 Agree, undo it'
-                        : '👍 Agree, it happened'}
-            </button>
-            <button className="btn disagree" onClick={onDisagree}>
-              {isReplace
-                ? '👎 Keep it as is'
-                : isWagerChange
-                  ? '👎 Deny it'
-                  : isReroll
-                    ? '👎 Keep their board'
-                    : isCustom
-                      ? '👎 Reject it'
-                      : isUndo
-                        ? '👎 Keep it marked'
-                        : '👎 Disagree'}
-            </button>
-          </div>
+        {!isClaimant &&
+          !hasVoted &&
+          (choosingRationale ? (
+            <div className="vote-rationale-picker">
+              <p className="hint">Why are you disagreeing? This is optional and stays anonymous.</p>
+              {['Not on screen', 'Not clear enough', 'Need more context'].map((rationale) => (
+                <button key={rationale} className="btn" onClick={() => onDisagree(rationale)}>
+                  {rationale}
+                </button>
+              ))}
+              <button className="btn disagree" onClick={() => onDisagree()}>
+                Skip reason
+              </button>
+              <button className="btn" onClick={() => setChoosingRationale(false)}>
+                Back
+              </button>
+            </div>
+          ) : (
+            <div className="claim-vote-buttons">
+              <button className={`btn agree${isReplace ? ' swap-agree' : ''}`} onClick={onAgree}>
+                {isReplace
+                  ? '👍 Agree, swap it out'
+                  : isWagerChange
+                    ? '👍 Agree, allow it'
+                    : isReroll
+                      ? '👍 Agree, deal a new board'
+                      : isCustom
+                        ? '👍 Agree, add it'
+                        : isUndo
+                          ? '👍 Agree, undo it'
+                          : '👍 Agree, it happened'}
+              </button>
+              <button
+                className={`btn disagree${isReplace ? ' swap-disagree' : ''}`}
+                onClick={() => setChoosingRationale(true)}
+              >
+                {isReplace
+                  ? '👎 Keep it as is'
+                  : isWagerChange
+                    ? '👎 Deny it'
+                    : isReroll
+                      ? '👎 Keep their board'
+                      : isCustom
+                        ? '👎 Reject it'
+                        : isUndo
+                          ? '👎 Keep it marked'
+                          : '👎 Disagree'}
+              </button>
+            </div>
+          ))}
+
+        {Object.keys(rationaleCounts).length > 0 && (
+          <p className="hint">
+            Reasons shared:{' '}
+            {Object.entries(rationaleCounts)
+              .map(([reason, count]) => `${reason} (${count})`)
+              .join(', ')}
+            .
+          </p>
         )}
 
         {(isClaimant || hasVoted) && (

@@ -4,7 +4,7 @@ import { getSuggestedSubgenres } from '../net/wikidataLookup.js';
 import { SUBGENRES_BY_GENRE } from '../data/tropes.js';
 import ErrorModal from './ErrorModal.jsx';
 
-export default function MovieLookup({ onFound }) {
+export default function MovieLookup({ onFound, onMovieSelected }) {
   const [query, setQuery] = useState('');
   const [busy, setBusy] = useState(false);
   const [results, setResults] = useState(null);
@@ -39,6 +39,7 @@ export default function MovieLookup({ onFound }) {
       setSuggestedSubgenres(subgenres);
       setResults(null);
       onFound(details.genres, subgenres);
+      onMovieSelected?.({ title: details.title, year: details.year, type: details.type, poster: details.poster });
     } catch (err) {
       setError(err.message || 'Could not load that title.');
     } finally {

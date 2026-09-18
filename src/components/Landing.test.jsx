@@ -100,7 +100,22 @@ describe('Landing', () => {
       [],
       { horror: 100 },
       { horror: { general: 100 } },
+      null,
+      false,
     );
+  });
+
+  it('lets the host opt into marathon standings', () => {
+    const onHost = vi.fn();
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    renderLanding({ onHost });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced Host Setup' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: /Marathon mode/i }));
+    fireEvent.change(screen.getByPlaceholderText('e.g. Ashley'), { target: { value: 'Ashley' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Host Game' }));
+
+    expect(onHost.mock.calls[0].at(-1)).toBe(true);
   });
 
   it('asks for only the missing join fields and submits them', () => {

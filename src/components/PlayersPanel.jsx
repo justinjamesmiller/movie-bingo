@@ -1,3 +1,5 @@
+import SuperlativeBadge from './SuperlativeBadge.jsx';
+
 export default function PlayersPanel({
   players,
   hostIds = [],
@@ -10,8 +12,12 @@ export default function PlayersPanel({
   onKick,
   onEditSelf,
   onManagePlayer,
+  onViewPlayerStats,
+  callStats = {},
   wageringEnabled,
   onOpenWagerIntro,
+  superlatives = {},
+  onSuperlativeClick,
 }) {
   return (
     <aside className="players-panel">
@@ -20,6 +26,7 @@ export default function PlayersPanel({
         {players.map((p) => {
           const wagerLocked = p.wagered.length === 5;
           const wageredMarked = p.wagered.filter((i) => p.marked.includes(i)).length;
+          const calls = callStats[p.id] || {};
           return (
             <li key={p.id}>
               <div className="player-row">
@@ -36,11 +43,11 @@ export default function PlayersPanel({
                     {!p.connected ? ' (disconnected)' : ''}
                   </button>
                 ) : (
-                  <span>
+                  <button className="player-profile-button" onClick={() => onViewPlayerStats?.(p)}>
                     {p.avatar ? `${p.avatar} ` : ''}
                     {p.name}
                     {!p.connected ? ' (disconnected)' : ''}
-                  </span>
+                  </button>
                 )}
                 <span>
                   {hostIds.includes(p.id) && <span className="tag">HOST</span>}{' '}
@@ -55,7 +62,11 @@ export default function PlayersPanel({
               <div className="hint player-stats">
                 {p.marked.length} marked · {bingoCounts[p.id] || 0} bingo{(bingoCounts[p.id] || 0) === 1 ? '' : 's'}
                 {p.wagered.length > 0 && ` · ${wageredMarked}/${p.wagered.length} wagered marked`}
+                {calls.made > 0 && ` · 📣 ${calls.correct || 0}/${calls.made} calls`}
               </div>
+              {superlatives[p.id] && (
+                <SuperlativeBadge award={superlatives[p.id]} onClick={() => onSuperlativeClick?.(p)} />
+              )}
             </li>
           );
         })}

@@ -4,6 +4,7 @@
 // genre; sub-genre-specific tropes are only added on top of the general pool
 // when that sub-genre is selected.
 import { EXPANDED_GENRES, EXPANDED_SUBGENRES_BY_GENRE, EXPANDED_TROPES } from './expandedGenres.js';
+import { SHARED_TROPE_ROWS } from './sharedTropes.js';
 
 export const GENRES = [
   { id: 'horror', label: 'Horror' },
@@ -107,7 +108,7 @@ const RAW_TROPES = [
   t('Babysitter left alone', 'horror', ['general']),
   t('No one believes the victim', 'horror', ['general']),
   t('Hiding in a closet', 'horror', ['general', 'slasher']),
-  t('Cat causes a fake scare', 'horror', ['general']),
+  t('Fake scare', 'horror', ['general']),
   t('A locked door fails', 'horror', ['general']),
   t('A family secret', 'horror', ['general', 'supernatural']),
   t('An abandoned building', 'horror', ['general', 'psychological']),
@@ -182,7 +183,7 @@ const RAW_TROPES = [
   t('A "killer is dead" fake-out', 'horror', ['slasher']),
   t('Killer picked the perfect night', 'horror', ['slasher']),
   t('A costume party setting', 'horror', ['slasher']),
-  t('A getaway route already planned', 'horror', ['slasher']),
+  t('Every escape route is blocked', 'horror', ['slasher']),
 
   // ---------- Supernatural / Haunted House ----------
   t('Mirror jump scare', 'horror', ['supernatural']),
@@ -1617,6 +1618,9 @@ const RAW_TROPES = [
   t('Weather-beaten researcher on camera', 'documentary', ['nature']),
   t('Final "circle of life" narration', 'documentary', ['nature']),
   t('Stunning sunset over landscape', 'documentary', ['nature']),
+
+  ...SHARED_TROPE_ROWS,
+
   ...EXPANDED_TROPES,
 ];
 

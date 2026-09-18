@@ -18,9 +18,9 @@ free on GitHub Pages.
   Tapping a trope always shows its description; opting in also adds an action to add or remove that wager.
 - During the game, tapping a space shows the trope description, then lets the player claim that trope happened; other players vote to confirm.
   A majority is required to mark it — and it marks that same trope on every board that has it.
-- Players can view accepted tropes; Advanced Gameplay additionally exposes the full trope pool, everyone's wagers,
-  activity history, whole-board swaps, and profile changes. Most trope list items open the same description window
-  and can be used to propose swapping a trope out.
+- Players can view accepted tropes; Advanced Options additionally exposes the full trope pool, everyone's wagers,
+  activity history, game stats, and whole-board swaps. Unaccepted trope list items open the same
+  description window and can be used to propose swapping a trope out.
 - Mid-game changes such as custom trope submissions, wager changes, and whole-board swaps go through the same
   majority-vote flow.
 - Bingos are detected automatically. Everyone sees the celebration banner, and the player list/final recap show each player's bingo count.
@@ -37,9 +37,20 @@ free on GitHub Pages.
 - **Activity feed:** approved marks, swaps, wager changes, resets, and other notable events are logged for anyone who looked away.
 - **Reactions:** quick emoji reactions broadcast briefly to everyone without starting a vote.
 - **Recap:** the host can end the game to show everyone final marked counts, bingo counts, and wager hits.
+- **Stats:** Advanced Options includes a shared current-game dashboard. Players can tap another player's name to
+  view their current metrics; hosts get the same read-only view from player management.
+- **Calls:** during a game, a trope's `Advanced actions` menu lets any player call one trope they expect next. The called
+  space is outlined only on their board; accepted calls are tracked as a metric, and a call can be withdrawn.
+- **Vote reasons:** choosing Disagree opens an optional, anonymous set of preset reasons. The group sees only the
+  aggregate reasons, never which player selected one.
+- **Marathon mode:** enable it in Advanced Host Setup to retain completed-watch metrics across game resets. The
+  Marathon History view tracks each player's completed watches, accepted tropes, bingos, and wager hits without
+  assigning points or a winner.
 - **Co-hosts:** a host can add other connected players as hosts. Every host has the same host controls, can add more
   hosts, and can resign once another host remains.
 - **PWA support:** the site includes a web app manifest and service worker so it can be installed via "Add to Home Screen" / browser install prompts. The app still needs network access for live multiplayer relay traffic.
+- **Notifications:** sound alerts can be muted from the header. iPhone/iPad browsers do not provide reliable webpage
+  vibration support, so the app also uses visible vote prompts and a tab-title alert when an answer is needed.
 
 ## Supabase setup (required)
 
@@ -107,8 +118,8 @@ npm run build
 
 This outputs a static site to `dist/`. Since `vite.config.js` uses relative asset paths
 (`base: './'`), the built site works when hosted from any subpath, including a GitHub Pages
-project site (`https://<user>.github.io/<repo>/`). Push the contents of `dist/` to your `gh-pages`
-branch (or configure a GitHub Actions workflow to build and deploy automatically) to publish it.
+project site (`https://<user>.github.io/<repo>/`). This repository's `Deploy to GitHub Pages`
+workflow builds and publishes automatically whenever changes are pushed to `main`.
 
 ## Notes & limitations
 

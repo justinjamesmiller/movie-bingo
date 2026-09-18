@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getEligibleTropeTexts } from '../data/tropes.js';
 import { resetFakeSupabase } from '../test/fakeSupabase.js';
 
 vi.mock('@supabase/supabase-js', async () => {
@@ -155,6 +154,29 @@ describe('GameClient', () => {
     expect(host.state.players[host.myId].wagered).toEqual([]);
   });
 
+  it('tracks a call, lets the player withdraw it, and records a correct call on approval', async () => {
+    const host = makeTrackedClient();
+    await host.client.hostGame('Alice', ['horror'], [], false, { horror: 50 }, 25);
+    host.client.startGame();
+    await flush();
+    const text = host.state.players[host.myId].board[0];
+
+    host.client.toggleCall(text);
+    await flush();
+    expect(host.state.calls[host.myId]).toBe(text);
+    expect(host.state.callStats[host.myId].made).toBe(1);
+
+    host.client.toggleCall(text);
+    await flush();
+    expect(host.state.calls[host.myId]).toBeUndefined();
+
+    host.client.toggleCall(text);
+    host.client.claim(0);
+    await flush();
+    expect(host.state.calls[host.myId]).toBeUndefined();
+    expect(host.state.callStats[host.myId]).toMatchObject({ made: 2, correct: 1 });
+  });
+
   it('caps wagers at 5 and ignores the free-space index', async () => {
     const host = makeTrackedClient();
     await host.client.hostGame('Alice', ['horror'], [], true, { horror: 50 }, 25);
@@ -178,6 +200,28 @@ describe('GameClient', () => {
 
     expect(host.state.started).toBe(true);
     expect(guest.state.started).toBe(true);
+  });
+
+  it('updates movie theme metadata without changing the active board configuration', async () => {
+    const host = makeTrackedClient();
+    await host.client.hostGame('Alice', ['horror'], [], false, { horror: 50 }, 25);
+    const originalBoard = [...host.state.players[host.myId].board];
+
+    host.client.updateMovie({
+      title: 'Example Show',
+      type: 'series',
+      genres: ['drama', 'tv'],
+      subgenreSelections: [{ genre: 'drama', subgenre: 'family-drama' }],
+    });
+    await flush();
+
+    expect(host.state.movie).toMatchObject({
+      title: 'Example Show',
+      themeGenres: ['drama', 'tv'],
+      themeSubgenreSelections: [{ genre: 'drama', subgenre: 'family-drama' }],
+    });
+    expect(host.state.genres).toEqual(['horror']);
+    expect(host.state.players[host.myId].board).toEqual(originalBoard);
   });
 
   it('resolves a claim as approved once a majority votes yes, and marks it on every matching board', async () => {
@@ -214,6 +258,97 @@ describe('GameClient', () => {
     expect(hostResolved.approvedBy.map((player) => player.name)).toEqual(['Alice', 'Bob']);
     expect(guestResolved.approvedBy.map((player) => player.name)).toEqual(['Alice', 'Bob']);
     expect(host.state.activityLog.at(-1).text).toContain('Approved by Alice and Bob.');
+  });
+
+  it('shares anonymous decline rationale totals with every player after a rejected claim', async () => {
+    const host = makeTrackedClient();
+    const code = await host.client.hostGame('Alice', ['horror'], [], false, { horror: 50 }, 25);
+    const guest = makeTrackedClient();
+    await guest.client.joinGame(code, 'Bob');
+    await flush();
+    host.client.startGame();
+    await flush();
+
+    host.client.claim(0);
+    await flush();
+    guest.client.vote(host.state.pendingClaim.claimId, false, 'Not clear enough');
+    await flush();
+
+    const hostResult = host.events.find((event) => event.type === 'claimResolved' && !event.approved);
+    const guestResult = guest.events.find((event) => event.type === 'claimResolved' && !event.approved);
+    expect(hostResult.disagreeRationaleCounts).toEqual({ 'Not clear enough': 1 });
+    expect(guestResult.disagreeRationaleCounts).toEqual({ 'Not clear enough': 1 });
+    expect(hostResult.disagreeRationaleCounts).not.toHaveProperty(guest.myId);
+  });
+
+  it('keeps a submitted vote and its anonymous rationale immutable', async () => {
+    const host = makeTrackedClient();
+    const code = await host.client.hostGame('Alice', ['horror'], [], false, { horror: 50 }, 25);
+    const guest = makeTrackedClient();
+    await guest.client.joinGame(code, 'Bob');
+    await flush();
+    const third = makeTrackedClient();
+    await third.client.joinGame(code, 'Charlie');
+    await flush();
+    host.client.startGame();
+    await flush();
+
+    host.client.claim(0);
+    await flush();
+    const claimId = host.state.pendingClaim.claimId;
+    guest.client.vote(claimId, false, 'Not on screen');
+    guest.client.vote(claimId, true);
+    await flush();
+
+    expect(host.state.pendingClaim.votes[guest.myId]).toBe(false);
+    expect(host.state.pendingClaim.disagreeRationaleCounts).toEqual({ 'Not on screen': 1 });
+    expect(host.state.pendingClaim.disagreeRationaleCounts).not.toHaveProperty(guest.myId);
+    third.client.vote(claimId, false);
+    await flush();
+
+    const result = host.events.find((event) => event.type === 'claimResolved' && !event.approved);
+    expect(result.disagreeRationaleCounts).toEqual({ 'Not on screen': 1 });
+  });
+
+  it('sends an empty rationale summary when a claim is declined without reasons', async () => {
+    const host = makeTrackedClient();
+    const code = await host.client.hostGame('Alice', ['horror'], [], false, { horror: 50 }, 25);
+    const guest = makeTrackedClient();
+    await guest.client.joinGame(code, 'Bob');
+    await flush();
+    host.client.startGame();
+    await flush();
+
+    host.client.claim(0);
+    await flush();
+    guest.client.vote(host.state.pendingClaim.claimId, false);
+    await flush();
+
+    const result = host.events.find((event) => event.type === 'claimResolved' && !event.approved);
+    expect(result.disagreeRationaleCounts).toEqual({});
+  });
+
+  it('merges simultaneous proposals for the same trope as automatic approvals', async () => {
+    const host = makeTrackedClient();
+    const code = await host.client.hostGame('Alice', ['horror'], [], false, { horror: 50 }, 25);
+    const guest = makeTrackedClient();
+    await guest.client.joinGame(code, 'Bob');
+    await flush();
+    host.client.startGame();
+    await flush();
+
+    const hostText = host.state.players[host.myId].board[0];
+    const guestIndex = guest.state.players[guest.myId].board.indexOf(hostText);
+    host.client.claim(0);
+    await flush();
+    guest.client.claim(guestIndex);
+    await flush();
+
+    expect(host.state.pendingClaim).toBeNull();
+    expect(host.state.acceptedTropes).toContain(hostText);
+    const resolved = host.events.find((event) => event.type === 'claimResolved' && event.approved);
+    expect(resolved.proposedBy).toEqual([host.myId, guest.myId]);
+    expect(host.state.activityLog.some((entry) => entry.text.includes('also proposed'))).toBe(true);
   });
 
   it('does not emit a terminal fully-voted claim as still pending before resolving', async () => {
@@ -489,7 +624,7 @@ describe('GameClient', () => {
     expect(host.state.pendingClaim).toBeNull();
   });
 
-  it('marks a replacement trope that the group had already accepted', async () => {
+  it('does not allow an accepted trope to be proposed for replacement', async () => {
     const host = makeTrackedClient();
     const code = await host.client.hostGame('Alice', ['horror'], [], false, { horror: 50 }, 40);
     const guest = makeTrackedClient();
@@ -498,19 +633,13 @@ describe('GameClient', () => {
     host.client.startGame();
     await flush();
 
-    // Treat every trope the swap could draw from as already accepted, so the
-    // randomly-picked replacement is guaranteed to be one of them.
-    host.client.state.acceptedTropes = [...getEligibleTropeTexts('horror', 'general')];
     const oldText = host.state.players[host.myId].board[0];
+    host.client.state.acceptedTropes = [oldText];
 
     host.client.proposeReplace(oldText, 'horror', 'general');
     await flush();
-    guest.client.vote(guest.state.pendingClaim.claimId, true);
-    await flush();
-
-    const me = host.state.players[host.myId];
-    expect(me.board[0]).not.toBe(oldText);
-    expect(me.marked).toContain(0);
+    expect(host.state.pendingClaim).toBeNull();
+    expect(host.state.pendingReplacement).toBeNull();
   });
 });
 
@@ -607,6 +736,43 @@ describe('GameClient connection stability', () => {
     expect(guest.client.isHost()).toBe(false);
   });
 
+  it('restores an active claim prompt when a player reconnects mid-vote', async () => {
+    const { host, guest } = await twoPlayerGame();
+    const text = host.state.players[host.myId].board[0];
+    host.client.claim(0);
+    await flush();
+    expect(host.state.pendingClaim?.text).toBe(text);
+
+    guest.client.destroy();
+    const returning = makeTrackedClient();
+    await returning.client.rejoinGame();
+
+    expect(returning.state.pendingClaim?.text).toBe(text);
+    expect(returning.state.pendingClaim?.kind).toBe('mark');
+    expect(returning.state.pendingClaim?.votes[host.myId]).toBe(true);
+  });
+
+  it('can pause automatic reconnect attempts and resume them on demand', async () => {
+    const host = makeTrackedClient();
+    host.client.state = { players: { [host.client.myId]: { id: host.client.myId } } };
+    host.client.code = 'ABCD';
+    host.client.channel = { state: 'closed' };
+    host.client._reconnect = vi.fn();
+
+    vi.useFakeTimers();
+    host.client._scheduleReconnect();
+    expect(host.client._reconnectTimer).not.toBeNull();
+    host.client.cancelReconnect();
+    expect(host.client._reconnectTimer).toBeNull();
+
+    await vi.advanceTimersByTimeAsync(20000);
+    expect(host.client._reconnectTimer).toBeNull();
+
+    host.client.retryReconnect();
+    expect(host.client._reconnect).toHaveBeenCalledOnce();
+    expect(host.client._reconnectPaused).toBe(false);
+  });
+
   // The old failure mode: everyone else still considered the host connected, so
   // no client satisfied isHost() to answer, and the rejoin timed out.
   it('answers a host rejoin even while peers still consider that host connected', async () => {
@@ -634,6 +800,18 @@ describe('GameClient connection stability', () => {
     expect(guest.state.gameOver).toBe(true);
     expect(GameClient.getSavedSession()).toBeNull();
     expect(GameClient.getSavedSnapshot()).toBeNull();
+  });
+
+  it('restarts the session expiry countdown when the host updates its lifetime', async () => {
+    const host = makeTrackedClient();
+    await host.client.hostGame('Alice', ['horror'], [], false, { horror: 50 }, 25);
+    const previousExpiry = host.state.sessionExpiresAt;
+
+    host.client.updateSessionLifetime(true, 168);
+
+    expect(host.state.sessionExtended).toBe(true);
+    expect(host.state.sessionLifetimeHours).toBe(168);
+    expect(host.state.sessionExpiresAt).toBeGreaterThan(previousExpiry);
   });
 
   it('lets the host resume an ended game for after-credits tropes', async () => {
@@ -750,6 +928,28 @@ describe('GameClient connection stability', () => {
 
     expect(host.state.genres).toEqual(['comedy']);
     expect(guest.state.genres).toEqual(['comedy']);
+    expect(host.state.started).toBe(false);
+  });
+
+  it('records completed marathon scores when the host resets the game', async () => {
+    const host = makeTrackedClient();
+    await host.client.hostGame('Alice', ['horror'], [], false, { horror: 50 }, 25, [], {}, {}, null, true);
+    host.client.startGame();
+    await flush();
+    host.client.state.acceptedTropes = [host.client.state.players[host.myId].board[0]];
+    host.client.state.players[host.myId].marked = [0];
+
+    host.client.resetGame(['horror'], [], false, { horror: 50 }, 25, [], {}, {}, null);
+    await flush();
+
+    expect(host.state.marathon.watches).toHaveLength(1);
+    expect(host.state.marathon.watches[0].players[0]).toMatchObject({
+      id: host.myId,
+      tropes: 1,
+      bingos: 0,
+      wagerHits: 0,
+    });
+    expect(host.state.marathon.watches[0].players[0]).not.toHaveProperty('points');
     expect(host.state.started).toBe(false);
   });
 

@@ -12,6 +12,8 @@ export default function TropeInfoModal({
   onConfirm,
   onCancel,
   onProposeSwap,
+  onAdvancedActions,
+  actionsAvailable = true,
   playerCount = 2,
 }) {
   const isSolo = playerCount === 1;
@@ -60,11 +62,17 @@ export default function TropeInfoModal({
             {onConfirm ? 'Cancel' : 'Close'}
           </button>
         </div>
-        {onProposeSwap && (
-          <button className="btn secondary-action" onClick={onProposeSwap}>
-            🔁 {isSolo ? 'Swap this trope out' : 'Propose swapping this trope out'}
+        {actionsAvailable && onAdvancedActions ? (
+          <button className="btn secondary-action" onClick={onAdvancedActions}>
+            ⋯ Advanced actions
           </button>
-        )}
+        ) : actionsAvailable ? (
+          onProposeSwap && (
+            <button className="btn secondary-action" onClick={onProposeSwap}>
+              🔁 {isSolo ? 'Swap this trope out' : 'Propose swapping this trope out'}
+            </button>
+          )
+        ) : null}
       </div>
     </ModalShell>
   );

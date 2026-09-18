@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import ClaimModal from './ClaimModal.jsx';
 
@@ -54,5 +54,41 @@ describe('ClaimModal', () => {
     expect(screen.getByText('Finalizing the result…')).toBeInTheDocument();
     expect(screen.getByText(/2 agree so far \(2\/2 voted, majority reached\)/)).toBeInTheDocument();
     expect(screen.queryByText(/majority needed/i)).toBeNull();
+  });
+
+  it('uses a distinct visual treatment for trope swaps', () => {
+    render(
+      <ClaimModal
+        pendingClaim={pendingClaim({ kind: 'replace', genre: 'horror', subgenre: 'slasher' })}
+        myId="p2"
+        players={players}
+        onAgree={vi.fn()}
+        onDisagree={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('TROPE SWAP')).toBeInTheDocument();
+    expect(screen.getByText('TROPE SWAP').closest('.modal-content')).toHaveClass('swap-claim-modal');
+    expect(screen.getByRole('button', { name: '👍 Agree, swap it out' })).toHaveClass('swap-agree');
+    expect(screen.getByRole('button', { name: '👎 Keep it as is' })).toHaveClass('swap-disagree');
+  });
+
+  it('offers optional anonymous reasons after a player disagrees', () => {
+    const onDisagree = vi.fn();
+    render(
+      <ClaimModal
+        pendingClaim={pendingClaim()}
+        myId="p2"
+        players={players}
+        onAgree={vi.fn()}
+        onDisagree={onDisagree}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '👎 Disagree' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Not clear enough' }));
+    expect(onDisagree).toHaveBeenCalledWith('Not clear enough');
   });
 });

@@ -1,6 +1,6 @@
 import ModalShell from './ModalShell.jsx';
 
-export default function PlayerManagementModal({ player, isHost, onAddHost, onProposeProfile, onCancel }) {
+export default function PlayerManagementModal({ player, isHost, onAddHost, onProposeProfile, onViewStats, onCancel }) {
   return (
     <ModalShell onClose={onCancel}>
       <div className="modal-content">
@@ -11,6 +11,9 @@ export default function PlayerManagementModal({ player, isHost, onAddHost, onPro
               👑 Add Host
             </button>
           )}
+          <button className="btn" onClick={onViewStats}>
+            📊 View Stats
+          </button>
           <button className="btn" onClick={onProposeProfile}>
             Propose Name &amp; Avatar
           </button>

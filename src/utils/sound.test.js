@@ -6,10 +6,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // actually "played" without needing real audio output.
 class FakeAudioContext {
   constructor() {
-    this.state = 'running';
+    this.state = FakeAudioContext.initialState;
     this.currentTime = 0;
     this.destination = {};
     this.oscillatorsCreated = 0;
+    this.resume = vi.fn(() => {
+      this.state = 'running';
+      return Promise.resolve();
+    });
+    FakeAudioContext.lastInstance = this;
   }
 
   createOscillator() {
@@ -29,11 +34,10 @@ class FakeAudioContext {
       connect: vi.fn(),
     };
   }
-
-  resume() {
-    return Promise.resolve();
-  }
 }
+
+FakeAudioContext.initialState = 'running';
+FakeAudioContext.lastInstance = null;
 
 async function freshSound() {
   vi.resetModules();
@@ -44,6 +48,8 @@ async function freshSound() {
 describe('sound', () => {
   beforeEach(() => {
     localStorage.clear();
+    FakeAudioContext.initialState = 'running';
+    FakeAudioContext.lastInstance = null;
     delete window.AudioContext;
     delete window.webkitAudioContext;
   });
@@ -92,6 +98,15 @@ describe('sound', () => {
       playBingoSound();
       playGameOverSound();
     }).not.toThrow();
+  });
+
+  it('resumes an interrupted audio context before playing an alert', async () => {
+    FakeAudioContext.initialState = 'interrupted';
+    const { playApprovedSound } = await freshSound();
+
+    playApprovedSound();
+
+    expect(FakeAudioContext.lastInstance.resume).toHaveBeenCalledTimes(1);
   });
 
   it('does nothing when no AudioContext is available at all', async () => {

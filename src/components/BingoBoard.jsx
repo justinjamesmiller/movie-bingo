@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { CENTER_INDEX } from '../data/tropes.js';
 
-function BingoCell({ index, text, isFreeSpace, wagered, marked, pending, flash, onLine, onCellClick }) {
+function BingoCell({ index, text, isFreeSpace, wagered, marked, called, pending, flash, onLine, onCellClick }) {
   const classes = ['bingo-cell'];
   if (wagered) classes.push('wagered');
   if (marked) classes.push('marked');
+  if (called) classes.push('called');
   if (isFreeSpace) classes.push('free-space');
   if (pending) classes.push('pending');
   if (flash) classes.push('flash');
@@ -16,7 +17,16 @@ function BingoCell({ index, text, isFreeSpace, wagered, marked, pending, flash, 
   );
 }
 
-export default function BingoBoard({ board, wagered, marked, freeSpace, pending, highlightedCells, onCellClick }) {
+export default function BingoBoard({
+  board,
+  wagered,
+  marked,
+  calledIndexes = [],
+  freeSpace,
+  pending,
+  highlightedCells,
+  onCellClick,
+}) {
   const prevMarkedRef = useRef(marked);
   const [flashSet, setFlashSet] = useState(new Set());
 
@@ -40,6 +50,7 @@ export default function BingoBoard({ board, wagered, marked, freeSpace, pending,
           isFreeSpace={freeSpace && index === CENTER_INDEX}
           wagered={wagered.includes(index)}
           marked={marked.includes(index)}
+          called={calledIndexes.includes(index)}
           pending={pending}
           flash={flashSet.has(index)}
           onLine={!!highlightedCells?.has(index)}

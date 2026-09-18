@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { areTropeDescriptionsLoaded, getTropeDescription, loadTropeDescriptions } from './tropeDescriptions.js';
 import { TROPES } from './tropes.js';
+import { SHARED_TROPE_DESCRIPTIONS } from './sharedTropes.js';
 
 describe('trope descriptions', () => {
   let descriptions;
@@ -53,5 +54,11 @@ describe('trope descriptions', () => {
   it('covers every trope in the game, so no player ever sees a blank explanation', () => {
     const missing = TROPES.filter((t) => !getTropeDescription(t.text)).map((t) => `${t.genre}: ${t.text}`);
     expect(missing).toEqual([]);
+  });
+
+  it('uses the canonical descriptions for shared tropes', () => {
+    for (const [text, entry] of Object.entries(SHARED_TROPE_DESCRIPTIONS)) {
+      expect(descriptions[text]).toEqual(entry);
+    }
   });
 });

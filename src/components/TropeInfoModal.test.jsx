@@ -65,8 +65,43 @@ describe('TropeInfoModal', () => {
     expect(onProposeSwap).toHaveBeenCalledTimes(1);
   });
 
+  it('uses compact advanced actions in place of the direct swap action when provided', () => {
+    const onAdvancedActions = vi.fn();
+    render(
+      <TropeInfoModal
+        text="Jump Scare"
+        marked={false}
+        onConfirm={vi.fn()}
+        onCancel={vi.fn()}
+        onProposeSwap={vi.fn()}
+        onAdvancedActions={onAdvancedActions}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '⋯ Advanced actions' }));
+    expect(onAdvancedActions).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('button', { name: /Propose swapping this trope out/i })).toBeNull();
+  });
+
   it('hides the swap action when no handler is given', () => {
     render(<TropeInfoModal text="Jump Scare" marked={false} onConfirm={vi.fn()} onCancel={vi.fn()} />);
+    expect(screen.queryByRole('button', { name: /Propose swapping/i })).toBeNull();
+  });
+
+  it('hides call and swap actions for an accepted trope', () => {
+    render(
+      <TropeInfoModal
+        text="Jump Scare"
+        marked
+        actionsAvailable={false}
+        onConfirm={vi.fn()}
+        onCancel={vi.fn()}
+        onProposeSwap={vi.fn()}
+        onAdvancedActions={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: '⋯ Advanced actions' })).toBeNull();
     expect(screen.queryByRole('button', { name: /Propose swapping/i })).toBeNull();
   });
 });

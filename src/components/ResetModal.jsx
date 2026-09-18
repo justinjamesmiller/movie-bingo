@@ -4,6 +4,7 @@ import MovieLookup from './MovieLookup.jsx';
 import GenreSubgenrePicker from './GenreSubgenrePicker.jsx';
 import GeneralPercentSliders from './GeneralPercentSliders.jsx';
 import CustomTropesEditor from './CustomTropesEditor.jsx';
+import { balancedRatios } from '../utils/ratios.js';
 import ModalShell from './ModalShell.jsx';
 
 export default function ResetModal({
@@ -11,6 +12,8 @@ export default function ResetModal({
   currentSubgenreSelections,
   currentFreeSpace,
   currentGeneralPercents,
+  currentGenrePercents,
+  currentSubgenrePercents,
   currentTotalTropes,
   onConfirm,
   onCancel,
@@ -21,8 +24,13 @@ export default function ResetModal({
   const [generalPercents, setGeneralPercents] = useState(
     currentGeneralPercents || { [GENRES[0].id]: DEFAULT_GENERAL_PERCENT },
   );
+  const [genrePercents, setGenrePercents] = useState(
+    currentGenrePercents || balancedRatios(currentGenres?.length ? currentGenres : [GENRES[0].id]),
+  );
+  const [subgenrePercents, setSubgenrePercents] = useState(currentSubgenrePercents || {});
   const [totalTropes, setTotalTropes] = useState(currentTotalTropes ?? DEFAULT_TOTAL_TROPES);
   const [customTropes, setCustomTropes] = useState([]);
+  const [movie, setMovie] = useState(null);
 
   function ensurePercentsFor(nextGenres) {
     setGeneralPercents((prev) => {
@@ -37,12 +45,22 @@ export default function ResetModal({
     setGenres(safeGenres);
     setSubgenreSelections(foundSubgenreSelections || []);
     ensurePercentsFor(safeGenres);
+    setGenrePercents(balancedRatios(safeGenres));
   }
 
   function handleGenreSubgenreChange(nextGenres, nextSelections) {
     setGenres(nextGenres);
     setSubgenreSelections(nextSelections);
     ensurePercentsFor(nextGenres);
+    setGenrePercents(balancedRatios(nextGenres));
+    setSubgenrePercents(() => {
+      const next = {};
+      for (const genre of nextGenres) {
+        const keys = ['general', ...nextSelections.filter((s) => s.genre === genre).map((s) => s.subgenre)];
+        next[genre] = balancedRatios(keys);
+      }
+      return next;
+    });
   }
 
   return (
@@ -50,7 +68,7 @@ export default function ResetModal({
       <div className="modal-content">
         <h3>Reset the game?</h3>
         <p className="hint">This deals fresh boards and clears all marks and wagers for every player.</p>
-        <MovieLookup onFound={handleMovieFound} />
+        <MovieLookup onFound={handleMovieFound} onMovieSelected={setMovie} />
         <GenreSubgenrePicker
           genres={genres}
           subgenreSelections={subgenreSelections}
@@ -63,8 +81,12 @@ export default function ResetModal({
         <GeneralPercentSliders
           genres={genres}
           subgenreSelections={subgenreSelections}
-          generalPercents={generalPercents}
-          onChange={(genreId, value) => setGeneralPercents((prev) => ({ ...prev, [genreId]: value }))}
+          genrePercents={genrePercents}
+          subgenrePercents={subgenrePercents}
+          onChange={(nextGenres, nextSubgenres) => {
+            setGenrePercents(nextGenres);
+            setSubgenrePercents(nextSubgenres);
+          }}
         />
         <label htmlFor="reset-total-tropes">Total unique tropes in play</label>
         <select id="reset-total-tropes" value={totalTropes} onChange={(e) => setTotalTropes(Number(e.target.value))}>
@@ -78,7 +100,19 @@ export default function ResetModal({
         <div className="claim-vote-buttons cancel-claim-btn">
           <button
             className="btn disagree"
-            onClick={() => onConfirm(genres, subgenreSelections, freeSpace, generalPercents, totalTropes, customTropes)}
+            onClick={() =>
+              onConfirm(
+                genres,
+                subgenreSelections,
+                freeSpace,
+                generalPercents,
+                totalTropes,
+                customTropes,
+                genrePercents,
+                subgenrePercents,
+                movie,
+              )
+            }
           >
             Reset Game
           </button>

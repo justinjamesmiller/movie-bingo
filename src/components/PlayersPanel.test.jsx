@@ -66,6 +66,13 @@ describe('PlayersPanel', () => {
     expect(screen.getByText('0 marked · 0 bingos · 0/1 wagered marked')).toBeInTheDocument();
   });
 
+  it('shows call metrics only after a player makes a call', () => {
+    renderPanel({ callStats: { p1: { made: 2, correct: 1 } } });
+
+    expect(screen.getByText(/2 marked.*📣 1\/2 calls/)).toBeInTheDocument();
+    expect(screen.getByText('0 marked · 0 bingos · 0/1 wagered marked')).not.toHaveTextContent('calls');
+  });
+
   it('opens the profile editor when the current player clicks their name or avatar', () => {
     const onEditSelf = vi.fn();
     renderPanel({ onEditSelf });

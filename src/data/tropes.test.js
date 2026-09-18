@@ -17,6 +17,7 @@ import {
   tropeHasSubgenre,
   TROPES,
 } from './tropes.js';
+import { SHARED_TROPE_DESCRIPTIONS, SHARED_TROPES } from './sharedTropes.js';
 
 describe('GENRES / SUBGENRES_BY_GENRE data integrity', () => {
   it('has a subgenre list (including "general") for every genre', () => {
@@ -41,6 +42,32 @@ describe('GENRES / SUBGENRES_BY_GENRE data integrity', () => {
     expect(shared.genres).toEqual(expect.arrayContaining(['horror', 'action']));
     expect(tropeHasSubgenre(shared, 'horror', 'zombie')).toBe(true);
     expect(tropeHasSubgenre(shared, 'action', 'general')).toBe(true);
+  });
+
+  it('defines each canonical shared trope once with its explanation and memberships', () => {
+    const texts = new Set();
+    const memberships = new Set();
+    for (const shared of SHARED_TROPES) {
+      const trope = TROPES.find((candidate) => candidate.text === shared.text);
+      expect(texts.has(shared.text), `duplicate shared trope: ${shared.text}`).toBe(false);
+      texts.add(shared.text);
+      expect(shared.what).toBeTruthy();
+      expect(shared.example).toBeTruthy();
+      expect(shared.memberships.length).toBeGreaterThan(0);
+      expect(trope).toBeDefined();
+      for (const [genre, subgenres] of shared.memberships) {
+        expect(GENRES.some((candidate) => candidate.id === genre)).toBe(true);
+        expect(subgenres.length).toBeGreaterThan(0);
+        for (const subgenre of subgenres) {
+          const membership = `${shared.text}:${genre}:${subgenre}`;
+          expect(memberships.has(membership), `duplicate shared membership: ${membership}`).toBe(false);
+          memberships.add(membership);
+          expect(SUBGENRES_BY_GENRE[genre].some((candidate) => candidate.id === subgenre)).toBe(true);
+          expect(tropeHasSubgenre(trope, genre, subgenre)).toBe(true);
+        }
+      }
+    }
+    expect(Object.keys(SHARED_TROPE_DESCRIPTIONS)).toHaveLength(SHARED_TROPES.length);
   });
 
   it('has every genre referenced by at least one trope, and every trope genre membership is known', () => {
@@ -131,17 +158,17 @@ describe('pickTropePool', () => {
     const horrorGeneralOnlyTexts = new Set(
       TROPES.filter((tr) => {
         const subgenres = getTropeSubgenres(tr, 'horror');
-        return subgenres.length === 1 && subgenres[0] === 'general';
+        return subgenres.length === 1 && subgenres[0] === 'general' && !tropeHasSubgenre(tr, 'comedy', 'general');
       }).map((tr) => tr.text),
     );
     const comedyGeneralTexts = new Set(
       TROPES.filter((tr) => tropeHasSubgenre(tr, 'comedy', 'general')).map((tr) => tr.text),
     );
-    const horrorInPool = pool.filter((text) => TROPES.some((tr) => tr.text === text && tropeHasGenre(tr, 'horror')));
     const comedyInPool = pool.filter((text) => TROPES.some((tr) => tr.text === text && tropeHasGenre(tr, 'comedy')));
 
-    // Horror at 0% general should never draw a general-only trope.
-    expect(horrorInPool.every((text) => !horrorGeneralOnlyTexts.has(text))).toBe(true);
+    // Horror at 0% general should never draw a horror-only general trope.
+    // Shared Horror/Comedy tropes can still be selected from Comedy's allocation.
+    expect(pool.every((text) => !horrorGeneralOnlyTexts.has(text))).toBe(true);
     // Comedy at 100% general should draw exclusively from its general pool.
     expect(comedyInPool.every((text) => comedyGeneralTexts.has(text))).toBe(true);
   });

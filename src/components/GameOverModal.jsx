@@ -3,8 +3,19 @@
 // replicated to every client (no protocol changes needed beyond the
 // gameOver flag itself).
 import ModalShell from './ModalShell.jsx';
+import SuperlativeBadge from './SuperlativeBadge.jsx';
 
-export default function GameOverModal({ players, bingoCounts = {}, onClose }) {
+export default function GameOverModal({
+  players,
+  bingoCounts = {},
+  callStats = {},
+  superlatives = {},
+  movie,
+  isHost = false,
+  onMovieClick,
+  onSuperlativeClick,
+  onClose,
+}) {
   const withStats = players.map((p) => {
     const wageredHit = p.wagered.filter((i) => p.marked.includes(i)).length;
     return {
@@ -13,6 +24,8 @@ export default function GameOverModal({ players, bingoCounts = {}, onClose }) {
       bingoCount: bingoCounts[p.id] || 0,
       wageredHit,
       wageredTotal: p.wagered.length,
+      callsMade: callStats[p.id]?.made || 0,
+      correctCalls: callStats[p.id]?.correct || 0,
     };
   });
   const topMarked = Math.max(0, ...withStats.map((p) => p.markedCount));
@@ -23,6 +36,15 @@ export default function GameOverModal({ players, bingoCounts = {}, onClose }) {
     <ModalShell onClose={onClose}>
       <div className="modal-content list-modal">
         <h3>🏁 Game Over — Recap</h3>
+        {movie && (
+          <button
+            className={`recap-movie${isHost ? ' recap-movie-editable' : ''}`}
+            onClick={() => isHost && onMovieClick?.()}
+          >
+            {movie.poster && <img src={movie.poster} alt="" />}
+            <span>{movie.title}</span>
+          </button>
+        )}
         <div className="modal-scroll-area">
           <ul className="recap-list">
             {withStats.map((p) => (
@@ -36,8 +58,11 @@ export default function GameOverModal({ players, bingoCounts = {}, onClose }) {
                 </div>
                 <div className="hint">
                   {p.markedCount} tropes marked · {p.bingoCount} bingo{p.bingoCount === 1 ? '' : 's'} · {p.wageredHit}/
-                  {p.wageredTotal} wagers hit
+                  {p.wageredTotal} wagers hit · 📣 {p.correctCalls}/{p.callsMade} calls
                 </div>
+                {superlatives[p.id] && (
+                  <SuperlativeBadge award={superlatives[p.id]} onClick={() => onSuperlativeClick?.(p)} />
+                )}
               </li>
             ))}
           </ul>

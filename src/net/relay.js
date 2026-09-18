@@ -22,6 +22,8 @@ import {
   DEFAULT_TOTAL_TROPES,
 } from '../data/tropes.js';
 import { AVATAR_OPTIONS } from '../data/avatars.js';
+import { DEFAULT_SESSION_LIFETIME_HOURS, SESSION_LIFETIME_OPTIONS } from '../data/session.js';
+import { getCompletedLines } from '../utils/bingoLines.js';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -46,8 +48,11 @@ const SESSION_KEY = 'movie-bingo-session';
 const SESSION_BACKUP_KEY = 'movie-bingo-session-backup';
 const SNAPSHOT_KEY = 'movie-bingo-snapshot';
 const SNAPSHOT_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+const MAX_SESSION_LIFETIME_MS = Math.max(...SESSION_LIFETIME_OPTIONS.map((option) => option.hours * 60 * 60 * 1000));
+const MAX_TIMER_DELAY_MS = 2_000_000_000;
 const MAX_CUSTOM_TROPES = 20;
 const MAX_CUSTOM_TROPE_LENGTH = 60;
+const DISAGREE_RATIONALES = new Set(['Not on screen', 'Not clear enough', 'Need more context']);
 
 // Storage can be entirely unavailable (private browsing, blocked cookies) or
 // throw on write (quota), and none of it is worth failing a game over.
@@ -88,6 +93,10 @@ function isValidSubgenre(genre, subgenre) {
   return (SUBGENRES_BY_GENRE[genre] || []).some((s) => s.id === subgenre);
 }
 
+function isValidSessionLifetime(hours) {
+  return SESSION_LIFETIME_OPTIONS.some((option) => option.hours === hours);
+}
+
 // Picks a random avatar, preferring one not already in use by another
 // connected/seated player (falls back to the full pool once every avatar is
 // taken, e.g. more players than AVATAR_OPTIONS entries).
@@ -105,6 +114,30 @@ function markAlreadyAcceptedTropes(board, marked, acceptedTropes) {
   board.forEach((text, index) => {
     if (acceptedTropes.includes(text) && !marked.includes(index)) marked.push(index);
   });
+}
+
+function recordMarathonWatch(state) {
+  if (!state.marathon?.enabled || !state.started) return;
+  const watchNumber = state.marathon.watches.length + 1;
+  const players = Object.values(state.players).map((player) => {
+    const tropes = player.board.filter(
+      (text, index) => player.marked.includes(index) && state.acceptedTropes.includes(text),
+    ).length;
+    const bingos = getCompletedLines(player.marked).length;
+    const wagerHits = player.wagered.filter((index) => player.marked.includes(index)).length;
+    const calls = state.callStats?.[player.id] || {};
+    return {
+      id: player.id,
+      name: player.name,
+      avatar: player.avatar,
+      tropes,
+      bingos,
+      wagerHits,
+      callsMade: calls.made || 0,
+      correctCalls: calls.correct || 0,
+    };
+  });
+  state.marathon.watches.push({ number: watchNumber, movie: state.movie, completedAt: Date.now(), players });
 }
 
 function approvedPlayersFromVotes(players, votes) {
@@ -184,6 +217,15 @@ function randomId() {
   return 'p' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 }
 
+function shuffled(items) {
+  const result = items.slice();
+  for (let index = result.length - 1; index > 0; index--) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [result[index], result[swapIndex]] = [result[swapIndex], result[index]];
+  }
+  return result;
+}
+
 export class GameClient {
   constructor({ onState, onEvent } = {}) {
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
@@ -200,6 +242,9 @@ export class GameClient {
     this._pendingDisconnects = new Map();
     this._reconnectTimer = null;
     this._reconnectAttempts = 0;
+    this._reconnectPaused = false;
+    this._sessionExpiryTimer = null;
+    this._queuedActions = [];
     this._installLifecycleListeners();
   }
 
@@ -230,6 +275,7 @@ export class GameClient {
     this._destroyed = true;
     clearTimeout(this.claimTimeout);
     clearTimeout(this._reconnectTimer);
+    clearTimeout(this._sessionExpiryTimer);
     this._reconnectTimer = null;
     this._pendingDisconnects.forEach((timer) => clearTimeout(timer));
     this._pendingDisconnects.clear();
@@ -251,7 +297,9 @@ export class GameClient {
     const snap = readStore(localStore(), SNAPSHOT_KEY);
     if (!snap?.state || !snap.code) return null;
     if (code && snap.code !== code) return null;
-    if (Date.now() - (snap.savedAt || 0) > SNAPSHOT_MAX_AGE_MS) return null;
+    if (snap.state.sessionExpiresAt && Date.now() >= snap.state.sessionExpiresAt) return null;
+    const maxAge = snap.state.sessionExtended ? MAX_SESSION_LIFETIME_MS : SNAPSHOT_MAX_AGE_MS;
+    if (Date.now() - (snap.savedAt || 0) > maxAge) return null;
     return snap;
   }
 
@@ -314,6 +362,8 @@ export class GameClient {
     customTropes,
     genrePercents,
     subgenrePercents,
+    movie,
+    marathonEnabled = false,
   ) {
     const trimmedName = (name || '').trim();
     if (!trimmedName) throw new Error('Please enter your name.');
@@ -335,6 +385,8 @@ export class GameClient {
       safeCustomTropes,
       genrePercents,
       subgenrePercents,
+      movie,
+      marathonEnabled,
     );
     this._saveSession(code, trimmedName);
     this._emitState();
@@ -535,16 +587,41 @@ export class GameClient {
     this._dispatch({ t: 'challenge', text });
   }
 
-  vote(claimId, agree) {
-    this._dispatch({ t: 'vote', claimId, agree });
+  vote(claimId, agree, rationale) {
+    this._dispatch({ t: 'vote', claimId, agree, rationale });
+  }
+
+  toggleCall(text) {
+    this._dispatch({ t: 'toggleCall', text });
   }
 
   cancelClaim(claimId) {
     this._dispatch({ t: 'cancelClaim', claimId });
   }
 
-  resetGame(genres, subgenreSelections, freeSpace, generalPercents, totalTropes, customTropes) {
-    this._dispatch({ t: 'reset', genres, subgenreSelections, freeSpace, generalPercents, totalTropes, customTropes });
+  resetGame(
+    genres,
+    subgenreSelections,
+    freeSpace,
+    generalPercents,
+    totalTropes,
+    customTropes,
+    genrePercents,
+    subgenrePercents,
+    movie,
+  ) {
+    this._dispatch({
+      t: 'reset',
+      genres,
+      subgenreSelections,
+      freeSpace,
+      generalPercents,
+      totalTropes,
+      customTropes,
+      genrePercents,
+      subgenrePercents,
+      movie,
+    });
   }
 
   // `genre`/`subgenre` here can be ANY genre/sub-genre in the whole registry,
@@ -552,6 +629,18 @@ export class GameClient {
   // for something from a totally different genre is intentional.
   proposeReplace(text, genre, subgenre) {
     this._dispatch({ t: 'proposeReplace', text, genre, subgenre });
+  }
+
+  chooseReplacement(text) {
+    this._dispatch({ t: 'chooseReplacement', text });
+  }
+
+  cycleReplacement() {
+    this._dispatch({ t: 'cycleReplacement' });
+  }
+
+  cancelReplacement() {
+    this._dispatch({ t: 'cancelReplacement' });
   }
 
   proposeAccept(text) {
@@ -568,6 +657,14 @@ export class GameClient {
   // still be claimed without resetting the board or accepted-trope history.
   resumeGame() {
     this._dispatch({ t: 'resumeGame' });
+  }
+
+  updateSessionLifetime(extended, hours) {
+    this._dispatch({ t: 'updateSessionLifetime', extended: !!extended, hours });
+  }
+
+  updateMovie(movie) {
+    this._dispatch({ t: 'updateMovie', movie });
   }
 
   changeName(newName) {
@@ -641,6 +738,21 @@ export class GameClient {
     this.destroy();
   }
 
+  cancelReconnect() {
+    clearTimeout(this._reconnectTimer);
+    this._reconnectTimer = null;
+    this._reconnectPaused = true;
+    this.onEvent({ type: 'reconnectCancelled' });
+  }
+
+  retryReconnect() {
+    if (this._destroyed || !this.state || !this.code) return;
+    this._reconnectPaused = false;
+    this._reconnectAttempts = 0;
+    this._checkConnection();
+    this.onEvent({ type: 'reconnectStarted' });
+  }
+
   isHost() {
     if (!this.state) return false;
     const activeHostIds = this._hostIds().filter((id) => this.state.players[id]?.connected);
@@ -706,7 +818,7 @@ export class GameClient {
   // seat so whoever currently holds authority clears our disconnected flag --
   // recovering without the player having to refresh and reconnect by hand.
   _scheduleReconnect() {
-    if (this._destroyed || this._reconnectTimer || !this.state || !this.code) return;
+    if (this._destroyed || this._reconnectPaused || this._reconnectTimer || !this.state || !this.code) return;
     const delay = Math.min(RECONNECT_BASE_DELAY_MS * 2 ** this._reconnectAttempts, RECONNECT_MAX_DELAY_MS);
     this._reconnectAttempts += 1;
     this._reconnectTimer = setTimeout(() => {
@@ -716,24 +828,27 @@ export class GameClient {
   }
 
   async _reconnect() {
-    if (this._destroyed || !this.state || !this.code) return;
+    if (this._destroyed || this._reconnectPaused || !this.state || !this.code) return;
     const oldChannel = this.channel;
     try {
       await this._connectChannel(this.code);
     } catch {
-      this._scheduleReconnect();
+      if (!this._reconnectPaused) this._scheduleReconnect();
       return;
     }
+    if (this._reconnectPaused) return;
     if (oldChannel && oldChannel !== this.channel) this.supabase.removeChannel(oldChannel);
     this._announceSelf();
+    this._flushQueuedActions();
   }
 
   // Checks the subscription is genuinely still live and repairs it if not.
   _checkConnection() {
-    if (this._destroyed || !this.state || !this.code) return;
+    if (this._destroyed || this._reconnectPaused || !this.state || !this.code) return;
     if (this.channel?.state === 'joined') {
       this.channel.track({ id: this.myId });
       this._announceSelf();
+      this._flushQueuedActions();
       return;
     }
     clearTimeout(this._reconnectTimer);
@@ -777,11 +892,22 @@ export class GameClient {
 
   _dispatch(action) {
     if (!this.state) return;
+    if (this.channel?.state !== 'joined') {
+      this._queuedActions.push(action);
+      this.onEvent({ type: 'actionQueued', actionType: action.t });
+      return;
+    }
     if (this._currentHostId() === this.myId) {
       return this._applyAction(this.myId, action);
     } else {
       return this._send({ t: 'action', from: this.myId, action });
     }
+  }
+
+  _flushQueuedActions() {
+    if (this.channel?.state !== 'joined' || this._queuedActions.length === 0) return;
+    const actions = this._queuedActions.splice(0);
+    actions.forEach((action) => this._dispatch(action));
   }
 
   _currentHostId() {
@@ -818,7 +944,33 @@ export class GameClient {
 
   _emitState() {
     this._saveSnapshot();
+    this._scheduleSessionExpiry();
     this.onState(this.state, this.myId);
+  }
+
+  _scheduleSessionExpiry() {
+    clearTimeout(this._sessionExpiryTimer);
+    const expiresAt = this.state?.sessionExpiresAt;
+    if (!expiresAt) return;
+    const delay = expiresAt - Date.now();
+    if (delay <= 0) {
+      GameClient.clearSavedSession();
+      this.onEvent({ type: 'sessionExpired' });
+      this.destroy();
+      return;
+    }
+    this._sessionExpiryTimer = setTimeout(
+      () => {
+        if (delay > MAX_TIMER_DELAY_MS) {
+          this._scheduleSessionExpiry();
+          return;
+        }
+        GameClient.clearSavedSession();
+        this.onEvent({ type: 'sessionExpired' });
+        this.destroy();
+      },
+      Math.min(delay, MAX_TIMER_DELAY_MS),
+    );
   }
 
   // Presence "leave" fires the instant a phone backgrounds, so hold the seat
@@ -937,6 +1089,7 @@ export class GameClient {
           } else {
             this._pendingJoin.resolve();
             this._emitState();
+            this._flushQueuedActions();
           }
         }
         break;
@@ -993,6 +1146,13 @@ export class GameClient {
           byId: data.byId,
           approved: data.approved,
           approvedBy: data.approvedBy || [],
+          disagreeRationaleCounts: data.disagreeRationaleCounts || {},
+          wagerFreed: !!data.wagerFreedIds?.includes(this.myId),
+        });
+        break;
+      case 'replacementResolved':
+        this.onEvent({
+          type: 'replacementResolved',
           wagerFreed: !!data.wagerFreedIds?.includes(this.myId),
         });
         break;
@@ -1050,6 +1210,8 @@ export class GameClient {
     customTropes = [],
     genrePercents = {},
     subgenrePercents = {},
+    movie = null,
+    marathonEnabled = false,
   ) {
     const tropePool = Array.from(
       new Set([
@@ -1087,10 +1249,19 @@ export class GameClient {
       started: false,
       gameOver: false,
       pendingClaim: null,
+      pendingReplacement: null,
       pendingJoinRequest: null,
       pendingProfileChanges: {},
       acceptedTropes: [],
+      calls: {},
+      callStats: {},
+      bingoEvents: [],
       activityLog: [],
+      movie,
+      marathon: { enabled: !!marathonEnabled, watches: [] },
+      sessionExtended: false,
+      sessionLifetimeHours: DEFAULT_SESSION_LIFETIME_HOURS,
+      sessionExpiresAt: Date.now() + DEFAULT_SESSION_LIFETIME_HOURS * 60 * 60 * 1000,
     };
   }
 
@@ -1247,11 +1418,15 @@ export class GameClient {
     }
 
     if (action.t === 'claim') {
-      if (!state.started || state.gameOver || state.pendingClaim) return;
+      if (!state.started || state.gameOver) return;
       const index = action.index;
       if (!Number.isInteger(index) || index < 0 || index >= 25) return;
       if (state.freeSpace && index === CENTER_INDEX) return;
       const kind = player.marked.includes(index) ? 'unmark' : 'mark';
+      if (state.pendingClaim) {
+        if (kind !== 'mark' || !this._mergeDuplicateMarkProposal(fromId, player.board[index])) return;
+        return;
+      }
       this._startClaim(fromId, player.board[index], kind);
       return;
     }
@@ -1265,9 +1440,29 @@ export class GameClient {
 
     if (action.t === 'vote') {
       const pc = state.pendingClaim;
-      if (!pc || pc.claimId !== action.claimId || fromId === pc.byId) return;
+      if (!pc || pc.claimId !== action.claimId || fromId === pc.byId || Object.hasOwn(pc.votes, fromId)) return;
       pc.votes[fromId] = !!action.agree;
+      if (!action.agree && DISAGREE_RATIONALES.has(action.rationale)) {
+        pc.disagreeRationaleCounts ||= {};
+        pc.disagreeRationaleCounts[action.rationale] = (pc.disagreeRationaleCounts[action.rationale] || 0) + 1;
+      }
       if (this._maybeAutoResolve()) return;
+      this._emitState();
+      this._send({ t: 'state', state: this.state });
+      return;
+    }
+
+    if (action.t === 'toggleCall') {
+      if (!state.started || state.gameOver || typeof action.text !== 'string') return;
+      if (!player.board.includes(action.text) || state.acceptedTropes.includes(action.text)) return;
+      state.calls ||= {};
+      state.callStats ||= {};
+      if (state.calls[fromId] === action.text) {
+        delete state.calls[fromId];
+      } else {
+        state.calls[fromId] = action.text;
+        state.callStats[fromId] = { ...state.callStats[fromId], made: (state.callStats[fromId]?.made || 0) + 1 };
+      }
       this._emitState();
       this._send({ t: 'state', state: this.state });
       return;
@@ -1278,6 +1473,7 @@ export class GameClient {
       if (!pc || pc.claimId !== action.claimId || fromId !== pc.byId) return;
       clearTimeout(this.claimTimeout);
       state.pendingClaim = null;
+      state.pendingReplacement = null;
       this._emitState();
       this._send({ t: 'state', state: this.state });
       this.onEvent({ type: 'claimCancelled', text: pc.text });
@@ -1287,16 +1483,27 @@ export class GameClient {
     if (action.t === 'reset') {
       if (!this._isActiveHostId(fromId)) return;
       clearTimeout(this.claimTimeout);
+      recordMarathonWatch(state);
       const safe = sanitizeGenreSelection(action.genres, action.subgenreSelections);
       state.genres = safe.genres;
       state.subgenreSelections = safe.subgenreSelections;
       if (typeof action.freeSpace === 'boolean') state.freeSpace = action.freeSpace;
       state.generalPercents = sanitizeGeneralPercents(state.genres, action.generalPercents);
+      state.movie = action.movie || null;
+      state.genrePercents = action.genrePercents || {};
+      state.subgenrePercents = action.subgenrePercents || {};
       if (VALID_TOTAL_TROPES.has(action.totalTropes)) state.totalTropes = action.totalTropes;
       const safeCustomTropes = sanitizeCustomTropes(action.customTropes);
       state.tropePool = Array.from(
         new Set([
-          ...pickTropePool(state.genres, state.subgenreSelections, state.generalPercents, state.totalTropes),
+          ...pickTropePool(
+            state.genres,
+            state.subgenreSelections,
+            state.generalPercents,
+            state.totalTropes,
+            state.genrePercents,
+            state.subgenrePercents,
+          ),
           ...safeCustomTropes,
         ]),
       );
@@ -1311,8 +1518,15 @@ export class GameClient {
       state.pendingJoinRequest = null;
       state.pendingProfileChanges = {};
       state.acceptedTropes = [];
+      state.calls = {};
+      state.callStats = {};
+      state.bingoEvents = [];
       state.activityLog = [];
-      this._logActivity('🔄 The host reset the game.');
+      this._logActivity(
+        state.marathon?.enabled && state.marathon.watches.length > 0
+          ? `🏁 Watch ${state.marathon.watches.length} was added to the marathon standings.`
+          : '🔄 The host reset the game.',
+      );
       this.onEvent({ type: 'gameReset' });
       this._send({ t: 'gameReset' });
       this._emitState();
@@ -1378,7 +1592,12 @@ export class GameClient {
 
     if (action.t === 'proposeReplace') {
       if (state.gameOver || state.pendingClaim) return;
-      if (typeof action.text !== 'string' || action.text === FREE_SPACE_TEXT || !state.tropePool.includes(action.text))
+      if (
+        typeof action.text !== 'string' ||
+        action.text === FREE_SPACE_TEXT ||
+        state.acceptedTropes.includes(action.text) ||
+        !state.tropePool.includes(action.text)
+      )
         return;
       const safeGenre = VALID_GENRES.has(action.genre) ? action.genre : state.genres[0];
       const safeSubgenre = isValidSubgenre(safeGenre, action.subgenre) ? action.subgenre : 'general';
@@ -1386,11 +1605,71 @@ export class GameClient {
       return;
     }
 
+    if (action.t === 'chooseReplacement' || action.t === 'cycleReplacement' || action.t === 'cancelReplacement') {
+      const replacement = state.pendingReplacement;
+      if (!replacement || replacement.byId !== fromId) return;
+      if (action.t === 'cancelReplacement') {
+        state.pendingReplacement = null;
+        this._logActivity(`🔁 ${player.name} cancelled the replacement for "${replacement.oldText}".`);
+      } else if (action.t === 'cycleReplacement') {
+        replacement.index = (replacement.index + 1) % replacement.candidates.length;
+      } else {
+        if (!replacement.candidates.includes(action.text)) return;
+        const wagerFreedIds = this._applyReplacement(replacement, action.text);
+        state.pendingReplacement = null;
+        this._send({ t: 'replacementResolved', wagerFreedIds });
+      }
+      this._emitState();
+      this._send({ t: 'state', state: this.state });
+      return;
+    }
+
     if (action.t === 'proposeAccept') {
-      if (state.gameOver || state.pendingClaim) return;
+      if (state.gameOver) return;
       if (typeof action.text !== 'string' || !state.tropePool.includes(action.text)) return;
       if (state.acceptedTropes.includes(action.text)) return;
+      if (state.pendingClaim) {
+        this._mergeDuplicateMarkProposal(fromId, action.text);
+        return;
+      }
       this._startClaim(fromId, action.text, 'mark');
+      return;
+    }
+
+    if (action.t === 'updateSessionLifetime') {
+      if (!this._isActiveHostId(fromId)) return;
+      const hours = isValidSessionLifetime(action.hours) ? action.hours : DEFAULT_SESSION_LIFETIME_HOURS;
+      state.sessionExtended = hours !== DEFAULT_SESSION_LIFETIME_HOURS;
+      state.sessionLifetimeHours = hours;
+      state.sessionExpiresAt = Date.now() + state.sessionLifetimeHours * 60 * 60 * 1000;
+      this._emitState();
+      this._send({ t: 'state', state: this.state });
+      this.onEvent({
+        type: 'sessionLifetimeUpdated',
+        extended: state.sessionExtended,
+        hours: state.sessionLifetimeHours,
+      });
+      return;
+    }
+
+    if (action.t === 'updateMovie') {
+      if (!this._isActiveHostId(fromId)) return;
+      const title = typeof action.movie?.title === 'string' ? action.movie.title.trim().slice(0, 120) : '';
+      const themeSelection = sanitizeGenreSelection(action.movie?.genres, action.movie?.subgenreSelections);
+      state.movie = title
+        ? {
+            title,
+            year: action.movie.year || null,
+            type: action.movie.type || null,
+            poster: action.movie.poster || null,
+            themeGenres: Array.isArray(action.movie?.genres) ? themeSelection.genres : null,
+            themeSubgenreSelections: Array.isArray(action.movie?.subgenreSelections)
+              ? themeSelection.subgenreSelections
+              : null,
+          }
+        : null;
+      this._emitState();
+      this._send({ t: 'state', state: this.state });
       return;
     }
 
@@ -1525,6 +1804,7 @@ export class GameClient {
       byId: fromId,
       text,
       kind,
+      proposedBy: [fromId],
       ...meta,
       votes: { [fromId]: true },
       totalPlayers: this._connectedCount(),
@@ -1534,6 +1814,20 @@ export class GameClient {
     if (this._maybeAutoResolve()) return;
     this._emitState();
     this._send({ t: 'state', state: this.state });
+  }
+
+  _mergeDuplicateMarkProposal(fromId, text) {
+    const pc = this.state.pendingClaim;
+    if (!pc || pc.kind !== 'mark' || pc.text !== text || pc.custom || pc.byId === fromId) return false;
+    if (!Array.isArray(pc.proposedBy)) pc.proposedBy = [pc.byId];
+    if (pc.proposedBy.includes(fromId)) return false;
+    pc.proposedBy.push(fromId);
+    pc.votes[fromId] = true;
+    this._logActivity(`👥 ${this.state.players[fromId].name} also proposed "${text}".`);
+    if (this._maybeAutoResolve()) return true;
+    this._emitState();
+    this._send({ t: 'state', state: this.state });
+    return true;
   }
 
   _majorityNeeded(total) {
@@ -1572,6 +1866,7 @@ export class GameClient {
     const needed = this._majorityNeeded(pc.totalPlayers);
     const approved = agree >= needed;
     const approvedBy = approvedPlayersFromVotes(this.state.players, pc.votes);
+    const disagreeRationaleCounts = approved ? {} : pc.disagreeRationaleCounts || {};
     const approvedByText = approvalSentence(approvedBy);
     const wagerFreedIds = [];
 
@@ -1583,24 +1878,22 @@ export class GameClient {
           (text) => text !== pc.text && text !== FREE_SPACE_TEXT && !affected.some((p) => p.board.includes(text)),
         );
         if (candidates.length > 0) {
-          const newText = candidates[Math.floor(Math.random() * candidates.length)];
-          for (const p of affected) {
-            const idx = p.board.indexOf(pc.text);
-            if (p.wagered.includes(idx)) wagerFreedIds.push(p.id);
-            p.board[idx] = newText;
-            p.wagered = p.wagered.filter((i) => i !== idx);
-            p.marked = p.marked.filter((i) => i !== idx);
-            // The replacement can itself be a trope the group already accepted.
-            if (this.state.acceptedTropes.includes(newText)) p.marked.push(idx);
-          }
-          if (!this.state.tropePool.includes(newText)) this.state.tropePool.push(newText);
-          this._logActivity(`🔁 "${pc.text}" was swapped out for "${newText}".${approvedByText}`);
+          this.state.pendingReplacement = {
+            replacementId: `${pc.claimId}-replacement`,
+            byId: pc.byId,
+            oldText: pc.text,
+            genre: pc.genre,
+            subgenre: pc.subgenre,
+            candidates: shuffled(candidates),
+            index: 0,
+            affectedIds: affected.map((p) => p.id),
+          };
+          this._logActivity(`🔁 "${pc.text}" was approved for replacement.${approvedByText}`);
         } else {
           this._logActivity(
             `🔁 "${pc.text}" was approved to be swapped out, but no replacement was available.${approvedByText}`,
           );
         }
-        this.state.acceptedTropes = this.state.acceptedTropes.filter((t) => t !== pc.text);
       } else if (pc.kind === 'wagerChange') {
         const proposer = this.state.players[pc.byId];
         if (proposer) {
@@ -1648,6 +1941,16 @@ export class GameClient {
           } else {
             this._logActivity(`✅ "${pc.text}" was marked as happened.${approvedByText}`);
           }
+          for (const [playerId, calledText] of Object.entries(this.state.calls || {})) {
+            if (calledText !== pc.text) continue;
+            this.state.callStats ||= {};
+            this.state.callStats[playerId] = {
+              ...this.state.callStats[playerId],
+              correct: (this.state.callStats[playerId]?.correct || 0) + 1,
+            };
+            delete this.state.calls[playerId];
+          }
+          this._recordBingoEvents();
         }
       }
     }
@@ -1660,11 +1963,51 @@ export class GameClient {
       byId: pc.byId,
       approved,
       approvedBy,
+      disagreeRationaleCounts,
       wagerFreedIds,
+      proposedBy: pc.proposedBy || [pc.byId],
     };
     this.onEvent({ type: 'claimResolved', ...payload, wagerFreed: wagerFreedIds.includes(this.myId) });
     this._send({ t: 'resolved', ...payload });
     this._emitState();
     this._send({ t: 'state', state: this.state });
+  }
+
+  _applyReplacement(replacement, newText) {
+    const affected = Object.values(this.state.players).filter((p) => replacement.affectedIds.includes(p.id));
+    const wagerFreedIds = [];
+    for (const p of affected) {
+      const idx = p.board.indexOf(replacement.oldText);
+      if (idx === -1) continue;
+      if (p.wagered.includes(idx)) wagerFreedIds.push(p.id);
+      p.board[idx] = newText;
+      p.wagered = p.wagered.filter((i) => i !== idx);
+      p.marked = p.marked.filter((i) => i !== idx);
+      if (this.state.acceptedTropes.includes(newText)) p.marked.push(idx);
+    }
+    for (const [playerId, calledText] of Object.entries(this.state.calls || {})) {
+      if (calledText === replacement.oldText) delete this.state.calls[playerId];
+    }
+    if (!this.state.tropePool.includes(newText)) this.state.tropePool.push(newText);
+    this.state.acceptedTropes = this.state.acceptedTropes.filter((text) => text !== replacement.oldText);
+    this._logActivity(`🔁 "${replacement.oldText}" was swapped out for "${newText}".`);
+    return wagerFreedIds;
+  }
+
+  _recordBingoEvents() {
+    if (!Array.isArray(this.state.bingoEvents)) this.state.bingoEvents = [];
+    for (const player of Object.values(this.state.players)) {
+      const bingoCount = getCompletedLines(player.marked).length;
+      const recordedCount = this.state.bingoEvents.filter((event) => event.playerId === player.id).length;
+      for (let count = recordedCount + 1; count <= bingoCount; count++) {
+        this.state.bingoEvents.push({
+          id: `${this.state.code}-${player.id}-${count}-${Date.now()}`,
+          playerId: player.id,
+          count,
+          ts: Date.now(),
+        });
+      }
+    }
+    this.state.bingoEvents = this.state.bingoEvents.slice(-50);
   }
 }

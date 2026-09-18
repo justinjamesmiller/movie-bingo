@@ -44,6 +44,16 @@ describe('BingoBoard', () => {
     expect(screen.getByText('Trope 0')).not.toHaveClass('marked');
   });
 
+  it('highlights the current player call separately from accepted marks', () => {
+    render(<BingoBoard {...makeBoard({ calledIndexes: [4] })} />);
+    expect(screen.getByText('Trope 4')).toHaveClass('called');
+  });
+
+  it('keeps both call and wager states on the same cell', () => {
+    render(<BingoBoard {...makeBoard({ wagered: [4], calledIndexes: [4] })} />);
+    expect(screen.getByText('Trope 4')).toHaveClass('wagered', 'called');
+  });
+
   it('highlights cells that are part of a completed bingo line', () => {
     render(<BingoBoard {...makeBoard({ highlightedCells: new Set([0, 1, 2]) })} />);
     expect(screen.getByText('Trope 0')).toHaveClass('bingo-line');

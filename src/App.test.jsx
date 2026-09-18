@@ -45,6 +45,7 @@ function makeClientState() {
 }
 
 let clientState = makeClientState();
+let latestClient;
 
 vi.mock('./net/relay.js', () => {
   class GameClient {
@@ -54,6 +55,7 @@ vi.mock('./net/relay.js', () => {
 
     constructor({ onState }) {
       this.onState = onState;
+      latestClient = this;
     }
 
     async hostGame(name) {
@@ -91,14 +93,35 @@ describe('App', () => {
     vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }));
     render(<App />);
 
-    fireEvent.change(screen.getByPlaceholderText('e.g. Ashley'), { target: { value: 'Ashley' } });
+    const nameInput = screen.getByPlaceholderText('e.g. Ashley');
+    const blur = vi.spyOn(nameInput, 'blur');
+    nameInput.focus();
+    fireEvent.change(nameInput, { target: { value: 'Ashley' } });
     fireEvent.click(screen.getByRole('button', { name: 'Host Game' }));
 
     expect(await screen.findByText('Code: ABCD')).toBeInTheDocument();
+    expect(blur).toHaveBeenCalledTimes(1);
     expect(screen.getByRole('button', { name: 'Start Game' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
-    expect(screen.getByRole('button', { name: 'Advanced Gameplay' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Advanced Options' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '👑 Add Host' })).toBeNull();
+  });
+
+  it('shows player distinctions only after the first trope is accepted', async () => {
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }));
+    const { container } = render(<App />);
+
+    fireEvent.change(screen.getByPlaceholderText('e.g. Ashley'), { target: { value: 'Ashley' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Host Game' }));
+    await screen.findByText('Code: ABCD');
+    expect(container.querySelectorAll('.superlative-badge')).toHaveLength(0);
+
+    clientState.acceptedTropes = ['Trope 1'];
+    clientState.players.p1.marked = [0];
+    latestClient.onState(clientState, 'p1');
+    await screen.findAllByTitle(/Learn about/);
+    expect(container.querySelectorAll('.superlative-badge').length).toBeGreaterThan(0);
   });
 
   it('lets a host add another host from the players list and then resign through the menu', async () => {
@@ -117,7 +140,8 @@ describe('App', () => {
     expect(await screen.findAllByText('HOST')).toHaveLength(2);
 
     fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Advanced Gameplay' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced Options' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Host Settings' }));
     fireEvent.click(screen.getByRole('button', { name: 'Resign as Host' }));
     expect(await screen.findAllByText('HOST')).toHaveLength(1);
   });
@@ -132,7 +156,8 @@ describe('App', () => {
     await screen.findByText('Code: ABCD');
 
     fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Advanced Gameplay' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced Options' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Explore & Stats' }));
     fireEvent.click(screen.getByRole('button', { name: 'All Tropes (25)' }));
     fireEvent.click(screen.getByRole('button', { name: 'Trope 1' }));
     fireEvent.click(screen.getByRole('button', { name: '👍 Propose it happened' }));

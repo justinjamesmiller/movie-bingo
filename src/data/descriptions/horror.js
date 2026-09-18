@@ -72,9 +72,9 @@ export default {
     what: 'A character conceals themselves in a wardrobe, cupboard or under a bed while the threat searches.',
     example: 'Someone crouches behind hanging coats while the killer opens doors one by one.',
   },
-  'Cat causes a fake scare': {
+  'Fake scare': {
     what: 'A sudden noise turns out to be harmless \u2014 an animal, a falling object \u2014 releasing tension before the real scare.',
-    example: 'A locker bangs open and a cat launches itself out instead of the monster.',
+    example: 'A locker bangs open and a harmless object tumbles out instead of the monster.',
   },
   'A locked door fails': {
     what: 'A door someone is relying on gives way, or the lock proves useless.',
@@ -366,9 +366,9 @@ export default {
     what: 'Masks and costumes let the threat blend into a crowd.',
     example: 'Nobody notices one extra guest in a matching costume.',
   },
-  'A getaway route already planned': {
+  'Every escape route is blocked': {
     what: 'The threat has anticipated how characters would try to escape.',
-    example: 'Every car in the driveway already has its tyres slashed.',
+    example: 'Every car in the driveway already has its tires slashed.',
   },
 
   // Supernatural / haunted house

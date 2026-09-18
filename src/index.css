@@ -4,13 +4,15 @@
   --text: #201a1a;
   --muted: #6b6262;
   --border: #ddd5d2;
-  --accent: #8f1e2b;
-  --accent-hover: #6f1620;
+  --accent: var(--theme-accent, #8f1e2b);
+  --accent-hover: var(--theme-accent-hover, #6f1620);
   --accent-contrast: #ffffff;
   --wagered: #d8a900;
   --marked: #2f7a3f;
   --marked-text: #ffffff;
   --danger: #b13636;
+  --swap: #087d7b;
+  --swap-soft: #e3f4f2;
   --shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 }
 
@@ -20,13 +22,15 @@ body.dark {
   --text: #eee6e2;
   --muted: #ab9d98;
   --border: #3a2f2c;
-  --accent: #c0394a;
-  --accent-hover: #d94d5f;
+  --accent: var(--theme-accent, #c0394a);
+  --accent-hover: var(--theme-accent-hover, #d94d5f);
   --accent-contrast: #fff;
   --wagered: #e8bf3a;
   --marked: #3f9a52;
   --marked-text: #0d1a0f;
   --danger: #e05a5a;
+  --swap: #43b9b4;
+  --swap-soft: #173837;
   --shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
 }
 
@@ -56,7 +60,7 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 1rem 1.5rem;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 3px solid var(--accent);
   background: var(--surface);
 }
 
@@ -92,6 +96,10 @@ body {
   max-width: 1000px;
   margin: 0 auto;
   padding: 1.5rem;
+}
+
+.screen-game {
+  padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
 }
 
 .screen-landing {
@@ -443,6 +451,72 @@ select {
   text-align: center;
 }
 
+.menu-genre-toggle {
+  width: 100%;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+}
+
+.menu-genre-toggle::after {
+  content: '⌄';
+  display: inline-block;
+  margin-left: 0.45rem;
+}
+
+.menu-genre-toggle[aria-expanded='true']::after {
+  transform: rotate(180deg);
+}
+
+.btn.menu-expander {
+  border: 1px dashed var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.btn.menu-expander::after {
+  content: '⌄';
+  display: inline-block;
+  margin-left: 0.45rem;
+}
+
+.btn.menu-expander[aria-expanded='true']::after {
+  transform: rotate(180deg);
+}
+
+.btn.menu-expander:hover {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.btn.menu-section-toggle {
+  border-color: var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-weight: 700;
+  text-align: left;
+}
+
+.btn.menu-section-toggle::after {
+  content: '⌄';
+  float: right;
+}
+
+.btn.menu-section-toggle[aria-expanded='true'] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.btn.menu-section-toggle[aria-expanded='true']::after {
+  transform: rotate(180deg);
+}
+
+.game-menu-section {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0 0.25rem 0.25rem;
+}
+
 .game-menu-copy-row {
   display: flex;
   gap: 0.5rem;
@@ -543,7 +617,6 @@ select {
 
 .player-profile-button:hover {
   color: var(--accent);
-  text-decoration: underline;
 }
 
 .player-stats {
@@ -575,7 +648,31 @@ select {
   flex: 2 1 420px;
   display: flex;
   justify-content: center;
+  position: relative;
   min-width: 0;
+}
+
+.reconnect-panel {
+  position: absolute;
+  z-index: 2;
+  inset: 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  padding: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  box-shadow: var(--shadow);
+  text-align: center;
+}
+
+.reconnect-panel p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
 }
 
 .bingo-board {
@@ -627,6 +724,18 @@ select {
   text-decoration: line-through;
 }
 
+.bingo-cell.called:not(.marked) {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 3px var(--accent);
+}
+
+.bingo-cell.wagered.called:not(.marked) {
+  border-color: var(--wagered);
+  box-shadow:
+    inset 0 0 0 3px var(--accent),
+    inset 0 0 0 6px var(--wagered);
+}
+
 .bingo-cell.free-space {
   font-weight: bold;
   text-decoration: none;
@@ -673,6 +782,97 @@ select {
   padding: 0.5rem 1rem;
   font-size: 0.9rem;
   font-weight: bold;
+}
+
+.movie-banner,
+.recap-movie {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  max-width: min(30rem, 100%);
+  gap: 0.55rem;
+  padding: 0.2rem 0.55rem 0.2rem 0.2rem;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-weight: bold;
+  text-align: left;
+}
+
+.replacement-suggestion {
+  margin: 1rem 0;
+  text-align: center;
+}
+
+.replacement-actions {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.replacement-list {
+  max-height: 16rem;
+  overflow-y: auto;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.replacement-list .btn {
+  width: 100%;
+  margin-top: 0.35rem;
+  text-align: left;
+}
+
+.movie-banner img,
+.recap-movie img {
+  width: 28px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 3px;
+}
+
+.movie-banner img {
+  width: 32px;
+  height: 46px;
+}
+
+.movie-banner-copy {
+  display: grid;
+  gap: 0.05rem;
+  min-width: 0;
+}
+
+.movie-banner-copy small {
+  color: var(--accent);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.movie-banner-copy strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.movie-banner-editable,
+.recap-movie-editable {
+  cursor: pointer;
+}
+
+.movie-banner-editable:hover,
+.recap-movie-editable:hover {
+  border-color: var(--border);
+  background: var(--bg);
+}
+
+.recap-movie {
+  width: 100%;
+  justify-content: center;
+  margin: 0 0 0.75rem;
+  font-size: 1.1rem;
 }
 
 .bingo-banner {
@@ -731,6 +931,125 @@ select {
   }
 }
 
+.finale-banner {
+  position: fixed;
+  inset: 0;
+  z-index: 34;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  overflow: hidden;
+  background: radial-gradient(circle at center, rgba(255, 213, 94, 0.16), transparent 38%);
+  animation: finale-fade 5s ease forwards;
+}
+
+.finale-rays {
+  position: absolute;
+  width: min(72vw, 680px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: repeating-conic-gradient(from 4deg, rgba(255, 214, 102, 0.24) 0deg 7deg, transparent 7deg 18deg);
+  animation: finale-spin 5s ease-out forwards;
+}
+
+.finale-banner-text {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 1.5rem 2.5rem;
+  color: #fff8dc;
+  background: #24201a;
+  border: 2px solid #e4b94f;
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 8px rgba(228, 185, 79, 0.12),
+    0 0 45px rgba(228, 185, 79, 0.45);
+  text-align: center;
+  animation: finale-rise 0.7s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+  cursor: default;
+}
+
+.finale-banner-text strong {
+  font-size: clamp(1.8rem, 6vw, 3.4rem);
+  line-height: 1;
+}
+
+.finale-banner-text > span:last-child {
+  color: #e4b94f;
+  font-size: 0.9rem;
+}
+
+.finale-kicker {
+  letter-spacing: 0.18em;
+  color: #e4b94f;
+  font-size: 0.72rem;
+  font-weight: bold;
+}
+
+.finale-mark {
+  position: absolute;
+  color: #f5cf62;
+  font-size: 2rem;
+  transform: rotate(var(--finale-angle)) translateY(-min(31vw, 270px));
+  animation: finale-mark-burst 2.8s ease-out forwards;
+}
+
+@keyframes finale-fade {
+  0%,
+  78% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes finale-spin {
+  0% {
+    transform: rotate(-20deg) scale(0.35);
+    opacity: 0;
+  }
+  22% {
+    opacity: 1;
+  }
+  100% {
+    transform: rotate(35deg) scale(1.05);
+    opacity: 0;
+  }
+}
+
+@keyframes finale-rise {
+  0% {
+    transform: scale(0.45) translateY(40px);
+    opacity: 0;
+  }
+  65% {
+    transform: scale(1.06) translateY(0);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes finale-mark-burst {
+  0% {
+    opacity: 0;
+    transform: rotate(var(--finale-angle)) translateY(-20px) scale(0.2);
+  }
+  22% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(var(--finale-angle)) translateY(-min(31vw, 270px)) scale(1);
+  }
+}
+
 .recap-list {
   list-style: none;
   margin: 0 0 1rem;
@@ -738,6 +1057,45 @@ select {
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
+}
+
+.superlative-badge {
+  display: inline-block;
+  margin-top: 0.35rem;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid #d9ad43;
+  border-radius: 999px;
+  background: rgba(228, 185, 79, 0.12);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.superlative-badge:hover,
+.superlative-badge:focus-visible {
+  background: rgba(228, 185, 79, 0.24);
+  color: #b28118;
+}
+
+.superlative-modal {
+  text-align: center;
+}
+
+.superlative-modal-kicker {
+  color: #b28118;
+  font-size: 0.7rem;
+  font-weight: bold;
+  letter-spacing: 0.16em;
+}
+
+.superlative-modal h3 {
+  margin-bottom: 0.25rem;
+}
+
+.superlative-player {
+  margin-top: 0;
+  font-weight: bold;
 }
 
 .recap-player {
@@ -859,6 +1217,51 @@ select {
   padding-left: 1.2rem;
 }
 
+.marathon-standings {
+  display: grid;
+  gap: 0.65rem;
+  margin: 0.5rem 0;
+  padding-left: 1.5rem;
+}
+
+.marathon-standings li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.15rem 0.75rem;
+}
+
+.marathon-standings small {
+  color: var(--muted);
+  grid-column: 1 / -1;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.5rem 1rem;
+  margin: 0.75rem 0;
+}
+
+.stats-player-list {
+  list-style: none;
+  margin: 0.5rem 0;
+  padding: 0;
+}
+
+.stats-player-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.stats-player-list span {
+  color: var(--muted);
+  font-size: 0.85rem;
+  text-align: right;
+}
+
 .trope-description {
   margin: 0.5rem 0;
   line-height: 1.45;
@@ -881,6 +1284,24 @@ select {
   gap: 0.75rem;
 }
 
+.vote-rationale-picker,
+.trope-actions {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.swap-claim-modal {
+  border: 3px solid var(--swap);
+  background: var(--swap-soft);
+}
+
+.swap-claim-kicker {
+  color: var(--swap);
+  font-size: 0.8rem;
+  font-weight: 700;
+  margin: 0 0 0.25rem;
+}
+
 .btn.agree {
   background: var(--marked);
   color: #fff;
@@ -888,6 +1309,14 @@ select {
 .btn.disagree {
   background: var(--danger);
   color: #fff;
+}
+.btn.swap-agree {
+  background: var(--swap);
+}
+.btn.swap-disagree {
+  background: transparent;
+  border-color: var(--swap);
+  color: var(--swap);
 }
 .cancel-claim-btn {
   margin: 0.75rem 0;

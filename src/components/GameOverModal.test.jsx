@@ -15,11 +15,12 @@ describe('GameOverModal', () => {
           player({ id: '2', name: 'Bob', avatar: '🍿', marked: [0], wagered: [] }),
         ]}
         bingoCounts={{ 1: 1, 2: 0 }}
+        callStats={{ 1: { made: 2, correct: 1 } }}
         onClose={vi.fn()}
       />,
     );
-    expect(screen.getByText(/2 tropes marked · 1 bingo · 1\/2 wagers hit/)).toBeInTheDocument();
-    expect(screen.getByText(/1 tropes marked · 0 bingos · 0\/0 wagers hit/)).toBeInTheDocument();
+    expect(screen.getByText(/2 tropes marked · 1 bingo · 1\/2 wagers hit · 📣 1\/2 calls/)).toBeInTheDocument();
+    expect(screen.getByText(/1 tropes marked · 0 bingos · 0\/0 wagers hit · 📣 0\/0 calls/)).toBeInTheDocument();
   });
 
   it('crowns the player with the most tropes marked', () => {

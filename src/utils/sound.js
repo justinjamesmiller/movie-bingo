@@ -11,6 +11,7 @@ try {
 }
 
 let audioCtx = null;
+let resumePromise = null;
 
 export function isSoundMuted() {
   return muted;
@@ -25,14 +26,38 @@ export function setSoundMuted(value) {
   }
 }
 
+function resumeContext(ctx) {
+  if (ctx.state === 'running' || resumePromise) return;
+  resumePromise = ctx
+    .resume()
+    .catch(() => {})
+    .finally(() => {
+      resumePromise = null;
+    });
+}
+
 function getContext() {
-  if (!audioCtx) {
+  if (!audioCtx || audioCtx.state === 'closed') {
     const Ctx = window.AudioContext || window.webkitAudioContext;
     if (!Ctx) return null;
-    audioCtx = new Ctx();
+    try {
+      audioCtx = new Ctx();
+    } catch {
+      return null;
+    }
   }
-  if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+  resumeContext(audioCtx);
   return audioCtx;
+}
+
+// iOS only permits resuming an interrupted context from a user gesture. Keep
+// this listener installed so the next tap restores alerts after an interruption.
+if (typeof document !== 'undefined') {
+  ['pointerdown', 'touchstart', 'keydown'].forEach((eventName) => {
+    document.addEventListener(eventName, () => {
+      if (audioCtx) resumeContext(audioCtx);
+    });
+  });
 }
 
 function tone(ctx, freq, startTime, duration, type, gainValue) {

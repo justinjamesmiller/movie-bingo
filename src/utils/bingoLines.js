@@ -17,3 +17,8 @@ export function getCompletedLineCells(marked) {
   }
   return cells;
 }
+
+export function getAlmostCompletedLines(marked) {
+  const markedSet = new Set(marked);
+  return LINES.filter((line) => line.filter((i) => markedSet.has(i)).length === 4);
+}

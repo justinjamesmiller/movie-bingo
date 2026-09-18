@@ -8,7 +8,7 @@ describe('HelpModal', () => {
     render(<HelpModal onClose={onClose} />);
 
     expect(screen.getByRole('heading', { name: '❓ How to Play' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '⚙️ Advanced gameplay' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '⚙️ Advanced Options' })).toBeInTheDocument();
     expect(screen.getByText(/Add Host/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(onClose).toHaveBeenCalledTimes(1);

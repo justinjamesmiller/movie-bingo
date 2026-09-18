@@ -20,6 +20,7 @@ import Landing from './components/Landing.jsx';
 import PlayersPanel from './components/PlayersPanel.jsx';
 import BingoBoard from './components/BingoBoard.jsx';
 import BingoBanner from './components/BingoBanner.jsx';
+import FinaleBanner from './components/FinaleBanner.jsx';
 import ReactionBar from './components/ReactionBar.jsx';
 import ReactionOverlay from './components/ReactionOverlay.jsx';
 import CustomTropeModal from './components/CustomTropeModal.jsx';
@@ -47,6 +48,16 @@ import HostTransferModal from './components/HostTransferModal.jsx';
 import PlayerManagementModal from './components/PlayerManagementModal.jsx';
 import ProfileChangeProposalModal from './components/ProfileChangeProposalModal.jsx';
 import HostPromotionModal from './components/HostPromotionModal.jsx';
+import SessionLifetimeModal from './components/SessionLifetimeModal.jsx';
+import MovieIdentityModal from './components/MovieIdentityModal.jsx';
+import ReplacementPickerModal from './components/ReplacementPickerModal.jsx';
+import SuperlativeModal from './components/SuperlativeModal.jsx';
+import MarathonStandingsModal from './components/MarathonStandingsModal.jsx';
+import PlayerStatsModal from './components/PlayerStatsModal.jsx';
+import StatsDashboardModal from './components/StatsDashboardModal.jsx';
+import TropeAdvancedActionsModal from './components/TropeAdvancedActionsModal.jsx';
+import { getPlayerSuperlatives } from './utils/superlatives.js';
+import { getGameTheme } from './utils/gameTheme.js';
 
 const MAX_WAGERS = 5;
 
@@ -56,11 +67,21 @@ function formatNameList(names) {
   return `${names.slice(0, -1).join(', ')}, and ${names[names.length - 1]}`;
 }
 
+function blurActiveTextField() {
+  const activeElement = document.activeElement;
+  if (activeElement?.tagName === 'INPUT' || activeElement?.tagName === 'TEXTAREA') activeElement.blur();
+}
+
 function formatApprovedBy(approvedBy) {
   const names = (approvedBy || [])
     .map((player) => (typeof player === 'string' ? player : player?.name))
     .filter(Boolean);
   return names.length > 0 ? ` Approved by ${formatNameList(names)}.` : '';
+}
+
+function formatDisagreeRationales(counts) {
+  const reasons = Object.entries(counts || {}).map(([reason, count]) => `${reason} (${count})`);
+  return reasons.length > 0 ? ` Reasons: ${reasons.join(', ')}.` : '';
 }
 
 function App() {
@@ -97,6 +118,8 @@ function App() {
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
   const [hostTransferOpen, setHostTransferOpen] = useState(false);
   const [hostTransferLeaves, setHostTransferLeaves] = useState(false);
+  const [sessionLifetimeModalOpen, setSessionLifetimeModalOpen] = useState(false);
+  const [movieIdentityModalOpen, setMovieIdentityModalOpen] = useState(false);
   const [endGameConfirmOpen, setEndGameConfirmOpen] = useState(false);
   const [inviteQrOpen, setInviteQrOpen] = useState(false);
   const [soundMuted, setSoundMutedState] = useState(() => isSoundMuted());
@@ -105,9 +128,18 @@ function App() {
   const [tropeInfo, setTropeInfo] = useState(null);
   const [reactions, setReactions] = useState([]);
   const [connectionStatus, setConnectionStatus] = useState('connected');
+  const [reconnectCancelled, setReconnectCancelled] = useState(false);
   const [browserOffline, setBrowserOffline] = useState(() => !navigator.onLine);
   const [bingoBanner, setBingoBanner] = useState(null);
+  const [finaleBanner, setFinaleBanner] = useState(false);
   const [highlightedCells, setHighlightedCells] = useState(new Set());
+  const [personalSuperlativeStats, setPersonalSuperlativeStats] = useState({ views: 0, submissions: 0, rejections: 0 });
+  const [superlativeMilestones, setSuperlativeMilestones] = useState({});
+  const [superlativeInfo, setSuperlativeInfo] = useState(null);
+  const [marathonStandingsOpen, setMarathonStandingsOpen] = useState(false);
+  const [playerStatsTargetId, setPlayerStatsTargetId] = useState(null);
+  const [statsDashboardOpen, setStatsDashboardOpen] = useState(false);
+  const [tropeAdvancedActions, setTropeAdvancedActions] = useState(null);
   const loadingRequestRef = useRef(0);
   const prevClaimIdRef = useRef(null);
   const prevJoinRequestIdRef = useRef(null);
@@ -116,6 +148,8 @@ function App() {
   const prevGameCodeRef = useRef(null);
   const prevBingoCountsRef = useRef({});
   const bingoBannerTimeoutRef = useRef(null);
+  const finaleBannerTimeoutRef = useRef(null);
+  const seenBingoEventIdsRef = useRef(new Set());
   const [theme, setTheme] = useState(
     localStorage.getItem('bingo-theme') ||
       (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
@@ -127,7 +161,28 @@ function App() {
   }, [theme]);
 
   useEffect(() => {
+    const gameTheme = gameState
+      ? getGameTheme(
+          gameState.movie?.themeGenres || gameState.genres,
+          gameState.movie?.themeSubgenreSelections || gameState.subgenreSelections,
+          theme,
+        )
+      : null;
+    if (gameTheme) {
+      document.body.style.setProperty('--theme-accent', gameTheme.accent);
+      document.body.style.setProperty('--theme-accent-hover', gameTheme.accentHover);
+    } else {
+      document.body.style.removeProperty('--theme-accent');
+      document.body.style.removeProperty('--theme-accent-hover');
+    }
+  }, [gameState?.genres, gameState?.subgenreSelections, gameState?.movie, theme]);
+
+  useEffect(() => {
     return () => clientRef.current?.destroy();
+  }, []);
+
+  useEffect(() => {
+    return () => clearTimeout(finaleBannerTimeoutRef.current);
   }, []);
 
   useEffect(() => {
@@ -153,6 +208,7 @@ function App() {
     const me = gameState.players[myId];
     if (!me) return;
     setHighlightedCells(getCompletedLineCells(me.marked));
+    if (Array.isArray(gameState.bingoEvents)) return;
     const nextCounts = Object.fromEntries(
       Object.entries(gameState.players).map(([id, player]) => [id, getCompletedLines(player.marked).length]),
     );
@@ -178,6 +234,10 @@ function App() {
       if (newBingo.id === myId) vibrate(VIBRATE_PATTERN_BINGO);
       clearTimeout(bingoBannerTimeoutRef.current);
       bingoBannerTimeoutRef.current = setTimeout(() => setBingoBanner(null), 4000);
+      setSuperlativeMilestones((previous) => {
+        if (Object.values(previous).some((milestone) => milestone.firstBingo)) return previous;
+        return { ...previous, [newBingo.id]: { ...previous[newBingo.id], firstBingo: true } };
+      });
     }
     prevBingoCountsRef.current = nextCounts;
   }, [gameState, myId]);
@@ -267,9 +327,36 @@ function App() {
     clientRef.current.resumeGame();
   }
 
+  function handleUpdateSessionLifetime(extended, hours) {
+    clientRef.current.updateSessionLifetime(extended, hours);
+    setSessionLifetimeModalOpen(false);
+  }
+
+  function handleUpdateMovie(movie) {
+    clientRef.current.updateMovie(movie);
+    setMovieIdentityModalOpen(false);
+  }
+
+  function handleChooseReplacement(text) {
+    clientRef.current.chooseReplacement(text);
+  }
+
+  function handleCycleReplacement() {
+    clientRef.current.cycleReplacement();
+  }
+
+  function handleCancelReplacement() {
+    clientRef.current.cancelReplacement();
+  }
+
   function handleConfirmEndGame() {
     setEndGameConfirmOpen(false);
     handleEndGame();
+  }
+
+  function handleDismissFinaleBanner() {
+    clearTimeout(finaleBannerTimeoutRef.current);
+    setFinaleBanner(false);
   }
 
   function handleConfirmLeave() {
@@ -314,6 +401,22 @@ function App() {
   function makeClient() {
     const client = new GameClient({
       onState: (state, id) => {
+        for (const event of state.bingoEvents || []) {
+          if (seenBingoEventIdsRef.current.has(event.id)) continue;
+          seenBingoEventIdsRef.current.add(event.id);
+          const player = state.players[event.playerId];
+          if (!player) continue;
+          const name = event.playerId === id ? '' : ` for ${player.name}`;
+          setBingoBanner(`🎉 BINGO${name}!${event.count > 1 ? ` (${event.count} lines!)` : ''}`);
+          playBingoSound();
+          if (event.playerId === id) vibrate(VIBRATE_PATTERN_BINGO);
+          clearTimeout(bingoBannerTimeoutRef.current);
+          bingoBannerTimeoutRef.current = setTimeout(() => setBingoBanner(null), 4000);
+          setSuperlativeMilestones((previous) => {
+            if (Object.values(previous).some((milestone) => milestone.firstBingo)) return previous;
+            return { ...previous, [event.playerId]: { ...previous[event.playerId], firstBingo: true } };
+          });
+        }
         setGameState({ ...state });
         setMyId(id);
         gameStateRef.current = state;
@@ -340,8 +443,8 @@ function App() {
             if (replace) {
               showToast(
                 evt.wagerFreed
-                  ? `✅ "${evt.text}" was swapped out for a new trope!${approvedByText} Your wager on it was freed up — pick a new space to wager.`
-                  : `✅ "${evt.text}" was swapped out for a new trope!${approvedByText}`,
+                  ? `✅ "${evt.text}" was approved for replacement.${approvedByText} Your wager will be freed when the proposer confirms a new trope.`
+                  : `✅ "${evt.text}" was approved for replacement.${approvedByText}`,
               );
               if (evt.wagerFreed) setManageWagersOpen(true);
             } else if (wagerChange) {
@@ -364,13 +467,35 @@ function App() {
             }
           } else {
             playDeniedSound();
+            if (evt.byId === myIdRef.current) {
+              setPersonalSuperlativeStats((previous) => ({ ...previous, rejections: previous.rejections + 1 }));
+            }
             showToast(
               wagerChange
                 ? '❌ The proposed wager changes did not reach majority agreement.'
                 : reroll
                   ? '❌ The request for a fresh board did not reach majority agreement.'
-                  : `❌ "${evt.text}" did not reach majority agreement.`,
+                  : `❌ "${evt.text}" did not reach majority agreement.${formatDisagreeRationales(evt.disagreeRationaleCounts)}`,
             );
+          }
+          if (evt.approved && evt.kind === 'mark') {
+            setSuperlativeMilestones((previous) => {
+              const next = { ...previous };
+              if (!Object.values(previous).some((milestone) => milestone.firstAccepted)) {
+                next[evt.byId] = { ...next[evt.byId], firstAccepted: true };
+              }
+              const state = gameStateRef.current;
+              const wageredPlayers = Object.values(state?.players || {}).filter((player) => {
+                const index = player.board.indexOf(evt.text);
+                return index !== -1 && player.wagered.includes(index);
+              });
+              if (wageredPlayers.length > 0 && !Object.values(previous).some((milestone) => milestone.firstWagerHit)) {
+                wageredPlayers.forEach((player) => {
+                  next[player.id] = { ...next[player.id], firstWagerHit: true };
+                });
+              }
+              return next;
+            });
           }
         } else if (evt.type === 'reaction') {
           const state = gameStateRef.current;
@@ -395,23 +520,47 @@ function App() {
           setGameOverModalOpen(false);
           setWageringEnabled(false);
           setAdvancedGameplay(false);
+          setSuperlativeMilestones({});
+          setPersonalSuperlativeStats({ views: 0, submissions: 0, rejections: 0 });
         } else if (evt.type === 'gameRestored') {
           showToast('Nobody else was still connected — your game was restored from where you left off.');
         } else if (evt.type === 'gameOver') {
           setSavedSession(null);
           playGameOverSound();
+          setFinaleBanner(true);
+          clearTimeout(finaleBannerTimeoutRef.current);
+          finaleBannerTimeoutRef.current = setTimeout(() => setFinaleBanner(false), 5000);
           showToast('🏁 The game has ended — check out the recap!');
           setGameOverModalOpen(true);
         } else if (evt.type === 'gameResumed') {
           setSavedSession(GameClient.getSavedSession());
+          setFinaleBanner(false);
+          clearTimeout(finaleBannerTimeoutRef.current);
           showToast('▶️ The game was resumed — after-credits tropes are back in play.');
           setGameOverModalOpen(false);
+        } else if (evt.type === 'sessionLifetimeUpdated') {
+          showToast(`Session countdown restarted for ${evt.hours} hours.`);
+        } else if (evt.type === 'sessionExpired') {
+          setScreen('landing');
+          setGameState(null);
+          setMyId(null);
+          setSavedSession(null);
+          setError('This game session expired while everyone was away.');
+          setConnectionStatus('connected');
+        } else if (evt.type === 'replacementResolved' && evt.wagerFreed) {
+          setManageWagersOpen(true);
         } else if (evt.type === 'connectionStatus') {
           setConnectionStatus(evt.status);
+          if (evt.status === 'connected') setReconnectCancelled(false);
+        } else if (evt.type === 'reconnectCancelled') {
+          setReconnectCancelled(true);
+        } else if (evt.type === 'reconnectStarted') {
+          setReconnectCancelled(false);
         } else if (evt.type === 'codeChanged') {
           showToast('A player was removed — the game code was rotated for security.');
         } else if (evt.type === 'joinApproved') {
           setJoinApprovalPending(false);
+          blurActiveTextField();
           setScreen('game');
         } else if (evt.type === 'joinDenied') {
           clientRef.current = null;
@@ -449,6 +598,8 @@ function App() {
     customTropes,
     genrePercents,
     subgenrePercents,
+    movie,
+    marathonEnabled,
   ) {
     const requestId = ++loadingRequestRef.current;
     setError('');
@@ -468,8 +619,11 @@ function App() {
         customTropes,
         genrePercents,
         subgenrePercents,
+        movie,
+        marathonEnabled,
       );
       if (loadingRequestRef.current !== requestId) return;
+      blurActiveTextField();
       setScreen('game');
     } catch (err) {
       if (loadingRequestRef.current !== requestId) return;
@@ -503,6 +657,7 @@ function App() {
       } else if (result.needsApproval) {
         setJoinApprovalPending(true);
       } else {
+        blurActiveTextField();
         setScreen('game');
       }
     } catch (err) {
@@ -523,6 +678,7 @@ function App() {
     try {
       await clientRef.current.claimDisconnectedSeat(seatId, joinChoice.name);
       setJoinChoice(null);
+      blurActiveTextField();
       setScreen('game');
     } catch (err) {
       setError(err.message || 'Could not reconnect as that player.');
@@ -542,6 +698,7 @@ function App() {
       if (result.needsApproval) {
         setJoinApprovalPending(true);
       } else {
+        blurActiveTextField();
         setScreen('game');
       }
     } catch (err) {
@@ -576,6 +733,7 @@ function App() {
       const client = makeClient();
       await client.rejoinGame();
       if (loadingRequestRef.current !== requestId) return;
+      blurActiveTextField();
       setScreen('game');
     } catch (err) {
       if (loadingRequestRef.current !== requestId) return;
@@ -599,11 +757,13 @@ function App() {
 
   function handleCellClick(index) {
     if (!gameState) return;
+    recordTropeView();
     if (gameState.freeSpace && index === CENTER_INDEX) return;
     const me = gameState.players[myId];
 
     if (!gameState.started) {
       const wagered = me.wagered.includes(index);
+      const accepted = gameState.acceptedTropes.includes(me.board[index]);
       setTropeInfo({
         text: me.board[index],
         marked: false,
@@ -615,7 +775,7 @@ function App() {
           : 'You can read about this trope or propose swapping it out before the game starts.',
         confirmLabel: wageringEnabled ? (wagered ? '🎯 Remove wager' : '🎯 Wager this trope') : undefined,
         onConfirm: wageringEnabled ? () => handleTogglePregameWager(index) : null,
-        onProposeSwap: () => handleProposeSwapFromInfo(me.board[index]),
+        onProposeSwap: accepted ? undefined : () => handleProposeSwapFromInfo(me.board[index]),
       });
       return;
     }
@@ -624,8 +784,14 @@ function App() {
       text: me.board[index],
       marked: me.marked.includes(index),
       onConfirm: () => handleConfirmTropeClaim(index),
-      onProposeSwap: () => handleProposeSwapFromInfo(me.board[index]),
+      onAdvancedActions: gameState.acceptedTropes.includes(me.board[index])
+        ? undefined
+        : () => setTropeAdvancedActions({ text: me.board[index] }),
     });
+  }
+
+  function recordTropeView() {
+    setPersonalSuperlativeStats((previous) => ({ ...previous, views: previous.views + 1 }));
   }
 
   function handleStartWagering() {
@@ -663,10 +829,12 @@ function App() {
       showToast('A claim is already being voted on.');
       return;
     }
+    setPersonalSuperlativeStats((previous) => ({ ...previous, submissions: previous.submissions + 1 }));
     clientRef.current.claim(index);
   }
 
   function handleAcceptedTropeInfo(text) {
+    recordTropeView();
     setTropeInfo({
       text,
       marked: true,
@@ -674,25 +842,26 @@ function App() {
       actionHint: 'This asks the group to vote on undoing this accepted trope.',
       confirmLabel: '👍 Challenge it',
       onConfirm: () => handleChallenge(text),
-      onProposeSwap: () => handleProposeSwapFromInfo(text),
     });
   }
 
   function handlePoolTropeInfo(text, accepted) {
+    recordTropeView();
     setTropeInfo({
       text,
       marked: accepted,
       title: accepted ? 'Accepted trope' : 'Propose this trope?',
       actionHint: accepted
-        ? 'The group already accepted this trope. You can still challenge it or propose swapping it out.'
+        ? 'The group already accepted this trope. You can still challenge it.'
         : "This asks the group to vote on marking it as having happened, even if it's not on your board.",
       confirmLabel: accepted ? '👍 Challenge it' : '👍 Propose it happened',
       onConfirm: () => (accepted ? handleChallenge(text) : handleProposeAccept(text)),
-      onProposeSwap: () => handleProposeSwapFromInfo(text),
+      onProposeSwap: accepted ? undefined : () => handleProposeSwapFromInfo(text),
     });
   }
 
   function handleReadOnlyTropeInfo(text, accepted = false) {
+    recordTropeView();
     setTropeInfo({
       text,
       marked: accepted,
@@ -701,11 +870,12 @@ function App() {
         ? 'This wager has already been accepted by the group.'
         : 'This is one of the wagered tropes in this game.',
       onConfirm: null,
-      onProposeSwap: () => handleProposeSwapFromInfo(text),
+      onProposeSwap: accepted ? undefined : () => handleProposeSwapFromInfo(text),
     });
   }
 
   function handleManagedWagerInfo({ text, marked, title, actionHint, confirmLabel, onConfirm }) {
+    recordTropeView();
     setTropeInfo({
       text,
       marked,
@@ -716,7 +886,7 @@ function App() {
         setTropeInfo(null);
         onConfirm();
       },
-      onProposeSwap: () => handleProposeSwapFromInfo(text),
+      onProposeSwap: marked ? undefined : () => handleProposeSwapFromInfo(text),
     });
   }
 
@@ -728,9 +898,29 @@ function App() {
     setResetModalOpen(true);
   }
 
-  function handleConfirmReset(genres, subgenreSelections, freeSpace, generalPercents, totalTropes, customTropes) {
+  function handleConfirmReset(
+    genres,
+    subgenreSelections,
+    freeSpace,
+    generalPercents,
+    totalTropes,
+    customTropes,
+    genrePercents,
+    subgenrePercents,
+    movie,
+  ) {
     setResetModalOpen(false);
-    clientRef.current.resetGame(genres, subgenreSelections, freeSpace, generalPercents, totalTropes, customTropes);
+    clientRef.current.resetGame(
+      genres,
+      subgenreSelections,
+      freeSpace,
+      generalPercents,
+      totalTropes,
+      customTropes,
+      genrePercents,
+      subgenrePercents,
+      movie,
+    );
   }
 
   function handleChallenge(text) {
@@ -770,6 +960,17 @@ function App() {
   function handleProposeSwapFromInfo(text) {
     setTropeInfo(null);
     handleRequestReplace(text);
+  }
+
+  function handleToggleCall(text) {
+    clientRef.current.toggleCall(text);
+    setTropeAdvancedActions(null);
+    setTropeInfo(null);
+  }
+
+  function handleAdvancedSwap(text) {
+    setTropeAdvancedActions(null);
+    handleProposeSwapFromInfo(text);
   }
 
   function handleSubmitWagerChange(add, remove) {
@@ -851,6 +1052,14 @@ function App() {
     setConnectionStatus('connected');
   }
 
+  function handleCancelReconnect() {
+    clientRef.current?.cancelReconnect();
+  }
+
+  function handleRetryReconnect() {
+    clientRef.current?.retryReconnect();
+  }
+
   if (screen === 'landing' || !gameState) {
     return (
       <>
@@ -902,6 +1111,9 @@ function App() {
   const me = gameState.players[myId];
   if (!me) return null;
   const players = Object.values(gameState.players).sort((a, b) => a.seat - b.seat);
+  const playerStatsTarget = players.find((player) => player.id === playerStatsTargetId) || null;
+  const calledText = gameState.calls?.[myId];
+  const calledIndexes = calledText ? [me.board.indexOf(calledText)].filter((index) => index !== -1) : [];
   const activePlayerCount = players.filter((player) => player.connected).length;
   const bingoCounts = Object.fromEntries(players.map((p) => [p.id, getCompletedLines(p.marked).length]));
   const hostIds = gameState.hostIds?.length ? gameState.hostIds : [gameState.seatOrder[0]];
@@ -917,11 +1129,16 @@ function App() {
     .map((id) => `${GENRES.find((g) => g.id === id)?.label || id} ${gameState.generalPercents[id]}%`)
     .join(', ');
   const inviteUrl = `${window.location.origin}${window.location.pathname}?code=${gameState.code}`;
+  const playerSuperlatives = gameState.acceptedTropes.length
+    ? getPlayerSuperlatives(players, gameState, { [myId]: personalSuperlativeStats }, superlativeMilestones)
+    : {};
 
   return (
     <>
       {(connectionStatus === 'disconnected' || browserOffline) && (
-        <div className="connection-banner">⚠️ Connection lost — trying to reconnect…</div>
+        <div className="connection-banner">
+          {reconnectCancelled ? '⚠️ Connection lost — reconnect paused.' : '⚠️ Connection lost — trying to reconnect…'}
+        </div>
       )}
       {!focusMode && (
         <header className="app-header">
@@ -938,6 +1155,7 @@ function App() {
         </header>
       )}
       <BingoBanner message={bingoBanner} />
+      <FinaleBanner visible={finaleBanner} onDismiss={handleDismissFinaleBanner} />
       <ReactionOverlay reactions={reactions} />
       <main id="app" className={focusMode ? 'focus-mode' : ''}>
         <section className="screen-game">
@@ -948,6 +1166,18 @@ function App() {
           ) : (
             <div className="game-topbar">
               <div className="code-display">Code: {gameState.code}</div>
+              {gameState.movie && (
+                <button
+                  className={`movie-banner${isHost ? ' movie-banner-editable' : ''}`}
+                  onClick={() => isHost && setMovieIdentityModalOpen(true)}
+                >
+                  {gameState.movie.poster && <img src={gameState.movie.poster} alt="" />}
+                  <span className="movie-banner-copy">
+                    <small>Now watching</small>
+                    <strong>{gameState.movie.title}</strong>
+                  </span>
+                </button>
+              )}
               <div className="game-status">
                 {gameState.started
                   ? 'Game in progress — click a space when it happens on screen!'
@@ -976,12 +1206,12 @@ function App() {
                 onShowAllWagers={() => setAllWagersModalOpen(true)}
                 onShowActivityFeed={() => setActivityFeedOpen(true)}
                 onBoardFocus={() => setFocusMode(true)}
-                onChangeName={() => setChangeNameModalOpen(true)}
                 onResignHost={handleResignHost}
                 hostCount={hostIds.length}
                 onResetGame={handleResetGame}
                 onEndGame={() => setEndGameConfirmOpen(true)}
                 onResumeGame={handleResumeGame}
+                onConfigureSession={() => setSessionLifetimeModalOpen(true)}
                 onViewRecap={() => setGameOverModalOpen(true)}
                 onLeaveGame={() => setLeaveConfirmOpen(true)}
                 onCopyInviteLink={handleCopyInviteLink}
@@ -990,6 +1220,9 @@ function App() {
                 onToggleAdvancedGameplay={() => setAdvancedGameplay((enabled) => !enabled)}
                 onSubmitCustomTrope={() => setCustomTropeModalOpen(true)}
                 onRequestBoardSwap={handleRequestBoardSwap}
+                marathonEnabled={gameState.marathon?.enabled}
+                onShowMarathonStandings={() => setMarathonStandingsOpen(true)}
+                onShowStatsDashboard={() => setStatsDashboardOpen(true)}
               />
             </div>
           )}
@@ -1010,15 +1243,44 @@ function App() {
                 onKick={handleKickPlayer}
                 onEditSelf={() => setChangeNameModalOpen(true)}
                 onManagePlayer={handleManagePlayer}
+                onViewPlayerStats={(player) => setPlayerStatsTargetId(player.id)}
+                callStats={gameState.callStats}
                 wageringEnabled={wageringEnabled}
                 onOpenWagerIntro={() => setWagerIntroOpen(true)}
+                superlatives={playerSuperlatives}
+                onSuperlativeClick={(player) =>
+                  setSuperlativeInfo({ award: playerSuperlatives[player.id], name: player.name })
+                }
               />
             )}
             <div className="board-wrap">
+              {(connectionStatus === 'disconnected' || browserOffline) && (
+                <div className="reconnect-panel" role="status" aria-live="polite">
+                  {reconnectCancelled ? (
+                    <>
+                      <strong>Disconnected</strong>
+                      <p>Reconnect was paused. Your board is still here.</p>
+                      <button className="btn primary" onClick={handleRetryReconnect}>
+                        ↻ Reconnect
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="loading-spinner" aria-hidden="true" />
+                      <strong>Reconnecting…</strong>
+                      <p>Your board is preserved while we restore the connection.</p>
+                      <button className="btn" onClick={handleCancelReconnect}>
+                        Cancel reconnect
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
               <BingoBoard
                 board={me.board}
                 wagered={me.wagered}
                 marked={me.marked}
+                calledIndexes={calledIndexes}
                 freeSpace={gameState.freeSpace}
                 pending={!!gameState.pendingClaim}
                 highlightedCells={highlightedCells}
@@ -1034,7 +1296,7 @@ function App() {
         myId={myId}
         players={players}
         onAgree={() => clientRef.current.vote(gameState.pendingClaim.claimId, true)}
-        onDisagree={() => clientRef.current.vote(gameState.pendingClaim.claimId, false)}
+        onDisagree={(rationale) => clientRef.current.vote(gameState.pendingClaim.claimId, false, rationale)}
         onCancel={() => clientRef.current.cancelClaim(gameState.pendingClaim.claimId)}
       />
 
@@ -1046,6 +1308,8 @@ function App() {
           currentSubgenreSelections={gameState.subgenreSelections}
           currentFreeSpace={gameState.freeSpace}
           currentGeneralPercents={gameState.generalPercents}
+          currentGenrePercents={gameState.genrePercents}
+          currentSubgenrePercents={gameState.subgenrePercents}
           currentTotalTropes={gameState.totalTropes}
           onConfirm={handleConfirmReset}
           onCancel={() => setResetModalOpen(false)}
@@ -1136,6 +1400,10 @@ function App() {
           isHost={hostIds.includes(managedPlayer.id)}
           onAddHost={handleAddManagedHost}
           onProposeProfile={handleOpenProfileProposal}
+          onViewStats={() => {
+            setPlayerStatsTargetId(managedPlayer.id);
+            setManagedPlayer(null);
+          }}
           onCancel={() => setManagedPlayer(null)}
         />
       )}
@@ -1171,8 +1439,79 @@ function App() {
         <ActivityFeedModal activityLog={gameState.activityLog || []} onClose={() => setActivityFeedOpen(false)} />
       )}
 
+      {marathonStandingsOpen && (
+        <MarathonStandingsModal marathon={gameState.marathon} onClose={() => setMarathonStandingsOpen(false)} />
+      )}
+
+      {playerStatsTarget && (
+        <PlayerStatsModal
+          player={playerStatsTarget}
+          marathon={gameState.marathon}
+          freeSpace={gameState.freeSpace}
+          callStats={gameState.callStats?.[playerStatsTarget.id]}
+          onClose={() => setPlayerStatsTargetId(null)}
+        />
+      )}
+
+      {statsDashboardOpen && (
+        <StatsDashboardModal
+          players={players}
+          acceptedTropes={gameState.acceptedTropes}
+          freeSpace={gameState.freeSpace}
+          callStats={gameState.callStats}
+          onClose={() => setStatsDashboardOpen(false)}
+        />
+      )}
+
       {gameOverModalOpen && (
-        <GameOverModal players={players} bingoCounts={bingoCounts} onClose={() => setGameOverModalOpen(false)} />
+        <GameOverModal
+          players={players}
+          bingoCounts={bingoCounts}
+          callStats={gameState.callStats}
+          movie={gameState.movie}
+          isHost={isHost}
+          onMovieClick={() => setMovieIdentityModalOpen(true)}
+          superlatives={playerSuperlatives}
+          onSuperlativeClick={(player) =>
+            setSuperlativeInfo({ award: playerSuperlatives[player.id], name: player.name })
+          }
+          onClose={() => setGameOverModalOpen(false)}
+        />
+      )}
+
+      {sessionLifetimeModalOpen && (
+        <SessionLifetimeModal
+          currentExtended={gameState.sessionExtended}
+          currentHours={gameState.sessionLifetimeHours}
+          onConfirm={handleUpdateSessionLifetime}
+          onCancel={() => setSessionLifetimeModalOpen(false)}
+        />
+      )}
+
+      {movieIdentityModalOpen && (
+        <MovieIdentityModal
+          currentMovie={gameState.movie}
+          onConfirm={handleUpdateMovie}
+          onCancel={() => setMovieIdentityModalOpen(false)}
+        />
+      )}
+
+      {gameState.pendingReplacement && (
+        <ReplacementPickerModal
+          replacement={gameState.pendingReplacement}
+          isProposer={gameState.pendingReplacement.byId === myId}
+          onCycle={handleCycleReplacement}
+          onChoose={handleChooseReplacement}
+          onCancel={handleCancelReplacement}
+        />
+      )}
+
+      {superlativeInfo && (
+        <SuperlativeModal
+          award={superlativeInfo.award}
+          playerName={superlativeInfo.name}
+          onClose={() => setSuperlativeInfo(null)}
+        />
       )}
 
       {leaveConfirmOpen && (
@@ -1223,6 +1562,18 @@ function App() {
           onConfirm={tropeInfo.onConfirm}
           onCancel={handleCloseTropeInfo}
           onProposeSwap={tropeInfo.onProposeSwap}
+          onAdvancedActions={tropeInfo.onAdvancedActions}
+          actionsAvailable={!gameState.acceptedTropes.includes(tropeInfo.text)}
+        />
+      )}
+
+      {tropeAdvancedActions && !gameState.acceptedTropes.includes(tropeAdvancedActions.text) && (
+        <TropeAdvancedActionsModal
+          text={tropeAdvancedActions.text}
+          called={gameState.calls?.[myId] === tropeAdvancedActions.text}
+          onToggleCall={() => handleToggleCall(tropeAdvancedActions.text)}
+          onSwap={() => handleAdvancedSwap(tropeAdvancedActions.text)}
+          onClose={() => setTropeAdvancedActions(null)}
         />
       )}
 

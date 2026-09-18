@@ -31,6 +31,8 @@ export default function Landing({
   const [advancedSetup, setAdvancedSetup] = useState(false);
   const [hostTotalTropes, setHostTotalTropes] = useState(DEFAULT_TOTAL_TROPES);
   const [hostCustomTropes, setHostCustomTropes] = useState([]);
+  const [hostMovie, setHostMovie] = useState(null);
+  const [hostMarathon, setHostMarathon] = useState(false);
   const [joinName, setJoinName] = useState('');
   const [joinCode, setJoinCode] = useState(() => {
     const fromUrl = new URLSearchParams(window.location.search).get('code');
@@ -95,6 +97,8 @@ export default function Landing({
       hostCustomTropes,
       hostGenrePercents,
       resolvedSubgenrePercents,
+      hostMovie,
+      hostMarathon,
     );
   }
 
@@ -229,6 +233,10 @@ export default function Landing({
               Free center space
             </label>
             <label className="checkbox-label">
+              <input type="checkbox" checked={hostMarathon} onChange={(e) => setHostMarathon(e.target.checked)} />
+              Marathon mode (keep standings across resets)
+            </label>
+            <label className="checkbox-label">
               <input
                 type="checkbox"
                 checked={customRatios}
@@ -263,7 +271,7 @@ export default function Landing({
             <CustomTropesEditor customTropes={hostCustomTropes} onChange={setHostCustomTropes} />
           </>
         )}
-        <MovieLookup onFound={handleMovieFound} />
+        <MovieLookup onFound={handleMovieFound} onMovieSelected={setHostMovie} />
       </div>
       <ErrorModal message={localError || error} onClose={() => (localError ? setLocalError('') : onDismissError())} />
       {hostSetupIssues && (

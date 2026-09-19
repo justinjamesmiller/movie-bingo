@@ -81,14 +81,22 @@ body {
   font-size: 1rem;
 }
 
+/* Fixed box + flex centering so emoji glyph metrics can't change the button size across platforms */
+.icon-btn,
 .theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text);
   border-radius: 50%;
   width: 2.4rem;
   height: 2.4rem;
+  padding: 0;
   font-size: 1.2rem;
+  line-height: 1;
   cursor: pointer;
 }
 
@@ -178,6 +186,21 @@ body {
 
 .movie-lookup-row .btn {
   flex: 0 0 auto;
+}
+
+.movie-lookup-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.movie-lookup-loading .loading-spinner {
+  width: 1.1rem;
+  height: 1.1rem;
+  border-width: 2px;
 }
 
 .movie-result-list {
@@ -544,8 +567,10 @@ select {
 .game-layout {
   display: flex;
   gap: 1.5rem;
-  flex-wrap: wrap;
-  align-items: flex-start;
+  /* wrap-reverse puts the players panel (first child) BELOW the board once they stack;
+     with reversed cross-axis, flex-end keeps them top-aligned side by side */
+  flex-wrap: wrap-reverse;
+  align-items: flex-end;
 }
 
 #app.focus-mode {
@@ -704,13 +729,7 @@ select {
   -webkit-user-select: none;
   -webkit-touch-callout: none;
   -webkit-tap-highlight-color: transparent;
-  transition:
-    transform 0.1s ease,
-    background 0.15s ease;
-}
-
-.bingo-cell:hover {
-  transform: translateY(-2px);
+  transition: background 0.15s ease;
 }
 
 .bingo-cell.wagered {
@@ -1413,18 +1432,24 @@ select {
 
 .avatar-grid {
   display: grid;
-  grid-template-columns: repeat(8, 1fr);
+  /* auto-fill wraps to fewer columns on narrow phones instead of overflowing right */
+  grid-template-columns: repeat(auto-fill, minmax(2.6rem, 1fr));
   gap: 0.4rem;
   margin-bottom: 0.5rem;
+  width: 100%;
 }
 
 .avatar-option {
   font-size: 1.3rem;
-  padding: 0.4rem;
+  padding: 0.4rem 0;
+  min-width: 0;
   border-radius: 8px;
   border: 2px solid transparent;
   background: var(--bg);
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .avatar-option.selected {

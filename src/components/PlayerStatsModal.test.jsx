@@ -8,7 +8,6 @@ describe('PlayerStatsModal', () => {
       <PlayerStatsModal
         player={{ id: 'a', name: 'Alice', avatar: '🎬', marked: [0, 1], wagered: [0, 2] }}
         marathon={{
-          enabled: true,
           watches: [{ players: [{ id: 'a', name: 'Alice', avatar: '🎬', tropes: 4, bingos: 1, wagerHits: 2 }] }],
         }}
         onClose={vi.fn()}

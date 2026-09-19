@@ -34,7 +34,6 @@ export default function GameMenu({
   onToggleAdvancedGameplay,
   onSubmitCustomTrope,
   onRequestBoardSwap,
-  marathonEnabled,
   onShowMarathonStandings,
   onShowStatsDashboard,
 }) {
@@ -116,11 +115,9 @@ export default function GameMenu({
                   <button className="btn" onClick={() => pick(onShowStatsDashboard)}>
                     📊 Game Stats
                   </button>
-                  {marathonEnabled && (
-                    <button className="btn" onClick={() => pick(onShowMarathonStandings)}>
-                      🎬 Marathon History
-                    </button>
-                  )}
+                  <button className="btn" onClick={() => pick(onShowMarathonStandings)}>
+                    🎬 Marathon History
+                  </button>
                 </div>
               )}
               {advancedGameplay && (

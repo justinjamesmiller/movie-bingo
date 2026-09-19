@@ -20,7 +20,6 @@ function renderPanel(overrides = {}) {
       bingoCounts={{ p1: 1, p2: 0 }}
       onKick={vi.fn()}
       wageringEnabled
-      onOpenWagerIntro={vi.fn()}
       {...overrides}
     />,
   );
@@ -47,15 +46,11 @@ describe('PlayersPanel', () => {
     expect(onKick).toHaveBeenCalledWith('p2', 'Bob');
   });
 
-  it('always offers optional wagers but hides wager copy until the player opts in', () => {
-    const onOpenWagerIntro = vi.fn();
-    renderPanel({ wageringEnabled: false, onOpenWagerIntro });
+  it('hides wager copy until the player opts in', () => {
+    renderPanel({ wageringEnabled: false });
 
-    expect(screen.getByRole('button', { name: '🎯 Optional Wagers' })).toBeInTheDocument();
     expect(screen.queryByText(/Pick 5 spaces/)).toBeNull();
     expect(screen.queryByText(/Wagered:/)).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: '🎯 Optional Wagers' }));
-    expect(onOpenWagerIntro).toHaveBeenCalledTimes(1);
   });
 
   it('hides wager-hit stats only for players without wagers', () => {

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -65,6 +65,20 @@ describe('MovieLookup', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Search a different title' }));
     expect(screen.queryByText(/Picked "Example Show"/)).toBeNull();
+  });
+
+  it('shows a loader while a search is in flight and hides it afterward', async () => {
+    let resolveSearch;
+    mocks.searchMovies.mockReturnValue(new Promise((resolve) => (resolveSearch = resolve)));
+    render(<MovieLookup onFound={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText(/Look up a movie/i), { target: { value: 'Example' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+
+    expect(screen.getByRole('status')).toHaveTextContent('Searching IMDb…');
+
+    resolveSearch([]);
+    await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
   });
 
   it('shows a lookup error and allows another search', async () => {

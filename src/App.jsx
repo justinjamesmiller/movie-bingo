@@ -60,6 +60,7 @@ import { getPlayerSuperlatives } from './utils/superlatives.js';
 import { getGameTheme } from './utils/gameTheme.js';
 
 const MAX_WAGERS = 5;
+const CONNECTION_LOST_GRACE_MS = 4000;
 
 function formatNameList(names) {
   if (names.length <= 1) return names[0] || '';
@@ -128,6 +129,7 @@ function App() {
   const [tropeInfo, setTropeInfo] = useState(null);
   const [reactions, setReactions] = useState([]);
   const [connectionStatus, setConnectionStatus] = useState('connected');
+  const [connectionLost, setConnectionLost] = useState(false);
   const [reconnectCancelled, setReconnectCancelled] = useState(false);
   const [browserOffline, setBrowserOffline] = useState(() => !navigator.onLine);
   const [bingoBanner, setBingoBanner] = useState(null);
@@ -199,6 +201,18 @@ function App() {
       window.removeEventListener('online', handleOnline);
     };
   }, []);
+
+  // Only surface a drop that persists -- a transient websocket blip usually
+  // heals within a second or two and isn't worth alarming the table over.
+  useEffect(() => {
+    const lost = connectionStatus === 'disconnected' || browserOffline;
+    if (!lost) {
+      setConnectionLost(false);
+      return undefined;
+    }
+    const timer = setTimeout(() => setConnectionLost(true), CONNECTION_LOST_GRACE_MS);
+    return () => clearTimeout(timer);
+  }, [connectionStatus, browserOffline]);
 
   // Detects newly-completed bingo lines for every player from the replicated
   // marked arrays. Each client shows the celebration locally, with a different
@@ -599,7 +613,6 @@ function App() {
     genrePercents,
     subgenrePercents,
     movie,
-    marathonEnabled,
   ) {
     const requestId = ++loadingRequestRef.current;
     setError('');
@@ -620,7 +633,6 @@ function App() {
         genrePercents,
         subgenrePercents,
         movie,
-        marathonEnabled,
       );
       if (loadingRequestRef.current !== requestId) return;
       blurActiveTextField();
@@ -1063,17 +1075,20 @@ function App() {
   if (screen === 'landing' || !gameState) {
     return (
       <>
-        {(connectionStatus === 'disconnected' || browserOffline) && (
-          <div className="connection-banner">⚠️ Connection lost — trying to reconnect…</div>
-        )}
+        {connectionLost && <div className="connection-banner">⚠️ Connection lost — trying to reconnect…</div>}
         <header className="app-header">
           <h1>🎬 Movie/TV Trope Bingo</h1>
           <div className="header-actions">
-            <button className="btn" onClick={toggleSoundMuted} aria-label={soundMuted ? 'Unmute sound' : 'Mute sound'}>
+            <button
+              className="icon-btn"
+              onClick={toggleSoundMuted}
+              aria-label={soundMuted ? 'Unmute sound' : 'Mute sound'}
+              title={soundMuted ? 'Unmute sound' : 'Mute sound'}
+            >
               {soundMuted ? '🔇' : '🔊'}
             </button>
-            <button className="btn" onClick={() => setHelpModalOpen(true)}>
-              ❓ Help
+            <button className="icon-btn" onClick={() => setHelpModalOpen(true)} aria-label="Help" title="Help">
+              ❓
             </button>
             <ThemeToggle theme={theme} onToggle={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
           </div>
@@ -1135,7 +1150,7 @@ function App() {
 
   return (
     <>
-      {(connectionStatus === 'disconnected' || browserOffline) && (
+      {connectionLost && (
         <div className="connection-banner">
           {reconnectCancelled ? '⚠️ Connection lost — reconnect paused.' : '⚠️ Connection lost — trying to reconnect…'}
         </div>
@@ -1144,11 +1159,16 @@ function App() {
         <header className="app-header">
           <h1>🎬 Movie/TV Trope Bingo</h1>
           <div className="header-actions">
-            <button className="btn" onClick={toggleSoundMuted} aria-label={soundMuted ? 'Unmute sound' : 'Mute sound'}>
+            <button
+              className="icon-btn"
+              onClick={toggleSoundMuted}
+              aria-label={soundMuted ? 'Unmute sound' : 'Mute sound'}
+              title={soundMuted ? 'Unmute sound' : 'Mute sound'}
+            >
               {soundMuted ? '🔇' : '🔊'}
             </button>
-            <button className="btn" onClick={() => setHelpModalOpen(true)}>
-              ❓ Help
+            <button className="icon-btn" onClick={() => setHelpModalOpen(true)} aria-label="Help" title="Help">
+              ❓
             </button>
             <ThemeToggle theme={theme} onToggle={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
           </div>
@@ -1188,6 +1208,11 @@ function App() {
                   Start Game
                 </button>
               )}
+              {!gameState.started && (
+                <button className="btn" onClick={() => setWagerIntroOpen(true)}>
+                  🎯 {wageringEnabled ? 'Choose Wagers' : 'Optional Wagers'}
+                </button>
+              )}
               <GameMenu
                 open={menuOpen}
                 onToggle={() => setMenuOpen((v) => !v)}
@@ -1220,7 +1245,6 @@ function App() {
                 onToggleAdvancedGameplay={() => setAdvancedGameplay((enabled) => !enabled)}
                 onSubmitCustomTrope={() => setCustomTropeModalOpen(true)}
                 onRequestBoardSwap={handleRequestBoardSwap}
-                marathonEnabled={gameState.marathon?.enabled}
                 onShowMarathonStandings={() => setMarathonStandingsOpen(true)}
                 onShowStatsDashboard={() => setStatsDashboardOpen(true)}
               />
@@ -1246,7 +1270,6 @@ function App() {
                 onViewPlayerStats={(player) => setPlayerStatsTargetId(player.id)}
                 callStats={gameState.callStats}
                 wageringEnabled={wageringEnabled}
-                onOpenWagerIntro={() => setWagerIntroOpen(true)}
                 superlatives={playerSuperlatives}
                 onSuperlativeClick={(player) =>
                   setSuperlativeInfo({ award: playerSuperlatives[player.id], name: player.name })
@@ -1254,7 +1277,7 @@ function App() {
               />
             )}
             <div className="board-wrap">
-              {(connectionStatus === 'disconnected' || browserOffline) && (
+              {connectionLost && (
                 <div className="reconnect-panel" role="status" aria-live="polite">
                   {reconnectCancelled ? (
                     <>
@@ -1496,10 +1519,9 @@ function App() {
         />
       )}
 
-      {gameState.pendingReplacement && (
+      {gameState.pendingReplacement && gameState.pendingReplacement.byId === myId && (
         <ReplacementPickerModal
           replacement={gameState.pendingReplacement}
-          isProposer={gameState.pendingReplacement.byId === myId}
           onCycle={handleCycleReplacement}
           onChoose={handleChooseReplacement}
           onCancel={handleCancelReplacement}

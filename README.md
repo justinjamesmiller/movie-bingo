@@ -43,7 +43,7 @@ free on GitHub Pages.
   space is outlined only on their board; accepted calls are tracked as a metric, and a call can be withdrawn.
 - **Vote reasons:** choosing Disagree opens an optional, anonymous set of preset reasons. The group sees only the
   aggregate reasons, never which player selected one.
-- **Marathon mode:** enable it in Advanced Host Setup to retain completed-watch metrics across game resets. The
+- **Marathon history:** always on — whenever the host resets a started game, that watch's metrics are retained. The
   Marathon History view tracks each player's completed watches, accepted tropes, bingos, and wager hits without
   assigning points or a winner.
 - **Co-hosts:** a host can add other connected players as hosts. Every host has the same host controls, can add more

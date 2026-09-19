@@ -7,6 +7,7 @@ import ErrorModal from './ErrorModal.jsx';
 export default function MovieLookup({ onFound, onMovieSelected }) {
   const [query, setQuery] = useState('');
   const [busy, setBusy] = useState(false);
+  const [busyMessage, setBusyMessage] = useState('');
   const [results, setResults] = useState(null);
   const [selected, setSelected] = useState(null);
   const [suggestedSubgenres, setSuggestedSubgenres] = useState([]);
@@ -18,6 +19,7 @@ export default function MovieLookup({ onFound, onMovieSelected }) {
     setError('');
     setResults(null);
     setSelected(null);
+    setBusyMessage('Searching IMDb…');
     setBusy(true);
     try {
       const found = await searchMovies(query);
@@ -31,6 +33,7 @@ export default function MovieLookup({ onFound, onMovieSelected }) {
 
   async function handlePick(imdbID) {
     setError('');
+    setBusyMessage('Loading title details…');
     setBusy(true);
     try {
       const details = await getMovieDetails(imdbID);
@@ -75,6 +78,12 @@ export default function MovieLookup({ onFound, onMovieSelected }) {
           {busy ? 'Searching…' : 'Search'}
         </button>
       </div>
+      {busy && (
+        <div className="movie-lookup-loading" role="status" aria-live="polite">
+          <span className="loading-spinner" aria-hidden="true" />
+          <span>{busyMessage}</span>
+        </div>
+      )}
       <ErrorModal message={error} onClose={() => setError('')} />
 
       {results && (

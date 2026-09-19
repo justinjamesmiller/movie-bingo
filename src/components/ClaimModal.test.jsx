@@ -91,4 +91,24 @@ describe('ClaimModal', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Not clear enough' }));
     expect(onDisagree).toHaveBeenCalledWith('Not clear enough');
   });
+
+  it('offers swap-specific reasons when declining a trope swap', () => {
+    const onDisagree = vi.fn();
+    render(
+      <ClaimModal
+        pendingClaim={pendingClaim({ kind: 'replace', genre: 'horror', subgenre: 'slasher' })}
+        myId="p2"
+        players={players}
+        onAgree={vi.fn()}
+        onDisagree={onDisagree}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '👎 Keep it as is' }));
+    expect(screen.getByText(/Why keep this trope\?/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Not on screen' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'It could still happen' }));
+    expect(onDisagree).toHaveBeenCalledWith('It could still happen');
+  });
 });

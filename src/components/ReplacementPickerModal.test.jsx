@@ -13,13 +13,7 @@ const replacement = {
 describe('ReplacementPickerModal', () => {
   it('groups replacement controls in a spaced action stack', () => {
     render(
-      <ReplacementPickerModal
-        replacement={replacement}
-        isProposer
-        onCycle={vi.fn()}
-        onChoose={vi.fn()}
-        onCancel={vi.fn()}
-      />,
+      <ReplacementPickerModal replacement={replacement} onCycle={vi.fn()} onChoose={vi.fn()} onCancel={vi.fn()} />,
     );
 
     expect(screen.getByRole('button', { name: '🔀 Pass' }).closest('.replacement-actions')).not.toBeNull();

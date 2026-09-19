@@ -28,11 +28,19 @@ class FakeChannel {
   subscribe(cb) {
     if (!bus.has(this.name)) bus.set(this.name, new Set());
     bus.get(this.name).add(this);
+    this._statusCb = cb;
     queueMicrotask(() => {
       this.state = 'joined';
       cb('SUBSCRIBED');
     });
     return this;
+  }
+
+  // Re-emits a subscribe status on this same channel, the way realtime-js does
+  // when the socket blips (CHANNEL_ERROR) and then rejoins (SUBSCRIBED).
+  simulateStatus(status) {
+    this.state = status === 'SUBSCRIBED' ? 'joined' : 'errored';
+    this._statusCb?.(status);
   }
 
   track() {

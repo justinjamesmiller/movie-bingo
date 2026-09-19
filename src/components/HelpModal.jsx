@@ -107,11 +107,11 @@ export default function HelpModal({ onClose }) {
           their current tropes, bingos, and wager hits without adding extra numbers to the player list.
         </p>
 
-        <h4>🎬 Marathon Mode</h4>
+        <h4>🎬 Marathon History</h4>
         <p className="hint">
-          Turn on Marathon mode in Advanced Host Setup before hosting. Whenever the host resets after a started watch,
-          that watch's tropes, bingos, and wager hits are saved in Marathon History. It keeps shared totals without
-          assigning points or declaring a winner.
+          Marathon tracking is always on. Whenever the host resets after a started watch, that watch's tropes, bingos,
+          and wager hits are saved in Marathon History, so a multi-movie night just works with Reset Game between
+          movies. It keeps shared totals without assigning points or declaring a winner.
         </p>
 
         <h4>🏁 Ending the game &amp; recap</h4>
@@ -158,7 +158,7 @@ export default function HelpModal({ onClose }) {
             ✏️ <strong>Your name in the Players list</strong> — rename and re-pick your avatar anytime.
           </li>
           <li>
-            🎬 <strong>Marathon History</strong> — view completed-watch totals when Marathon mode is enabled.
+            🎬 <strong>Marathon History</strong> — view totals from every completed watch in this session.
           </li>
           <li>
             🔗 <strong>Copy Invite Link</strong> / <strong>QR Code</strong> — share the game with others.

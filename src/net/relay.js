@@ -22,6 +22,7 @@ import {
   DEFAULT_TOTAL_TROPES,
 } from '../data/tropes.js';
 import { AVATAR_OPTIONS } from '../data/avatars.js';
+import { isValidDisagreeRationale } from '../data/disagreeRationales.js';
 import { DEFAULT_SESSION_LIFETIME_HOURS, SESSION_LIFETIME_OPTIONS } from '../data/session.js';
 import { getCompletedLines } from '../utils/bingoLines.js';
 
@@ -52,7 +53,6 @@ const MAX_SESSION_LIFETIME_MS = Math.max(...SESSION_LIFETIME_OPTIONS.map((option
 const MAX_TIMER_DELAY_MS = 2_000_000_000;
 const MAX_CUSTOM_TROPES = 20;
 const MAX_CUSTOM_TROPE_LENGTH = 60;
-const DISAGREE_RATIONALES = new Set(['Not on screen', 'Not clear enough', 'Need more context']);
 
 // Storage can be entirely unavailable (private browsing, blocked cookies) or
 // throw on write (quota), and none of it is worth failing a game over.
@@ -117,7 +117,8 @@ function markAlreadyAcceptedTropes(board, marked, acceptedTropes) {
 }
 
 function recordMarathonWatch(state) {
-  if (!state.marathon?.enabled || !state.started) return;
+  if (!state.started) return;
+  if (!state.marathon) state.marathon = { watches: [] };
   const watchNumber = state.marathon.watches.length + 1;
   const players = Object.values(state.players).map((player) => {
     const tropes = player.board.filter(
@@ -363,7 +364,6 @@ export class GameClient {
     genrePercents,
     subgenrePercents,
     movie,
-    marathonEnabled = false,
   ) {
     const trimmedName = (name || '').trim();
     if (!trimmedName) throw new Error('Please enter your name.');
@@ -386,7 +386,6 @@ export class GameClient {
       genrePercents,
       subgenrePercents,
       movie,
-      marathonEnabled,
     );
     this._saveSession(code, trimmedName);
     this._emitState();
@@ -784,6 +783,7 @@ export class GameClient {
         clearTimeout(timeout);
         callback();
       };
+      let resubscribed = false;
 
       channel.subscribe((status, err) => {
         // Ignore status events from a channel that's already been replaced
@@ -798,7 +798,16 @@ export class GameClient {
           finish(() => {
             channel.track({ id: this.myId });
             this._reconnectAttempts = 0;
+            // realtime-js re-joins this same channel by itself after a socket
+            // blip, so a replacement we scheduled on the error is now moot.
+            clearTimeout(this._reconnectTimer);
+            this._reconnectTimer = null;
             this.onEvent({ type: 'connectionStatus', status: 'connected' });
+            if (resubscribed) {
+              this._announceSelf();
+              this._flushQueuedActions();
+            }
+            resubscribed = true;
             resolve();
           });
         } else {
@@ -833,6 +842,11 @@ export class GameClient {
     try {
       await this._connectChannel(this.code);
     } catch {
+      // Drop the failed attempt and fall back to the previous channel, which
+      // realtime-js may still rejoin on its own -- otherwise both end up
+      // subscribed to the same topic and every broadcast arrives twice.
+      if (this.channel && this.channel !== oldChannel) this.supabase.removeChannel(this.channel);
+      this.channel = oldChannel;
       if (!this._reconnectPaused) this._scheduleReconnect();
       return;
     }
@@ -1211,7 +1225,6 @@ export class GameClient {
     genrePercents = {},
     subgenrePercents = {},
     movie = null,
-    marathonEnabled = false,
   ) {
     const tropePool = Array.from(
       new Set([
@@ -1258,7 +1271,7 @@ export class GameClient {
       bingoEvents: [],
       activityLog: [],
       movie,
-      marathon: { enabled: !!marathonEnabled, watches: [] },
+      marathon: { watches: [] },
       sessionExtended: false,
       sessionLifetimeHours: DEFAULT_SESSION_LIFETIME_HOURS,
       sessionExpiresAt: Date.now() + DEFAULT_SESSION_LIFETIME_HOURS * 60 * 60 * 1000,
@@ -1442,7 +1455,7 @@ export class GameClient {
       const pc = state.pendingClaim;
       if (!pc || pc.claimId !== action.claimId || fromId === pc.byId || Object.hasOwn(pc.votes, fromId)) return;
       pc.votes[fromId] = !!action.agree;
-      if (!action.agree && DISAGREE_RATIONALES.has(action.rationale)) {
+      if (!action.agree && isValidDisagreeRationale(pc.kind, action.rationale)) {
         pc.disagreeRationaleCounts ||= {};
         pc.disagreeRationaleCounts[action.rationale] = (pc.disagreeRationaleCounts[action.rationale] || 0) + 1;
       }
@@ -1523,7 +1536,7 @@ export class GameClient {
       state.bingoEvents = [];
       state.activityLog = [];
       this._logActivity(
-        state.marathon?.enabled && state.marathon.watches.length > 0
+        state.marathon?.watches.length > 0
           ? `🏁 Watch ${state.marathon.watches.length} was added to the marathon standings.`
           : '🔄 The host reset the game.',
       );

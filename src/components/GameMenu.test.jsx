@@ -35,7 +35,6 @@ function renderMenu(overrides = {}) {
     onToggleAdvancedGameplay: vi.fn(),
     onSubmitCustomTrope: vi.fn(),
     onRequestBoardSwap: vi.fn(),
-    marathonEnabled: false,
     onShowMarathonStandings: vi.fn(),
     onShowStatsDashboard: vi.fn(),
     ...overrides,
@@ -116,7 +115,7 @@ describe('GameMenu', () => {
   });
 
   it('opens game stats and marathon history from the advanced menu', () => {
-    const props = renderMenu({ marathonEnabled: true });
+    const props = renderMenu();
 
     fireEvent.click(screen.getByRole('button', { name: 'Explore & Stats' }));
     fireEvent.click(screen.getByRole('button', { name: '📊 Game Stats' }));

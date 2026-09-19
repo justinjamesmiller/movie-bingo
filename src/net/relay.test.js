@@ -328,6 +328,29 @@ describe('GameClient', () => {
     expect(result.disagreeRationaleCounts).toEqual({});
   });
 
+  it('only counts swap-specific rationales on a trope swap vote', async () => {
+    const host = makeTrackedClient();
+    const code = await host.client.hostGame('Alice', ['horror'], [], false, { horror: 50 }, 25);
+    const guest = makeTrackedClient();
+    await guest.client.joinGame(code, 'Bob');
+    await flush();
+    const third = makeTrackedClient();
+    await third.client.joinGame(code, 'Charlie');
+    await flush();
+    host.client.startGame();
+    await flush();
+
+    host.client.proposeReplace(host.state.players[host.myId].board[0], 'horror', 'general');
+    await flush();
+    const claimId = host.state.pendingClaim.claimId;
+    guest.client.vote(claimId, false, 'Not on screen');
+    third.client.vote(claimId, false, 'It could still happen');
+    await flush();
+
+    const result = host.events.find((event) => event.type === 'claimResolved' && !event.approved);
+    expect(result.disagreeRationaleCounts).toEqual({ 'It could still happen': 1 });
+  });
+
   it('merges simultaneous proposals for the same trope as automatic approvals', async () => {
     const host = makeTrackedClient();
     const code = await host.client.hostGame('Alice', ['horror'], [], false, { horror: 50 }, 25);
@@ -752,6 +775,23 @@ describe('GameClient connection stability', () => {
     expect(returning.state.pendingClaim?.votes[host.myId]).toBe(true);
   });
 
+  it('keeps the same channel when realtime-js rejoins it by itself after a blip', async () => {
+    const { host } = await twoPlayerGame();
+    const channel = host.client.channel;
+    vi.useFakeTimers();
+
+    channel.simulateStatus('CHANNEL_ERROR');
+    expect(host.events.at(-1)).toEqual({ type: 'connectionStatus', status: 'disconnected' });
+    expect(host.client._reconnectTimer).not.toBeNull();
+
+    channel.simulateStatus('SUBSCRIBED');
+    expect(host.events.at(-1)).toEqual({ type: 'connectionStatus', status: 'connected' });
+    expect(host.client._reconnectTimer).toBeNull();
+
+    await vi.advanceTimersByTimeAsync(30000);
+    expect(host.client.channel).toBe(channel);
+  });
+
   it('can pause automatic reconnect attempts and resume them on demand', async () => {
     const host = makeTrackedClient();
     host.client.state = { players: { [host.client.myId]: { id: host.client.myId } } };
@@ -931,9 +971,9 @@ describe('GameClient connection stability', () => {
     expect(host.state.started).toBe(false);
   });
 
-  it('records completed marathon scores when the host resets the game', async () => {
+  it('records completed marathon scores when the host resets a started game', async () => {
     const host = makeTrackedClient();
-    await host.client.hostGame('Alice', ['horror'], [], false, { horror: 50 }, 25, [], {}, {}, null, true);
+    await host.client.hostGame('Alice', ['horror'], [], false, { horror: 50 }, 25);
     host.client.startGame();
     await flush();
     host.client.state.acceptedTropes = [host.client.state.players[host.myId].board[0]];

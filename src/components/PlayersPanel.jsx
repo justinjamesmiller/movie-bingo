@@ -15,7 +15,6 @@ export default function PlayersPanel({
   onViewPlayerStats,
   callStats = {},
   wageringEnabled,
-  onOpenWagerIntro,
   superlatives = {},
   onSuperlativeClick,
 }) {
@@ -71,22 +70,15 @@ export default function PlayersPanel({
           );
         })}
       </ul>
-      {!started && (
+      {!started && wageringEnabled && (
         <>
-          <button className="btn" onClick={onOpenWagerIntro}>
-            🎯 {wageringEnabled ? 'Choose Wagers' : 'Optional Wagers'}
-          </button>
-          {wageringEnabled && (
-            <>
-              <p className="hint">
-                Pick 5 spaces to <strong>wager</strong> — you think these tropes are extra likely to happen. Wagers lock
-                once the game starts.
-              </p>
-              <p className="hint">
-                Wagered: {wagerCount} / {maxWagers}
-              </p>
-            </>
-          )}
+          <p className="hint">
+            Pick 5 spaces to <strong>wager</strong> — you think these tropes are extra likely to happen. Wagers lock
+            once the game starts.
+          </p>
+          <p className="hint">
+            Wagered: {wagerCount} / {maxWagers}
+          </p>
         </>
       )}
     </aside>

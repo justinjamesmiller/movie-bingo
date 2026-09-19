@@ -60,10 +60,6 @@ export default {
     what: 'Rain, thunder and lightning arrive to cover noise and cut the power.',
     example: 'Thunder covers the sound outside, then lightning reveals a figure near the trees.',
   },
-  'Babysitter left alone': {
-    what: 'A young caretaker is left in an empty house with children asleep upstairs.',
-    example: 'The parents leave, the children are asleep, and the phone starts ringing from an unknown number.',
-  },
   'No one believes the victim': {
     what: 'A character reports what they saw and is dismissed as hysterical, drunk or imagining it.',
     example: 'The victim describes the attack and the adults decide it was stress or a nightmare.',
@@ -476,11 +472,7 @@ export default {
     what: 'A radio signal dissolves into harsh static, sometimes carrying a hidden message or warning.',
     example: 'The dial lands on dead air, then a voice breaks through the static for one sentence.',
   },
-  'A grandfather clock chimes 13': {
-    what: 'A clock strikes an impossible hour.',
-    example: 'Counting the chimes and reaching thirteen.',
-  },
-  'Footsteps on the ceiling': {
+  'Footsteps heard above': {
     what: 'Someone hears movement in a room above them that should be empty.',
     example: 'Pacing overhead while everyone is downstairs.',
   },

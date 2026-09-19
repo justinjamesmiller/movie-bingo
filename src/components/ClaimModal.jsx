@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { GENRES, SUBGENRES_BY_GENRE } from '../data/tropes.js';
+import { getDisagreeRationales } from '../data/disagreeRationales.js';
 import { useTropeDescription } from '../hooks/useTropeDescription.js';
 
 export default function ClaimModal({ pendingClaim, myId, players, onAgree, onDisagree, onCancel }) {
@@ -103,8 +104,10 @@ export default function ClaimModal({ pendingClaim, myId, players, onAgree, onDis
           !hasVoted &&
           (choosingRationale ? (
             <div className="vote-rationale-picker">
-              <p className="hint">Why are you disagreeing? This is optional and stays anonymous.</p>
-              {['Not on screen', 'Not clear enough', 'Need more context'].map((rationale) => (
+              <p className="hint">
+                {isReplace ? 'Why keep this trope?' : 'Why are you disagreeing?'} This is optional and stays anonymous.
+              </p>
+              {getDisagreeRationales(pendingClaim.kind).map((rationale) => (
                 <button key={rationale} className="btn" onClick={() => onDisagree(rationale)}>
                   {rationale}
                 </button>

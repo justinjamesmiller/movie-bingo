@@ -45,8 +45,8 @@ export default {
     what: 'Characters begin throwing food at each other.',
     example: 'One flung bread roll and the whole hall goes up.',
   },
-  'A talking animal reaction shot': {
-    what: 'A cut to an animal reacting as though it understands.',
+  'An animal reacts like a person': {
+    what: 'An animal reacts to a situation as though it understands human behavior; it does not have to speak.',
     example: 'The dog raises an eyebrow at the excuse.',
   },
   'Breaks the fourth wall': {
@@ -133,9 +133,9 @@ export default {
     what: 'A character gets physically trapped in an absurd place.',
     example: 'Wedged in a cat flap for most of the second act.',
   },
-  'An unexpected celebrity cameo': {
-    what: 'A famous face turns up briefly, often as themselves.',
-    example: 'The plumber turns out to be someone they recognise.',
+  'Someone tries to hide laughter': {
+    what: 'A character visibly tries not to laugh or conceals their laughter from someone else.',
+    example: 'Someone covers their mouth and turns away while trying not to laugh during a serious speech.',
   },
   'A road trip derails': {
     what: 'A journey goes badly off plan.',
@@ -591,10 +591,6 @@ export default {
     what: 'The montage format itself is the joke.',
     example: 'The montage lasts longer than the training did.',
   },
-  'An over-the-top explosion parody': {
-    what: 'An explosion is absurdly large or badly motivated.',
-    example: 'A toaster detonating like a fuel depot.',
-  },
   'A parody of a courtroom drama': {
     what: 'Legal drama conventions are mocked.',
     example: 'An objection sustained before it is finished.',
@@ -676,10 +672,6 @@ export default {
   'One bails the other out': {
     what: 'A character rescues their friend from trouble.',
     example: 'Turning up at the station at three in the morning.',
-  },
-  'A rivalry turns friendly': {
-    what: 'Competition becomes camaraderie.',
-    example: 'The two of them end up on the same side by the third act.',
   },
   'Opposite approaches to a problem': {
     what: 'The pair tackle the same issue in incompatible ways.',

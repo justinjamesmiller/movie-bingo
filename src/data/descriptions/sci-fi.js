@@ -37,9 +37,9 @@ export default {
     what: 'The crew picks up a call for help.',
     example: 'A repeating tone from a system nobody has charted.',
   },
-  'Terraforming a new planet': {
-    what: 'A world is being made habitable.',
-    example: 'Atmosphere processors on the horizon.',
+  'A warning flashes on screen': {
+    what: 'A warning or error message flashes up on a device, monitor, or control panel.',
+    example: 'A console interrupts the crew with a red "SYSTEM FAILURE" warning.',
   },
   'A rogue AI takes over': {
     what: 'An artificial intelligence seizes control of systems.',
@@ -153,9 +153,9 @@ export default {
     what: 'Memories are deliberately erased.',
     example: 'A chair, a headset and a signed consent form.',
   },
-  'A galaxy-spanning conflict': {
-    what: 'War extends across enormous distances.',
-    example: 'A map with fronts on opposite arms of the galaxy.',
+  'Someone questions the mission': {
+    what: 'A character openly questions the purpose, necessity, or safety of their mission.',
+    example: 'A crew member asks, "Why are we risking our lives for this?"',
   },
   'A final transmission home': {
     what: 'A last message is sent back.',

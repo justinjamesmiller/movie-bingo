@@ -3,10 +3,9 @@
 Jackbox-style multiplayer bingo for movie & TV tropes, spanning Horror, Comedy, Action, Sci-Fi,
 Fantasy, Thriller/Crime, Romance, Drama, Documentary, Adventure, Animation, Biography, Family,
 History, Music, Musical, Sport, War, Western, and TV/Unscripted formats (a game can mix multiple
-genres/sub-genres at once). No database and no custom backend to maintain — players connect using a 4-character game code, and
-[Supabase Realtime](https://supabase.com/docs/guides/realtime) is used purely as an ephemeral
-broadcast relay (no tables, nothing persisted). The whole app is a static React site deployable for
-free on GitHub Pages.
+genres/sub-genres at once). The frontend is a static React site deployable for free on GitHub Pages.
+Multiplayer uses Supabase anonymous Auth, private Realtime channels, a small room/membership database,
+and an Edge Function that authenticates and authorizes every state/action relay.
 
 ## How it works
 
@@ -24,25 +23,91 @@ free on GitHub Pages.
 - Mid-game changes such as custom trope submissions, wager changes, and whole-board swaps go through the same
   majority-vote flow.
 - Bingos are detected automatically. Everyone sees the celebration banner, and the player list/final recap show each player's bingo count.
-- Everyone subscribes to the same Supabase Realtime channel (named after the game code) and
-  broadcasts messages to it; Supabase relays messages to everyone else on the channel. One or more players can hold
-  host permissions; a deterministic connected host coordinates relay messages to prevent duplicate updates.
+- Players subscribe to an authenticated private Realtime channel named after the game code. An Edge
+  Function binds every message to its Supabase Auth membership, accepts state only from a registered
+  host, and relays guest actions with a server-derived player ID. Co-hosts retain host permission; if
+  every authorized host disconnects, game-changing actions pause until a host reconnects.
 
 ## Player features
 
-- **Reconnect / seat reclaim:** returning players can use the Reconnect card, or join with the code and reclaim a
-  disconnected seat. Reconnect is not offered after the host ends a game or after a player deliberately leaves.
+- **Claim queue:** trope claims, challenges, swaps, and custom submissions wait in order while another vote or
+  replacement choice is active. Matching proposals merge and co-proposers automatically agree when their vote starts.
+  Open Claim Queue from the menu or View waiting proposals from a vote to withdraw your own participation. Limits are
+  30 waiting entries per game and five new waiting entries per player. Disconnected proposals wait for a proposer to
+  return; obsolete proposals are skipped. Ending or resetting clears the queue.
+- **Scene context:** optionally add a note (240 characters) and movie timestamp (`M:SS` or `H:MM:SS`) to a trope proposal.
+  Context appears with the vote and is retained in its activity entry and recap history.
+- **Trope search:** All Tropes and Accepted Tropes support case-insensitive search combined with filters for accepted
+  status, your board, your wagers, and active or successful calls.
+- **Accessibility:** the menu offers larger text, a readable single-column board, visible space-state labels, and
+  reduced animations. Board spaces support Enter/Space. These preferences stay on your device in
+  `bingo-accessibility` localStorage and do not change other players' views.
+- **Optional trope presets:** Advanced Host Setup and Reset Game include checkboxes in the custom-trope editor for
+  visual-effects judgments, filming marvels, continuity/period errors, implausible explosions, heavy foreshadowing,
+  product placement, substance use, and language-sensitive dialogue including slurs. These documented tropes retain
+  genre tags but are excluded from automatic game
+  and replacement draws. Selecting a preset adds it through the existing custom pool and respects its 20-entry cap.
+- **Guided tutorial:** a spotlight overlay starts after hosting, joining, or reconnecting, adapting to host/player
+  role and pre-game/live play. It covers browsing trope explanations, optional wagers, approval votes, sound
+  notifications, and the light/dark-mode toggle. Calls are covered in the optional advanced-tools branch.
+  Its actions open real controls, and it yields to
+  votes, modals, menus, and bingo/game-ending celebrations. Pause with the close control or Escape; skip disables
+  automatic guidance on that device
+  (`bingo-tutorial-enabled` in localStorage). Menu's Start tutorial re-enables it. Sound is only enabled explicitly.
+- **Reconnect:** use the Reconnect card in the tab that has the saved session to restore that player ID with its
+  authenticated identity. The Join Game form always requests a new seat, even if another tab shares the same browser
+  Auth identity; after play starts, the host must approve it. The home-page card appears only while the server confirms
+  that the room and seat are still active; it is hidden after expiry or game end. It is unavailable after a player
+  deliberately leaves.
+- **Host recovery password:** the original host can set a password of at least 12 characters in Advanced Options →
+  Host Settings. On a new device, join with the game code and password to restore the original host seat, board, and
+  permissions. If the old device still appears connected, wait up to about a minute after its last heartbeat and retry.
+  Only a PBKDF2 verifier is stored; recovery attempts are rate-limited. A successful recovery replaces the old
+  device's Auth membership.
+- **Restore a board after changing devices:** have the player join as a new player, then a host can open that
+  connected player's options, choose their disconnected non-host seat, and restore its board, marks, wagers, and call
+  history. The connected player's current name/avatar and authenticated identity are kept; the abandoned seat is
+  removed. Finish pending votes, replacements, and queued claims first. This is an explicit host action, not a way to
+  transfer another person's Auth identity.
 - **Invite sharing:** the in-game menu can copy a join link with the code pre-filled or show the same link as a QR
   code. Both reflect the current code after a rotation.
-- **Activity feed:** approved marks, swaps, wager changes, resets, and other notable events are logged for anyone who looked away.
+- **Movie details:** any player can tap the selected title to view its saved poster, year, director, cast, genres,
+  and IMDb link. Details from IMDb selection are shared with the game and saved in reconnect snapshots. Hosts can
+  edit the selection; manual entry starts empty and requires a nonblank title before confirmation.
+- **Activity feed:** approved marks, swaps, wager changes, resets, and unaccepted trope proposals are logged for anyone who looked away. Unaccepted trope proposals include anonymous decline reason totals, or state that no reasons were provided. Player names include their avatars, preserved as they appeared when the event was logged.
 - **Reactions:** quick emoji reactions broadcast briefly to everyone without starting a vote.
-- **Recap:** the host can end the game to show everyone final marked counts, bingo counts, and wager hits.
+- **Recap:** the host can end the game to show everyone final marked counts, bingo counts, and wager hits. Leader markers
+  are shown only for untied, nonzero totals. Highlights include successful callers, recorded multi-line bingo moments,
+  and the latest ten debated outcomes with optional scene context and anonymous reason totals. The watch retains up to
+  100 trope-vote outcomes; older snapshots cannot reconstruct highlights that were not recorded.
 - **Stats:** Advanced Options includes a shared current-game dashboard. Players can tap another player's name to
-  view their current metrics; hosts get the same read-only view from player management.
-- **Calls:** during a game, a trope's `Advanced actions` menu lets any player call one trope they expect next. The called
-  space is outlined only on their board; accepted calls are tracked as a metric, and a call can be withdrawn.
+  view their current metrics; hosts get the same read-only view from player management. Tapping your own name opens
+  player options with View Stats and Edit Name & Avatar, available to hosts and non-hosts alike.
+- **Player distinctions:** explanation opens, trope proposals, outcomes, approval votes, and first-event milestones
+  are tracked in replicated game state. All players see the same evidence-based badges; comparative distinctions
+  require an untied leader, simultaneous firsts are not singled out, and resets clear the watch's tracking.
+  There is no blanket first-acceptance unlock or participation fallback: each badge needs its own evidence.
+  Full House can appear after five wagers during setup; reading badges count distinct tropes rather than repeated
+  clicks; most-bingo recognition needs at least two lines and an untied lead; Trophy Hunter needs three lines;
+  end-of-watch badges wait until the watch ends. Stronger achievements supersede lighter ones. Players can have no
+  badge, while multiple players may share a genuinely earned non-comparative achievement.
+- **Calls:** during a game, a trope's `Advanced actions` menu lets any player call one trope they expect next. A
+  player's score appears only after making a call. Live player-list and final recap scores are clickable, explaining
+  correct calls / calls made (including changed or withdrawn predictions) and how to make a call from a board trope.
+  The score popup also lists that player's individual predictions and whether each scored, is still waiting, was
+  changed/withdrawn, or had its trope replaced. Call history is shared, saved for reconnects, and cleared on reset.
+  Older watches show only recoverable active/successful calls with a notice for unrecorded history.
+  The called space is outlined on their own board, while caller avatars appear on matching spaces for everyone. Narrow spaces
+  show fewer avatars and `...` for additional callers. Tap a space to see caller avatars below its buttons, then tap
+  any avatar to reveal all caller names. Each newly opened trope starts with avatars only. If a different trope is
+  accepted first, each affected caller is asked whether to keep or drop their call. Accepted calls are tracked as a
+  metric, and a call can also be withdrawn through Advanced actions.
+  Accepted spaces celebrate briefly with a green ring; called hits use a distinct gold pulse/spark and retain a small
+  target marker and inset outline. Successful callers are shared and saved for reconnects, and their avatars/names
+  remain available from the trope details. Undoing acceptance, replacing the trope, or resetting clears the marker.
+  Reduced-motion preferences disable the animated effects while preserving the success marking.
 - **Vote reasons:** choosing Disagree opens an optional, anonymous set of preset reasons. The group sees only the
-  aggregate reasons, never which player selected one.
+  aggregate reasons, never which player selected one. Reasons for unaccepted trope proposals are retained in the activity feed.
 - **Marathon history:** always on — whenever the host resets a started game, that watch's metrics are retained. The
   Marathon History view tracks each player's completed watches, accepted tropes, bingos, and wager hits without
   assigning points or a winner.
@@ -57,13 +122,53 @@ free on GitHub Pages.
 1. Create a free project at <https://supabase.com/dashboard> (no credit card required).
 2. In your project's **Settings → API**, copy the **Project URL** and the **anon public key**
    (this key is designed to be public/embedded in client-side code — that's expected here).
-3. For local dev: copy `.env.example` to `.env` and fill in `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY`.
-4. For the GitHub Pages deploy: add two **repository secrets** (Settings → Secrets and variables →
+3. In **Authentication → Sign In / Providers**, enable **Anonymous Sign-Ins**. The browser uses anonymous Auth so
+   Realtime and the relay function can bind requests to a stable user identity.
+4. In **Realtime Settings**, disable **Allow public access**. Room channels must remain private.
+5. For local dev: copy `.env.example` to `.env` and fill in `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY`.
+6. For the GitHub Pages deploy: add two **repository secrets** (Settings → Secrets and variables →
    Actions) named `SUPABASE_URL` and `SUPABASE_ANON_KEY` — the deploy workflow passes them through
    as build-time env vars automatically.
 
-Realtime is enabled by default on new Supabase projects and needs no database tables for this app
-(only ephemeral broadcast + presence are used).
+### Secure relay deployment
+
+The Edge Function service key must stay in Supabase and must never be added to `.env`, GitHub Pages
+secrets, or browser code. Supabase provides `SUPABASE_SERVICE_ROLE_KEY` to deployed Edge Functions.
+
+1. Install/use the Supabase CLI and link this repository to your project:
+
+```sh
+npx supabase login
+npx supabase link --project-ref YOUR_PROJECT_REF
+```
+
+2. Apply the private room/membership schema and Realtime RLS policies, then deploy the authenticated relay:
+
+```sh
+npx supabase db push
+npx supabase functions deploy game-relay
+```
+
+Publish the updated GitHub Pages frontend before applying the transactional room-revision migration and
+deploying the revised relay. The frontend sends a server revision with each full-state publish; the Edge
+Function commits state and membership changes atomically and rejects stale snapshots. After deploying the
+function, ask players with an already-open tab or installed app to reload so it uses the revision-aware
+protocol. The migration stores authoritative room snapshots and Auth-bound memberships with an expiry.
+Realtime read access is limited to active members; direct client broadcast writes are not allowed. Pending
+mid-game joiners remain off the room channel until the host approves them.
+
+### Live Security Smoke Test
+
+After deployment, run `node scripts/supabase-smoke.js` from the repository root. It uses local Supabase
+configuration and your deployment login (macOS CLI keychain, or `SUPABASE_ACCESS_TOKEN` on other systems).
+Credentials are used only in memory and are not printed. This is a live test: it creates temporary anonymous
+users and a room, checks private Realtime access, forged identity/state denial, membership permissions,
+pending joins, active/expired reconnect status, concurrent co-host snapshot conflicts, code rotation, and password lockout/recovery, then
+deletes its own room and users.
+It also verifies the authenticated movie lookup proxy with a real search and IMDb detail request.
+
+The test requires a deployment account with access to project API keys for cleanup. Run it only against
+the project you intend to test; it does not deploy the static frontend.
 
 ## Movie/TV lookup (optional)
 
@@ -72,8 +177,14 @@ Hosting a game lets you search for a movie or TV show by title and auto-select i
 without it, genres/sub-genres are just picked manually via checkboxes.
 
 1. Get a free API key at <https://www.omdbapi.com/apikey.aspx>.
-2. Add it to `.env` as `VITE_OMDB_API_KEY` (local dev) and as a `OMDB_API_KEY` repository secret for
-   the GitHub Pages deploy workflow. If unset, the movie-lookup UI simply doesn't appear.
+2. Store it as the **`OMDB_API_KEY` Supabase Edge Function secret**, not a `VITE_` variable or GitHub Pages build secret.
+3. Apply migrations (`npx supabase db push`) and deploy `movie-lookup` (`npx supabase functions deploy movie-lookup`).
+
+The browser sends authenticated search requests to the proxy; only the server contacts OMDb with the key.
+The proxy accepts title searches, exact-title lookups, and IMDb details only. Database-backed limits are 30
+requests per authenticated user per minute and 900 across the project per UTC day. If the secret is absent,
+lookup reports that it is not configured and manual genre selection remains available. Keys previously
+embedded in public browser builds should be rotated through OMDb, then updated in Supabase secrets.
 
 Note: OMDb reports broad genres (e.g. "Horror, Comedy", "Animation", "Western", "Reality-TV"), not
 this app's finer sub-genres — see below for how those get suggested automatically.
@@ -87,9 +198,11 @@ pre-check) specific sub-genres, including TV formats such as Cooking, Dating, Ga
 Talk Show, News Magazine, Home Renovation, Talent Competition, Travel, Lifestyle, and Docuseries.
 This is inherently best-effort, since Wikidata's genre labels are free text, not a fixed list, and not
 every film/show has this data. No API key, signup, or configuration is required for this — it just
-works as long as `VITE_OMDB_API_KEY` is set (see above).
+works alongside the configured movie lookup proxy (see above).
 
 ## Development
+
+Use Node.js 22.12 or newer and npm; this matches the Vite and Vitest engine requirements.
 
 ```
 npm install
@@ -102,11 +215,14 @@ multiplayer — everyone just needs to reach the same Supabase project.
 Useful checks before shipping changes:
 
 ```
-npm run format
+npm run format:check
 npm run test
 npm run lint
+npm audit --audit-level=high
 npm run build
 ```
+
+Use `npm run format` to apply formatting before `npm run format:check` if needed.
 
 `npm run coverage` prints the Vitest coverage report.
 
@@ -121,21 +237,101 @@ This outputs a static site to `dist/`. Since `vite.config.js` uses relative asse
 project site (`https://<user>.github.io/<repo>/`). This repository's `Deploy to GitHub Pages`
 workflow builds and publishes automatically whenever changes are pushed to `main`.
 
+## Versions & official releases
+
+The home and game headers display the version from `package.json`. Release Please updates that file,
+`package-lock.json`, `.release-please-manifest.json`, and `CHANGELOG.md` together in a reviewable release PR.
+Normal feature commits do not directly change the displayed version; merging the release PR does.
+The generated changelog is excluded from Prettier checks because Release Please owns its formatting; source,
+configuration, and handwritten documentation remain checked normally.
+
+### One-time GitHub setup
+
+Enable GitHub Actions for this repository. Under **Settings → Secrets and variables → Actions**, configure the
+same repository secrets used by Pages: `SUPABASE_URL` and `SUPABASE_ANON_KEY` are required; `OMDB_API_KEY` is
+not a GitHub Actions secret. Store it only as a Supabase Edge Function secret. Only use Supabase's public
+client/anon key in frontend build configuration, never a service-role key: frontend configuration is included
+in the downloadable app.
+
+Under **Settings → Actions → General → Workflow permissions**, enable **Allow GitHub Actions to create and approve
+pull requests** if repository/organization policy permits it. The workflow grants Release Please scoped
+`contents: write`, `issues: write`, and `pull-requests: write` permissions. It creates PRs, but does not approve or
+merge them for you. No personal token or local GitHub CLI is required.
+
+### How automatic versioning works
+
+Pushes to `main` first run formatting, lint, tests, and a configured production build. If those succeed, Release
+Please examines Conventional Commits and creates or updates a release PR. Review and merge that PR when you want
+an official release. On the merge's push to `main`, Release Please creates the matching `v...` tag and GitHub
+Release using its generated changelog notes.
+
+Use Conventional Commit messages for changes merged into `main` (when squash-merging, use this style for the PR
+title/squash commit):
+
+| Commit                                                                 | Version effect after the first release                 |
+| ---------------------------------------------------------------------- | ------------------------------------------------------ |
+| `fix: restore double-bingo celebrations`                               | Patch, e.g. `0.1.0` → `0.1.1`                          |
+| `feat: add tutorial overlays`                                          | Minor, e.g. `0.1.0` → `0.2.0`                          |
+| `feat!: change the game-state protocol` or a `BREAKING CHANGE:` footer | Minor while below `1.0.0`; major once at/above `1.0.0` |
+| `docs:`, `chore:`, or `test:` without a breaking change                | Does not normally cause a release by itself            |
+
+The pre-1.0 policy is explicit in `release-please-config.json`: features retain minor bumps, and breaking changes
+use minor bumps while the app is still evolving. Moving to `1.0.0` is a deliberate release decision; after that,
+breaking changes use major bumps. Do not manually bump package versions or create release tags as part of the
+normal managed process, and do not move/reuse published tags.
+
+### First managed release
+
+The configuration starts the first official release at `0.1.0`. The empty manifest is intentional: it does not
+pretend that `0.1.0` has already been released. Release Please fills it in through the first release PR, and owns
+its updates thereafter. If a genuine release already exists when setup is pushed, Release Please can use that
+release history instead.
+
+1. Review/stage the intended app changes and these release files, run `npm run format:check`, `npm run lint`,
+   `npm run test`, and `npm run build`, then commit using a meaningful `feat:` or `fix:` message and push to `main`.
+   No staged/uncommitted work is included in a release until you commit and push it.
+2. Watch **Actions → Release Please**. If no release PR appears, check that there is an eligible Conventional Commit
+   and that the repository permits the bot to create PRs. The workflow can also be run manually on `main`.
+3. Review the release PR's package/lock versions, manifest, and changelog. Merge it only after reviewing/testing it.
+4. Watch the subsequent **Release Please** run: its `publish-asset` job checks out the exact new tag, validates the
+   tag/package/lock agreement, checks/tests/builds that code, and attaches `movie-tv-trope-bingo-v0.1.0.zip` to the
+   GitHub Release. Later releases use their own version in the filename.
+5. Review the notes and artifact at <https://github.com/justinjamesmiller/movie-bingo/releases>. To try the ZIP,
+   extract it and serve the contents with a local/static web server rather than opening its HTML through `file://`.
+
+### Bot-token checks and artifact recovery
+
+GitHub's default `GITHUB_TOKEN` does not trigger other workflows for bot-created PRs or tags. That is why the ZIP
+build/upload is in this same workflow, rather than depending on a separate tag event. Release Please PRs also do
+not automatically start the usual PR CI checks: run **Actions → CI → Run workflow**, selecting the release PR's
+branch, before merging. This is especially important if branch protection requires the `verify` check. An
+approved GitHub App token or suitable fine-grained token can be configured later if you want automatic PR events;
+it is not required for the current process.
+
+The GitHub Release may appear before its ZIP finishes building. If `publish-asset` fails, use **Re-run failed jobs**
+so the successful Release Please job's tag output is retained; **Re-run all jobs** may find the release already
+created and skip the asset job. The packaged ZIP is also retained as an Actions artifact before upload, so it can
+be attached manually from the release page if needed. Existing release assets are never overwritten.
+
+Pages still deploys pushes to `main` as before; the generated release tag does not drive Pages deployment.
+The displayed version and the downloadable release build both follow the committed package version.
+
 ## Notes & limitations
 
 - No peer-to-peer networking, so no NAT/firewall connectivity issues — everyone just needs a normal
   internet connection to reach Supabase.
-- Game state is held by connected browsers, not a database. At least one current/recent player needs
-  enough local state to keep or restore the game.
-- Host permissions can be held by multiple players. If every designated host disconnects, authority falls back to the
-  next connected player. A host who deliberately leaves while others remain can add a host before departing.
+- Supabase stores the authoritative room snapshot and memberships until the room expires; connected browsers also
+  hold the live state. A game can change only while an authorized host is connected. If every host disconnects,
+  player actions pause until a host reconnects or the original host recovers their seat with a configured password.
+- Host permissions can be held by multiple players. Ordinary players do not become hosts when all designated hosts
+  disconnect. A host who deliberately leaves while others remain can add a host before departing.
 - Ending a game clears its reconnect data. Deliberately leaving also clears that player's reconnect data, so a game
   cannot be restored after every player has chosen Leave Game.
 - Mobile browsers and installed web apps can suspend realtime connections when backgrounded. The app
   attempts to reconnect and surfaces connection failures, but a live game still depends on Supabase
   Realtime being reachable.
-- Requires a free Supabase account (see setup above) — this is the one external dependency this
-  app has, since some relay point is unavoidable for a code-based multiplayer join flow.
+- Multiplayer requires a Supabase project (see setup above). Optional movie lookup uses the OMDb proxy, and optional
+  sub-genre suggestions query Wikidata.
 - Supabase's free tier includes generous Realtime limits (concurrent connections and messages/month)
   more than sufficient for casual game nights; check current limits on their pricing page if you
   expect heavy use.

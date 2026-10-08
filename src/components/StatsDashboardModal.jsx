@@ -1,7 +1,14 @@
 import { getCurrentPlayerMetrics } from '../utils/gameStats.js';
 import ModalShell from './ModalShell.jsx';
 
-export default function StatsDashboardModal({ players, acceptedTropes, freeSpace, callStats = {}, onClose }) {
+export default function StatsDashboardModal({
+  players,
+  acceptedTropes,
+  freeSpace,
+  callStats = {},
+  onCallScoreClick,
+  onClose,
+}) {
   const metrics = players.map((player) => ({
     ...player,
     ...getCurrentPlayerMetrics(player, freeSpace, callStats[player.id]),
@@ -35,7 +42,19 @@ export default function StatsDashboardModal({ players, acceptedTropes, freeSpace
                 {player.name}
                 <span>
                   {player.tropes} tropes · {player.bingos} bingo{player.bingos === 1 ? '' : 's'} · {player.wagerHits}{' '}
-                  wager hits · {player.correctCalls}/{player.callsMade} calls
+                  wager hits
+                  {player.callsMade > 0 && (
+                    <>
+                      {' · '}
+                      <button
+                        className="player-profile-button"
+                        onClick={() => onCallScoreClick?.(player)}
+                        title="About call-it scores"
+                      >
+                        {player.correctCalls}/{player.callsMade} calls
+                      </button>
+                    </>
+                  )}
                 </span>
               </li>
             ))}

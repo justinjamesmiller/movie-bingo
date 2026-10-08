@@ -73,9 +73,9 @@ export default {
     what: 'The couple come from different classes or worlds.',
     example: 'One with everything and one with nothing.',
   },
-  'A proposal under the stars': {
-    what: 'A marriage proposal happens in a romantic outdoor setting.',
-    example: 'A ring produced somewhere with a view.',
+  'Someone proposes marriage': {
+    what: 'A character asks another person to marry them, regardless of the setting or the answer.',
+    example: 'During a conversation at home, someone asks, "Will you marry me?"',
   },
   'A heartbreak that changes everything': {
     what: 'A romantic loss alters the character.',
@@ -133,9 +133,9 @@ export default {
     what: 'A character must decide between two people.',
     example: 'Both waiting, and only one can be chosen.',
   },
-  'A love letter found decades later': {
-    what: 'An old written message resurfaces.',
-    example: 'Discovered while clearing out a house.',
+  'An old message is rediscovered': {
+    what: 'A character comes across a previously overlooked or forgotten letter, text, email, or recorded message.',
+    example: 'While scrolling through old texts, someone finds a message they had forgotten about.',
   },
   'A love that starts as rivalry': {
     what: 'Antagonism becomes attraction.',

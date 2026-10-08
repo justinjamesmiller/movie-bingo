@@ -33,9 +33,9 @@ export default {
     what: 'A key witness disappears.',
     example: 'The flat is empty and the kettle is still warm.',
   },
-  'A locked room mystery': {
-    what: 'Something impossible happens in a sealed space.',
-    example: 'Bolted from the inside, and yet.',
+  'Someone refuses to answer': {
+    what: 'A character responds to a direct question by refusing to answer or deliberately remaining silent.',
+    example: 'Asked where the missing person is, someone replies, "I am not telling you."',
   },
   'An unreliable narrator': {
     what: 'The perspective telling the story cannot be trusted.',

@@ -4,6 +4,18 @@ import TropeInfoModal from './TropeInfoModal.jsx';
 import { loadTropeDescriptions } from '../data/tropeDescriptions.js';
 
 describe('TropeInfoModal', () => {
+  it('submits optional scene context and prevents malformed movie timestamps', () => {
+    const onConfirm = vi.fn();
+    render(<TropeInfoModal text="Jump Scare" allowSceneContext onConfirm={onConfirm} onCancel={vi.fn()} />);
+    fireEvent.click(screen.getByText('Optional scene context'));
+    fireEvent.change(screen.getByLabelText('Movie timestamp'), { target: { value: '12:99' } });
+    expect(screen.getByRole('button', { name: /Submit to the group/ })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('Movie timestamp'), { target: { value: '12:34' } });
+    fireEvent.change(screen.getByLabelText('Scene note'), { target: { value: '  Kitchen scene  ' } });
+    fireEvent.click(screen.getByRole('button', { name: /Submit to the group/ }));
+    expect(onConfirm).toHaveBeenCalledWith({ note: 'Kitchen scene', timestamp: '12:34' });
+  });
+
   // Warm the lazy chunk once so the synchronous assertions below are stable.
   beforeAll(async () => {
     await loadTropeDescriptions();
@@ -25,6 +37,7 @@ describe('TropeInfoModal', () => {
     render(<TropeInfoModal text="Jump Scare" marked={false} onConfirm={vi.fn()} onCancel={vi.fn()} />);
     expect(screen.getByRole('heading', { name: /Claim this trope/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Submit to the group/i })).toBeInTheDocument();
+    expect(screen.queryByText(/The group votes on whether this really happened/)).toBeNull();
   });
 
   it('uses direct submit wording for a solo game', () => {
@@ -88,6 +101,33 @@ describe('TropeInfoModal', () => {
     expect(screen.queryByRole('button', { name: /Propose swapping/i })).toBeNull();
   });
 
+  it('lists every caller with their name and avatar, including callers omitted from the board preview', () => {
+    render(
+      <TropeInfoModal
+        text="Jump Scare"
+        marked={false}
+        onCancel={vi.fn()}
+        callers={[
+          { id: 'alice', name: 'Alice', avatar: '🎬', connected: true },
+          { id: 'bob', name: 'Bob', avatar: '🍿', connected: true },
+          { id: 'carol', name: 'Carol', avatar: '⭐', connected: false },
+        ]}
+      />,
+    );
+    expect(screen.queryByRole('heading', { name: 'Called to happen next' })).toBeNull();
+    expect(screen.queryByRole('list', { name: 'Players calling this trope' })).toBeNull();
+    const avatars = screen.getAllByRole('button', { name: 'Show players calling this trope' });
+    expect(avatars.map((button) => button.textContent)).toEqual(['🎬', '🍿', '⭐']);
+    expect(avatars[0]).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(avatars[1]);
+    expect(screen.getByRole('heading', { name: 'Called to happen next' })).toBeInTheDocument();
+    expect(screen.getByText(/Alice/)).toHaveTextContent('🎬 Alice');
+    expect(screen.getByText(/Bob/)).toHaveTextContent('🍿 Bob');
+    expect(screen.getByText(/Carol/)).toHaveTextContent('⭐ Carol (disconnected)');
+    fireEvent.click(avatars[0]);
+    expect(screen.queryByRole('heading', { name: 'Called to happen next' })).toBeNull();
+  });
+
   it('hides call and swap actions for an accepted trope', () => {
     render(
       <TropeInfoModal
@@ -103,5 +143,43 @@ describe('TropeInfoModal', () => {
 
     expect(screen.queryByRole('button', { name: '⋯ Advanced actions' })).toBeNull();
     expect(screen.queryByRole('button', { name: /Propose swapping/i })).toBeNull();
+  });
+
+  it('shows successful caller avatars and names with completed-call wording', () => {
+    render(
+      <TropeInfoModal
+        text="Jump Scare"
+        marked
+        onCancel={vi.fn()}
+        successfulCallers={[{ id: 'bob', name: 'Bob', avatar: '🍿' }]}
+      />,
+    );
+    expect(screen.queryByRole('heading', { name: 'Called it correctly' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Show successful callers' }));
+    expect(screen.getByRole('heading', { name: 'Called it correctly' })).toBeInTheDocument();
+    expect(screen.getByRole('list', { name: 'Players who called this trope correctly' })).toHaveTextContent('🍿 Bob');
+    expect(screen.queryByRole('heading', { name: 'Called to happen next' })).toBeNull();
+  });
+
+  it('resets expanded callers when a new trope modal is opened and keeps avatars below the actions', () => {
+    const props = {
+      marked: false,
+      onCancel: vi.fn(),
+      onAdvancedActions: vi.fn(),
+      callers: [{ id: 'alice', name: 'Alice', avatar: '🎬' }],
+    };
+    const { container, rerender } = render(<TropeInfoModal key="Jump Scare" text="Jump Scare" {...props} />);
+    const actions = screen.getByRole('button', { name: '⋯ Advanced actions' });
+    const avatar = screen.getByRole('button', { name: 'Show players calling this trope' });
+    expect(actions.compareDocumentPosition(avatar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(container.querySelector('.modal-content').lastElementChild).toHaveClass('trope-callers');
+    fireEvent.click(avatar);
+    expect(screen.getByRole('heading', { name: 'Called to happen next' })).toBeInTheDocument();
+    rerender(<TropeInfoModal key="Blood splatter" text="Blood splatter" {...props} />);
+    expect(screen.queryByRole('heading', { name: 'Called to happen next' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Show players calling this trope' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
   });
 });

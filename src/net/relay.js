@@ -25,6 +25,7 @@ import { AVATAR_OPTIONS } from '../data/avatars.js';
 import { isValidDisagreeRationale } from '../data/disagreeRationales.js';
 import { DEFAULT_SESSION_LIFETIME_HOURS, SESSION_LIFETIME_OPTIONS } from '../data/session.js';
 import { getCompletedLines } from '../utils/bingoLines.js';
+import { formatPlayerName } from '../utils/playerName.js';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -39,6 +40,7 @@ const JOIN_TIMEOUT_MS = 10000;
 const DISCONNECT_GRACE_MS = 120000;
 const RECONNECT_BASE_DELAY_MS = 1000;
 const RECONNECT_MAX_DELAY_MS = 15000;
+const HOST_HEARTBEAT_INTERVAL_MS = 20000;
 const VALID_GENRES = new Set(GENRES.map((g) => g.id));
 const VALID_GENERAL_PERCENTS = new Set(GENERAL_PERCENT_OPTIONS);
 const VALID_TOTAL_TROPES = new Set(TOTAL_TROPES_OPTIONS);
@@ -53,6 +55,10 @@ const MAX_SESSION_LIFETIME_MS = Math.max(...SESSION_LIFETIME_OPTIONS.map((option
 const MAX_TIMER_DELAY_MS = 2_000_000_000;
 const MAX_CUSTOM_TROPES = 20;
 const MAX_CUSTOM_TROPE_LENGTH = 60;
+const MESSAGE_RATE_WINDOW_MS = 10_000;
+const MAX_MESSAGES_PER_WINDOW = 60;
+const MAX_TRACKED_MESSAGE_SENDERS = 128;
+const ALLOWED_REACTIONS = new Set(['👏', '😂', '😱', '🔥', '❤️']);
 
 // Storage can be entirely unavailable (private browsing, blocked cookies) or
 // throw on write (quota), and none of it is worth failing a game over.
@@ -144,7 +150,7 @@ function recordMarathonWatch(state) {
 function approvedPlayersFromVotes(players, votes) {
   return Object.entries(votes)
     .filter(([, agree]) => agree)
-    .map(([id]) => ({ id, name: players[id]?.name || 'Unknown player' }));
+    .map(([id]) => ({ id, name: players[id]?.name || 'Unknown player', avatar: players[id]?.avatar || '👤' }));
 }
 
 function formatNameList(names) {
@@ -154,7 +160,7 @@ function formatNameList(names) {
 }
 
 function approvalSentence(approvedBy) {
-  const names = approvedBy.map((player) => player.name).filter(Boolean);
+  const names = approvedBy.map((player) => formatPlayerName(player));
   return names.length > 0 ? ` Approved by ${formatNameList(names)}.` : '';
 }
 
@@ -218,6 +224,48 @@ function randomId() {
   return 'p' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 }
 
+function isValidPlayerId(id) {
+  return typeof id === 'string' && /^p[a-z0-9]{1,20}$/.test(id);
+}
+
+function isValidReplicatedState(state) {
+  if (
+    !state ||
+    typeof state !== 'object' ||
+    Array.isArray(state) ||
+    typeof state.code !== 'string' ||
+    !Array.isArray(state.seatOrder) ||
+    state.seatOrder.length === 0 ||
+    new Set(state.seatOrder).size !== state.seatOrder.length ||
+    !state.players ||
+    typeof state.players !== 'object' ||
+    Array.isArray(state.players) ||
+    !Array.isArray(state.genres) ||
+    !Array.isArray(state.subgenreSelections) ||
+    !Array.isArray(state.tropePool) ||
+    !Array.isArray(state.acceptedTropes)
+  ) {
+    return false;
+  }
+  return state.seatOrder.every((id) => {
+    if (typeof id !== 'string' || !Object.hasOwn(state.players, id)) return false;
+    const player = state.players[id];
+    return (
+      player &&
+      typeof player === 'object' &&
+      player.id === id &&
+      Number.isInteger(player.seat) &&
+      typeof player.connected === 'boolean' &&
+      Array.isArray(player.board) &&
+      player.board.length === 25 &&
+      Array.isArray(player.marked) &&
+      player.marked.every((index) => Number.isInteger(index) && index >= 0 && index < 25) &&
+      Array.isArray(player.wagered) &&
+      player.wagered.every((index) => Number.isInteger(index) && index >= 0 && index < 25)
+    );
+  });
+}
+
 function shuffled(items) {
   const result = items.slice();
   for (let index = result.length - 1; index > 0; index--) {
@@ -236,6 +284,7 @@ export class GameClient {
     this.onEvent = onEvent || (() => {});
     this.supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     this.myId = randomId();
+    this.authUserId = null;
     this.channel = null;
     this.state = null;
     this.claimTimeout = null;
@@ -246,7 +295,47 @@ export class GameClient {
     this._reconnectPaused = false;
     this._sessionExpiryTimer = null;
     this._queuedActions = [];
+    this._messageRateLimits = new Map();
+    this._publishQueue = Promise.resolve();
+    this._statePublishGeneration = 0;
+    this._hostHeartbeatTimer = null;
     this._installLifecycleListeners();
+  }
+
+  async _ensureAuthenticated() {
+    const { data, error } = await this.supabase.auth.getSession();
+    if (error) throw error;
+    let user = data?.session?.user;
+    if (!user) {
+      const result = await this.supabase.auth.signInAnonymously();
+      if (result.error) throw result.error;
+      user = result.data?.user;
+    }
+    if (!user?.id) throw new Error('Could not establish a secure game identity.');
+    this.authUserId = user.id;
+    return user.id;
+  }
+
+  async _relayRequest(operation, values = {}) {
+    const { data, error } = await this.supabase.functions.invoke('game-relay', {
+      body: { operation, ...values },
+    });
+    if (error) throw new Error(error.message || 'Could not reach the secure game relay.');
+    if (data?.error) throw new Error(data.error);
+    return data;
+  }
+
+  _syncHostHeartbeat() {
+    if (!this.state || !this.code || !this.isHost() || this._destroyed || this.channel?.state !== 'joined') {
+      clearInterval(this._hostHeartbeatTimer);
+      this._hostHeartbeatTimer = null;
+      return;
+    }
+    if (this._hostHeartbeatTimer) return;
+    this._hostHeartbeatTimer = setInterval(() => {
+      this._relayRequest('heartbeat', { code: this.code, playerId: this.myId }).catch(() => {});
+    }, HOST_HEARTBEAT_INTERVAL_MS);
+    this._hostHeartbeatTimer.unref?.();
   }
 
   // Returning to the tab or regaining network are the two moments when a
@@ -274,12 +363,19 @@ export class GameClient {
 
   destroy() {
     this._destroyed = true;
+    if (this._pendingJoin?.awaitingApproval && this.code && this.myId) {
+      this._relayRequest('cancel-join', { code: this.code, playerId: this.myId }).catch(() => {});
+    }
+    this._pendingJoin = null;
     clearTimeout(this.claimTimeout);
     clearTimeout(this._reconnectTimer);
     clearTimeout(this._sessionExpiryTimer);
+    clearInterval(this._hostHeartbeatTimer);
     this._reconnectTimer = null;
+    this._hostHeartbeatTimer = null;
     this._pendingDisconnects.forEach((timer) => clearTimeout(timer));
     this._pendingDisconnects.clear();
+    this._messageRateLimits.clear();
     this._removeLifecycleListeners();
     if (this.channel) this.supabase.removeChannel(this.channel);
   }
@@ -290,6 +386,27 @@ export class GameClient {
     const parsed = readStore(sessionStore(), SESSION_KEY) || readStore(localStore(), SESSION_BACKUP_KEY);
     if (!parsed?.code || !parsed?.myId || !parsed?.name) return null;
     return parsed;
+  }
+
+  static async isSavedSessionActive(savedSession) {
+    if (!savedSession?.code || !savedSession?.myId) return false;
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const { data: authData, error: authError } = await supabase.auth.getSession();
+    if (authError) throw authError;
+    if (!authData?.session) return false;
+    const { data, error } = await supabase.functions.invoke('game-relay', {
+      body: { operation: 'join-status', code: savedSession.code, playerId: savedSession.myId },
+    });
+    if (error) throw error;
+    if (data?.error) throw new Error(data.error);
+    const expiresAt = Number.isFinite(data?.expiresAt) ? data.expiresAt : data?.state?.sessionExpiresAt;
+    return (
+      data?.status === 'active' &&
+      isValidReplicatedState(data.state) &&
+      Object.hasOwn(data.state.players, savedSession.myId) &&
+      !data.state.gameOver &&
+      (!Number.isFinite(expiresAt) || Date.now() < expiresAt)
+    );
   }
 
   // The full replicated game state, kept so a game can be revived even when
@@ -311,7 +428,7 @@ export class GameClient {
   }
 
   _saveSession(code, name) {
-    const session = { code, myId: this.myId, name };
+    const session = { code, myId: this.myId, name, avatar: this.state?.players?.[this.myId]?.avatar };
     writeStore(sessionStore(), SESSION_KEY, session);
     writeStore(localStore(), SESSION_BACKUP_KEY, session);
   }
@@ -328,27 +445,6 @@ export class GameClient {
       return;
     }
     writeStore(localStore(), SNAPSHOT_KEY, { code: this.code, savedAt: Date.now(), state: this.state });
-  }
-
-  // Nobody answered our rejoin, so revive the game from our own copy of the
-  // replicated state -- this is what lets a table that all stepped away at
-  // once come back to the same boards instead of losing the game. Anyone else
-  // returning later syncs to whichever copy has the higher revision.
-  _restoreFromSnapshot(code, name) {
-    const snapshot = GameClient.getSavedSnapshot(code);
-    const me = snapshot?.state?.players?.[this.myId];
-    if (!me || snapshot.state.gameOver) return false;
-
-    this.state = snapshot.state;
-    if (name) me.name = name;
-    // Everyone is presumed away until they turn up; each returning player
-    // re-announces itself and gets marked connected again.
-    for (const player of Object.values(this.state.players)) player.connected = player.id === this.myId;
-    this._saveSession(code, me.name);
-    this._emitState();
-    this._send({ t: 'state', state: this.state });
-    this.onEvent({ type: 'gameRestored' });
-    return true;
   }
 
   // ---------- Public API ----------
@@ -373,7 +469,8 @@ export class GameClient {
     const safeTotalTropes = VALID_TOTAL_TROPES.has(totalTropes) ? totalTropes : DEFAULT_TOTAL_TROPES;
     const safeCustomTropes = sanitizeCustomTropes(customTropes);
     const code = randomCode();
-    await this._connectChannel(code);
+    await this._ensureAuthenticated();
+    this.code = code;
     this._initHostState(
       code,
       trimmedName,
@@ -387,6 +484,8 @@ export class GameClient {
       subgenrePercents,
       movie,
     );
+    await this._relayRequest('create', { code, playerId: this.myId, state: this.state });
+    await this._connectChannel(code);
     this._saveSession(code, trimmedName);
     this._emitState();
     return code;
@@ -397,49 +496,111 @@ export class GameClient {
   // code (see claimDisconnectedSeat), or `{ needsApproval: true }` if the game
   // has already started and the host must approve this as a brand-new seat --
   // in that last case, listen for the 'joinApproved'/'joinDenied' events.
-  joinGame(code, name) {
+  async joinGame(code, name, hostRecoveryPassword = '') {
     const trimmedName = (name || '').trim();
     if (!trimmedName) return Promise.reject(new Error('Please enter your name.'));
     const normalized = code.trim().toUpperCase();
-    return new Promise((resolve, reject) => {
-      this._connectChannel(normalized)
-        .then(() => {
-          const timeout = setTimeout(() => {
-            this._pendingJoin = null;
-            reject(
-              new Error(
-                'No response from a host with that code. Double-check the code and that the host is still connected.',
-              ),
-            );
-          }, JOIN_TIMEOUT_MS);
-
-          this._pendingJoin = {
-            name: trimmedName,
-            resolve: () => {
-              clearTimeout(timeout);
-              this._pendingJoin = null;
-              this._saveSession(normalized, trimmedName);
-              resolve({ needsChoice: false });
-            },
-            reject: (err) => {
-              clearTimeout(timeout);
-              this._pendingJoin = null;
-              reject(err);
-            },
-            choice: (options, allowNew) => {
-              clearTimeout(timeout);
-              resolve({ needsChoice: true, options, allowNew, name: trimmedName });
-            },
-            pending: () => {
-              clearTimeout(timeout);
-              this._pendingJoin.awaitingApproval = true;
-              resolve({ needsApproval: true });
-            },
-          };
-          this._send({ t: 'join', from: this.myId, name: trimmedName });
-        })
-        .catch(reject);
+    await this._ensureAuthenticated();
+    const membership = await this._relayRequest('join', {
+      code: normalized,
+      requestedPlayerId: this.myId,
+      newSeat: true,
+      name: trimmedName,
+      hostRecoveryPassword: hostRecoveryPassword || undefined,
     });
+    this.myId = membership.playerId;
+    this.code = normalized;
+    if (membership.isHost && isValidReplicatedState(membership.state)) {
+      this.state = membership.state;
+      const me = this.state.players[this.myId];
+      me.connected = true;
+      me.name = trimmedName;
+      await this._connectChannel(normalized);
+      this._saveSession(normalized, trimmedName);
+      this._emitState();
+      await this._send({ t: 'state', state: this.state });
+      return { needsChoice: false };
+    }
+    if (membership.needsApproval || membership.status === 'pending') {
+      this._pendingJoin = { awaitingApproval: true, name: trimmedName };
+      this._watchJoinApproval(normalized, this.myId, trimmedName).catch(() => {});
+      return { needsApproval: true };
+    }
+    await this._connectChannel(normalized);
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this._pendingJoin = null;
+        reject(
+          new Error(
+            'No response from a host with that code. Double-check the code and that the host is still connected.',
+          ),
+        );
+      }, JOIN_TIMEOUT_MS);
+
+      this._pendingJoin = {
+        name: trimmedName,
+        resolve: () => {
+          clearTimeout(timeout);
+          this._pendingJoin = null;
+          this._saveSession(normalized, trimmedName);
+          resolve({ needsChoice: false });
+        },
+        reject: (err) => {
+          clearTimeout(timeout);
+          this._pendingJoin = null;
+          reject(err);
+        },
+        choice: (options, allowNew) => {
+          clearTimeout(timeout);
+          resolve({ needsChoice: true, options, allowNew, name: trimmedName });
+        },
+        pending: () => {
+          clearTimeout(timeout);
+          this._pendingJoin.awaitingApproval = true;
+          resolve({ needsApproval: true });
+        },
+      };
+      this._send({ t: 'join', from: this.myId, name: trimmedName });
+    });
+  }
+
+  async _watchJoinApproval(code, playerId, name) {
+    const expiresAt = Date.now() + JOIN_TIMEOUT_MS;
+    while (!this._destroyed && this._pendingJoin?.awaitingApproval && Date.now() < expiresAt) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      if (this._destroyed || !this._pendingJoin?.awaitingApproval) return;
+      try {
+        const result = await this._relayRequest('join-status', { code, playerId });
+        if (result.status === 'revoked') {
+          this._pendingJoin = null;
+          this.onEvent({ type: 'joinDenied', reason: 'The host declined your request to join.' });
+          this.destroy();
+          return;
+        }
+        if (result.status !== 'active' || !isValidReplicatedState(result.state)) continue;
+        this.code = code;
+        this.myId = playerId;
+        this.state = result.state;
+        await this._connectChannel(code);
+        this._saveSession(code, name);
+        this._emitState();
+        this._pendingJoin = null;
+        this.onEvent({ type: 'joinApproved' });
+        return;
+      } catch (error) {
+        if (Date.now() >= expiresAt) {
+          this._pendingJoin = null;
+          this.onEvent({ type: 'joinDenied', reason: error.message || 'The host did not respond in time.' });
+          this.destroy();
+          return;
+        }
+      }
+    }
+    if (!this._destroyed && this._pendingJoin?.awaitingApproval) {
+      this._pendingJoin = null;
+      this.onEvent({ type: 'joinDenied', reason: 'The host did not respond in time.' });
+      this.destroy();
+    }
   }
 
   // Re-sends the join request on the same (already-connected) temp channel,
@@ -447,8 +608,15 @@ export class GameClient {
   // Used when the player picks "Join as a new player" from the choice modal.
   // Resolves to `{ needsApproval: true }` the same way joinGame() can, if the
   // game has already started.
-  confirmNewJoin(name) {
+  async confirmNewJoin(name) {
     const trimmedName = (name || '').trim();
+    const membership = await this._relayRequest('join', { code: this.code, newSeat: true });
+    this.myId = membership.playerId;
+    if (membership.needsApproval || membership.status === 'pending') {
+      this._pendingJoin = { awaitingApproval: true, name: trimmedName };
+      this._watchJoinApproval(this.code, this.myId, trimmedName).catch(() => {});
+      return { needsApproval: true };
+    }
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         this._pendingJoin = null;
@@ -480,9 +648,10 @@ export class GameClient {
   // Takes over an existing (disconnected) seat picked from the choice modal --
   // reconnects using that seat's id (same mechanism as rejoinGame) so its
   // board/wagers/marks are preserved, but with the freshly-entered name.
-  claimDisconnectedSeat(seatId, name) {
+  async claimDisconnectedSeat(seatId, name) {
     const trimmedName = (name || '').trim();
     const code = this.code;
+    await this._relayRequest('claim-seat', { code, playerId: this.myId, seatId });
     if (this.channel) {
       this.supabase.removeChannel(this.channel);
       this.channel = null;
@@ -518,19 +687,40 @@ export class GameClient {
   // disconnected host resume host authority once they reconnect (host authority
   // is always the lowest-seat *connected* player, so restoring `connected: true`
   // on the original host's seat automatically hands authority back to them).
-  rejoinGame() {
+  async rejoinGame() {
     const saved = GameClient.getSavedSession();
     if (!saved) return Promise.reject(new Error('No previous session found to reconnect to.'));
+    await this._ensureAuthenticated();
+    let membership;
+    try {
+      membership = await this._relayRequest('join', { code: saved.code, requestedPlayerId: saved.myId });
+    } catch {
+      GameClient.clearSavedSession();
+      throw new Error('No response from that game. It may have ended.');
+    }
+    if (membership.playerId !== saved.myId) throw new Error('This browser is not authorized to reclaim that seat.');
     this.myId = saved.myId;
+    this.code = saved.code;
+    if (membership.isHost && isValidReplicatedState(membership.state)) {
+      this.state = membership.state;
+      const me = this.state.players[this.myId];
+      const noOtherConnectedPlayers = Object.values(this.state.players).every(
+        (player) => player.id === this.myId || !player.connected,
+      );
+      me.connected = true;
+      if (saved.name) me.name = saved.name;
+      await this._connectChannel(saved.code);
+      this._saveSession(saved.code, me.name);
+      this._emitState();
+      await this._send({ t: 'state', state: this.state });
+      if (noOtherConnectedPlayers) this.onEvent({ type: 'gameRestored' });
+      return;
+    }
     return new Promise((resolve, reject) => {
       this._connectChannel(saved.code)
         .then(() => {
           const timeout = setTimeout(() => {
             this._pendingJoin = null;
-            if (this._restoreFromSnapshot(saved.code, saved.name)) {
-              resolve();
-              return;
-            }
             GameClient.clearSavedSession();
             reject(new Error('No response from that game. It may have ended.'));
           }, JOIN_TIMEOUT_MS);
@@ -578,12 +768,12 @@ export class GameClient {
     this._dispatch({ t: 'start' });
   }
 
-  claim(index) {
-    this._dispatch({ t: 'claim', index });
+  claim(index, sceneContext) {
+    this._dispatch({ t: 'claim', index, sceneContext });
   }
 
-  challengeTrope(text) {
-    this._dispatch({ t: 'challenge', text });
+  challengeTrope(text, sceneContext) {
+    this._dispatch({ t: 'challenge', text, sceneContext });
   }
 
   vote(claimId, agree, rationale) {
@@ -594,8 +784,16 @@ export class GameClient {
     this._dispatch({ t: 'toggleCall', text });
   }
 
+  recordTropeView(text) {
+    this._dispatch({ t: 'recordTropeView', text });
+  }
+
   cancelClaim(claimId) {
     this._dispatch({ t: 'cancelClaim', claimId });
+  }
+
+  withdrawQueuedClaim(queueId) {
+    this._dispatch({ t: 'withdrawQueuedClaim', queueId });
   }
 
   resetGame(
@@ -626,8 +824,8 @@ export class GameClient {
   // `genre`/`subgenre` here can be ANY genre/sub-genre in the whole registry,
   // independent of the game's own configured genres -- swapping a trope out
   // for something from a totally different genre is intentional.
-  proposeReplace(text, genre, subgenre) {
-    this._dispatch({ t: 'proposeReplace', text, genre, subgenre });
+  proposeReplace(text, genre, subgenre, sceneContext) {
+    this._dispatch({ t: 'proposeReplace', text, genre, subgenre, sceneContext });
   }
 
   chooseReplacement(text) {
@@ -642,8 +840,8 @@ export class GameClient {
     this._dispatch({ t: 'cancelReplacement' });
   }
 
-  proposeAccept(text) {
-    this._dispatch({ t: 'proposeAccept', text });
+  proposeAccept(text, sceneContext) {
+    this._dispatch({ t: 'proposeAccept', text, sceneContext });
   }
 
   // Host-only: marks the game as over and broadcasts a recap trigger to
@@ -681,8 +879,8 @@ export class GameClient {
   // Submits a brand-new free-text trope (not part of the pre-built pool) for
   // majority approval mid-game -- if approved it's added to the accepted
   // list AND the trope pool (so it shows up in "All Tropes" going forward).
-  proposeCustomTrope(text) {
-    this._dispatch({ t: 'proposeCustom', text });
+  proposeCustomTrope(text, sceneContext) {
+    this._dispatch({ t: 'proposeCustom', text, sceneContext });
   }
 
   // Ephemeral -- not part of replicated game state, just a fire-and-forget
@@ -698,6 +896,18 @@ export class GameClient {
   // still-connected client (including the host) to the new code's channel.
   kickPlayer(targetId) {
     this._dispatch({ t: 'kick', targetId });
+  }
+
+  restoreDisconnectedBoard(targetId, sourceId) {
+    this._dispatch({ t: 'restoreDisconnectedBoard', targetId, sourceId });
+  }
+
+  setHostRecoveryPassword(password) {
+    return this._relayRequest('set-host-recovery-password', {
+      code: this.code,
+      playerId: this.myId,
+      password,
+    });
   }
 
   // Host-only: seats the currently-pending mid-game join request.
@@ -733,6 +943,7 @@ export class GameClient {
   }
 
   leaveGame() {
+    if (this.code && this.myId) this._relayRequest('leave', { code: this.code, playerId: this.myId }).catch(() => {});
     GameClient.clearSavedSession();
     this.destroy();
   }
@@ -753,18 +964,17 @@ export class GameClient {
   }
 
   isHost() {
-    if (!this.state) return false;
-    const activeHostIds = this._hostIds().filter((id) => this.state.players[id]?.connected);
-    return activeHostIds.length > 0 ? activeHostIds.includes(this.myId) : this._authorityId() === this.myId;
+    return !!this.state && this._hostIds().includes(this.myId) && !!this.state.players[this.myId]?.connected;
   }
 
   // ---------- Channel plumbing ----------
 
-  _connectChannel(code) {
+  async _connectChannel(code) {
+    await this._ensureAuthenticated();
     this.code = code;
     return new Promise((resolve, reject) => {
       const channel = this.supabase.channel(CHANNEL_PREFIX + code, {
-        config: { broadcast: { self: false }, presence: { key: this.myId } },
+        config: { private: true, broadcast: { self: false }, presence: { key: this.myId } },
       });
       this.channel = channel;
 
@@ -803,6 +1013,7 @@ export class GameClient {
             clearTimeout(this._reconnectTimer);
             this._reconnectTimer = null;
             this.onEvent({ type: 'connectionStatus', status: 'connected' });
+            this._syncHostHeartbeat();
             if (resubscribed) {
               this._announceSelf();
               this._flushQueuedActions();
@@ -812,6 +1023,7 @@ export class GameClient {
           });
         } else {
           this.onEvent({ type: 'connectionStatus', status: 'disconnected' });
+          this._syncHostHeartbeat();
           if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
             this._scheduleReconnect();
           }
@@ -890,7 +1102,47 @@ export class GameClient {
   // can tell a fresher snapshot from a staler one.
   _send(msg) {
     if (msg.t === 'state' && this.state) this.state.rev = (this.state.rev || 0) + 1;
-    return this.channel?.send({ type: 'broadcast', event: 'msg', payload: { ...msg, sender: this.myId } });
+    const message = msg;
+    const isSnapshot = message.t === 'state' || message.t === 'welcome' || message.t === 'migrate';
+    const generation = this._statePublishGeneration;
+    const request = this._publishQueue.then(async () => {
+      if (isSnapshot && generation !== this._statePublishGeneration) return null;
+      const expectedRevision = isSnapshot
+        ? Number.isSafeInteger(message.state?.serverRevision)
+          ? message.state.serverRevision
+          : Number.isSafeInteger(this.state?.serverRevision)
+            ? this.state.serverRevision
+            : 0
+        : undefined;
+      if (isSnapshot && message.state?.serverRevision == null) message.state.serverRevision = expectedRevision;
+      const result = await this._relayRequest('publish', {
+        code: this.code,
+        playerId: this.myId,
+        ...(isSnapshot && { expectedRevision }),
+        message,
+      });
+      if (result?.conflict && isValidReplicatedState(result.state)) {
+        this._statePublishGeneration += 1;
+        this.state = result.state;
+        this._emitState();
+        this.onEvent({ type: 'stateConflict' });
+        return null;
+      }
+      if (
+        Number.isSafeInteger(result?.revision) &&
+        result.revision > (this.state?.serverRevision || 0) &&
+        result.code === this.state?.code
+      ) {
+        this.state.serverRevision = result.revision;
+        this._emitState();
+      }
+      return result;
+    });
+    this._publishQueue = request.catch(() => {});
+    return request.catch((error) => {
+      this.onEvent({ type: 'relayError', message: error.message || 'The secure game relay rejected an update.' });
+      return null;
+    });
   }
 
   // Transparently swaps the transport channel to a new code (used after a
@@ -911,7 +1163,13 @@ export class GameClient {
       this.onEvent({ type: 'actionQueued', actionType: action.t });
       return;
     }
-    if (this._currentHostId() === this.myId) {
+    const currentHostId = this._currentHostId();
+    if (!currentHostId) {
+      this._queuedActions.push(action);
+      this.onEvent({ type: 'actionQueued', actionType: action.t });
+      return;
+    }
+    if (currentHostId === this.myId) {
       return this._applyAction(this.myId, action);
     } else {
       return this._send({ t: 'action', from: this.myId, action });
@@ -927,16 +1185,11 @@ export class GameClient {
   _currentHostId() {
     if (!this.state) return null;
     const hostIds = this._hostIds();
-    return (
-      this.state.seatOrder.find((id) => hostIds.includes(id) && this.state.players[id]?.connected) ||
-      this._authorityId()
-    );
+    return this.state.seatOrder.find((id) => hostIds.includes(id) && this.state.players[id]?.connected) || null;
   }
 
   _hostIds() {
-    return Array.isArray(this.state?.hostIds) && this.state.hostIds.length > 0
-      ? this.state.hostIds
-      : [this.state?.seatOrder[0]];
+    return Array.isArray(this.state?.hostIds) && this.state.hostIds.length > 0 ? this.state.hostIds : [];
   }
 
   _isHostId(id) {
@@ -945,7 +1198,7 @@ export class GameClient {
 
   _isActiveHostId(id) {
     const activeHostIds = this._hostIds().filter((hostId) => this.state.players[hostId]?.connected);
-    return activeHostIds.length > 0 ? activeHostIds.includes(id) : this._authorityId() === id;
+    return activeHostIds.includes(id);
   }
 
   // The lowest-seat connected player, optionally ignoring one seat. Excluding a
@@ -953,13 +1206,28 @@ export class GameClient {
   // which is how a rejoin request from the host itself still gets answered.
   _authorityId(excludeId = null) {
     if (!this.state) return null;
-    return this.state.seatOrder.find((id) => id !== excludeId && this.state.players[id]?.connected) || null;
+    return (
+      this.state.seatOrder.find(
+        (id) => id !== excludeId && this._hostIds().includes(id) && this.state.players[id]?.connected,
+      ) || null
+    );
   }
 
   _emitState() {
     this._saveSnapshot();
+    const saved = GameClient.getSavedSession();
+    const me = this.state?.players?.[this.myId];
+    if (
+      saved?.myId === this.myId &&
+      saved.code === this.code &&
+      me &&
+      (saved.avatar !== me.avatar || saved.name !== me.name)
+    ) {
+      this._saveSession(this.code, me.name);
+    }
     this._scheduleSessionExpiry();
     this.onState(this.state, this.myId);
+    this._syncHostHeartbeat();
   }
 
   _scheduleSessionExpiry() {
@@ -991,7 +1259,7 @@ export class GameClient {
   // open for a grace period -- any traffic from that peer in the meantime
   // cancels the pending disconnect entirely.
   _onPeerLeft(peerId) {
-    if (!this.state || !this.state.players[peerId]) return;
+    if (!this.state || !isValidPlayerId(peerId) || !Object.hasOwn(this.state.players, peerId)) return;
     if (this._pendingDisconnects.has(peerId)) return;
     this._pendingDisconnects.set(
       peerId,
@@ -1013,13 +1281,15 @@ export class GameClient {
   // Any message from a peer proves they're still here, so cancel a pending
   // disconnect and undo a stale one.
   _notePeerAlive(peerId) {
-    if (!peerId || peerId === this.myId) return;
+    if (!isValidPlayerId(peerId) || peerId === this.myId || !Object.hasOwn(this.state?.players || {}, peerId)) {
+      return;
+    }
     const timer = this._pendingDisconnects.get(peerId);
     if (timer) {
       clearTimeout(timer);
       this._pendingDisconnects.delete(peerId);
     }
-    const player = this.state?.players?.[peerId];
+    const player = this.state.players[peerId];
     if (!player || player.connected) return;
     player.connected = true;
     this._emitState();
@@ -1027,7 +1297,7 @@ export class GameClient {
   }
 
   _markDisconnected(peerId) {
-    if (!this.state || !this.state.players[peerId]) return;
+    if (!this.state || !isValidPlayerId(peerId) || !Object.hasOwn(this.state.players, peerId)) return;
     // A leave can arrive for a channel the peer has already replaced (their own
     // reconnect tears the old one down), so trust live presence over the event.
     if (this._isPresent(peerId)) return;
@@ -1051,12 +1321,26 @@ export class GameClient {
   // clients briefly both believing they're host after a flaky reconnect.
   _shouldAcceptState(data) {
     if (!this.state || !data.sender) return true;
+    const incomingServerRevision = data.state?.serverRevision;
+    const currentServerRevision = this.state.serverRevision;
+    if (
+      Number.isSafeInteger(incomingServerRevision) &&
+      Number.isSafeInteger(currentServerRevision) &&
+      incomingServerRevision !== currentServerRevision
+    ) {
+      return incomingServerRevision > currentServerRevision;
+    }
     const incomingRev = data.state?.rev || 0;
     const myRev = this.state.rev || 0;
+    if (data.sender === this.myId && incomingRev <= myRev) return false;
     if (incomingRev > myRev) return true;
     if (this._currentHostId() !== this.myId) return true;
     const mySeat = this.state.players[this.myId]?.seat;
-    const theirSeat = this.state.players[data.sender]?.seat ?? data.state?.players?.[data.sender]?.seat;
+    const theirSeat = Object.hasOwn(this.state.players, data.sender)
+      ? this.state.players[data.sender]?.seat
+      : Object.hasOwn(data.state?.players || {}, data.sender)
+        ? data.state.players[data.sender]?.seat
+        : null;
     if (mySeat == null || theirSeat == null || theirSeat < mySeat) return true;
     this._send({ t: 'state', state: this.state });
     return false;
@@ -1072,14 +1356,44 @@ export class GameClient {
     this._emitState();
     if (this._authorityId(this.myId)) {
       this._send({ t: 'rejoin', from: this.myId, name: me.name });
-    } else {
+    } else if (this.isHost()) {
       this._send({ t: 'state', state: this.state });
     }
   }
 
   // ---------- Message handling ----------
 
+  _allowIncomingMessage(sender) {
+    const key = sender || 'unattributed';
+    const now = Date.now();
+    let bucket = this._messageRateLimits.get(key);
+    if (!bucket || now - bucket.startedAt >= MESSAGE_RATE_WINDOW_MS) {
+      bucket = { startedAt: now, count: 0 };
+    }
+    if (bucket.count >= MAX_MESSAGES_PER_WINDOW) return false;
+    bucket.count += 1;
+    this._messageRateLimits.set(key, bucket);
+    if (this._messageRateLimits.size > MAX_TRACKED_MESSAGE_SENDERS) {
+      this._messageRateLimits.delete(this._messageRateLimits.keys().next().value);
+    }
+    return true;
+  }
+
   _onMessage(data) {
+    if (!data || typeof data !== 'object' || Array.isArray(data) || typeof data.t !== 'string') return;
+    if (data.sender != null && !isValidPlayerId(data.sender)) return;
+    if (data.sender === this.myId) return;
+    if (!this._allowIncomingMessage(data.sender)) return;
+    if (
+      (data.t === 'state' ||
+        data.t === 'stateConflict' ||
+        data.t === 'migrate' ||
+        (data.t === 'welcome' && data.to === this.myId && this._pendingJoin)) &&
+      !isValidReplicatedState(data.state)
+    ) {
+      return;
+    }
+    if (data.t === 'migrate' && (typeof data.newCode !== 'string' || !data.newCode)) return;
     this._notePeerAlive(data.sender);
     switch (data.t) {
       case 'join':
@@ -1113,8 +1427,18 @@ export class GameClient {
         }
         break;
       case 'claimOffer':
-        if (data.to === this.myId && this._pendingJoin?.choice) {
-          this._pendingJoin.choice(data.options, data.allowNew);
+        if (data.to === this.myId && this._pendingJoin?.choice && Array.isArray(data.options)) {
+          const options = data.options.filter(
+            (option) =>
+              option &&
+              isValidPlayerId(option.id) &&
+              typeof option.name === 'string' &&
+              typeof option.avatar === 'string' &&
+              Number.isInteger(option.seat),
+          );
+          if (typeof data.allowNew === 'boolean' && (options.length > 0 || data.allowNew)) {
+            this._pendingJoin.choice(options, data.allowNew);
+          }
         }
         break;
       case 'joinRejected':
@@ -1151,6 +1475,21 @@ export class GameClient {
         this._emitState();
         this._ensureSeatConnected();
         break;
+      case 'stateConflict': {
+        const incomingRevision = data.state?.serverRevision;
+        const currentRevision = this.state?.serverRevision;
+        if (
+          isValidReplicatedState(data.state) &&
+          Number.isSafeInteger(incomingRevision) &&
+          (!Number.isSafeInteger(currentRevision) || incomingRevision > currentRevision)
+        ) {
+          this.state = data.state;
+          this._emitState();
+          this._ensureSeatConnected();
+        }
+        this.onEvent({ type: 'stateConflict' });
+        break;
+      }
       case 'resolved':
         this.onEvent({
           type: 'claimResolved',
@@ -1159,19 +1498,42 @@ export class GameClient {
           custom: !!data.custom,
           byId: data.byId,
           approved: data.approved,
-          approvedBy: data.approvedBy || [],
+          approvedBy: Array.isArray(data.approvedBy)
+            ? data.approvedBy
+                .filter((player) => player && typeof player === 'object' && !Array.isArray(player))
+                .map((player) => ({
+                  id: typeof player.id === 'string' ? player.id : '',
+                  name: typeof player.name === 'string' ? player.name : 'Unknown player',
+                  avatar: typeof player.avatar === 'string' ? player.avatar : '👤',
+                }))
+            : [],
           disagreeRationaleCounts: data.disagreeRationaleCounts || {},
-          wagerFreed: !!data.wagerFreedIds?.includes(this.myId),
+          wagerFreed: Array.isArray(data.wagerFreedIds) && data.wagerFreedIds.includes(this.myId),
+          missedCalls: Array.isArray(data.missedCalls)
+            ? data.missedCalls.filter(
+                (call) => call && typeof call.playerId === 'string' && typeof call.text === 'string',
+              )
+            : [],
         });
+        break;
+      case 'proposalRejected':
+        if (data.to === this.myId) {
+          this.onEvent({
+            type: 'proposalRejected',
+            message: typeof data.message === 'string' ? data.message.slice(0, 240) : 'Proposal could not be queued.',
+          });
+        }
         break;
       case 'replacementResolved':
         this.onEvent({
           type: 'replacementResolved',
-          wagerFreed: !!data.wagerFreedIds?.includes(this.myId),
+          wagerFreed: Array.isArray(data.wagerFreedIds) && data.wagerFreedIds.includes(this.myId),
         });
         break;
       case 'reaction':
-        this.onEvent({ type: 'reaction', from: data.from, emoji: data.emoji });
+        if (typeof data.from === 'string' && ALLOWED_REACTIONS.has(data.emoji)) {
+          this.onEvent({ type: 'reaction', from: data.from, emoji: data.emoji });
+        }
         break;
       case 'gameReset':
         this.onEvent({ type: 'gameReset' });
@@ -1186,7 +1548,11 @@ export class GameClient {
         break;
       case 'hostAdded':
         if (data.to === this.myId) {
-          this.onEvent({ type: 'hostAdded', byName: data.byName, byAvatar: data.byAvatar });
+          this.onEvent({
+            type: 'hostAdded',
+            byName: typeof data.byName === 'string' ? data.byName.slice(0, 40) : 'A player',
+            byAvatar: typeof data.byAvatar === 'string' ? data.byAvatar.slice(0, 16) : '👤',
+          });
         }
         break;
       case 'migrate':
@@ -1204,7 +1570,15 @@ export class GameClient {
         this._migrateToCode(data.newCode).catch(() => {});
         break;
       case 'action':
-        if (this._currentHostId() === this.myId) this._applyAction(data.from, data.action);
+        if (
+          this._currentHostId() === this.myId &&
+          typeof data.from === 'string' &&
+          data.action &&
+          typeof data.action === 'object' &&
+          !Array.isArray(data.action)
+        ) {
+          this._applyAction(data.from, data.action);
+        }
         break;
       default:
         break;
@@ -1237,6 +1611,7 @@ export class GameClient {
     this.state = {
       code,
       rev: 0,
+      serverRevision: 0,
       genres,
       subgenreSelections,
       freeSpace,
@@ -1262,12 +1637,19 @@ export class GameClient {
       started: false,
       gameOver: false,
       pendingClaim: null,
+      claimQueue: [],
+      claimHistory: [],
       pendingReplacement: null,
       pendingJoinRequest: null,
       pendingProfileChanges: {},
       acceptedTropes: [],
+      acceptedTropeProposers: {},
+      acceptedCalls: {},
       calls: {},
       callStats: {},
+      callHistory: {},
+      superlativeStats: {},
+      superlativeMilestones: {},
       bingoEvents: [],
       activityLog: [],
       movie,
@@ -1287,24 +1669,40 @@ export class GameClient {
     state.activityLog = state.activityLog.slice(-30);
   }
 
+  _superlativeStats(playerId) {
+    this.state.superlativeStats ||= {};
+    this.state.superlativeStats[playerId] ||= {
+      views: 0,
+      viewedTropes: [],
+      submissions: 0,
+      rejections: 0,
+      approvalVotes: 0,
+      otherApprovalVotes: 0,
+      acceptedProposals: 0,
+      acceptedAfterRejection: 0,
+      marksAfterRejection: 0,
+    };
+    return this.state.superlativeStats[playerId];
+  }
+
+  _recordSuperlativeMilestone(kind, playerIds) {
+    this.state.superlativeMilestones ||= {};
+    if (Object.values(this.state.superlativeMilestones).some((milestone) => milestone[kind])) return;
+    const ids = [...new Set(playerIds)];
+    for (const id of ids) {
+      this.state.superlativeMilestones[id] ||= {};
+      this.state.superlativeMilestones[id][kind] = true;
+      this.state.superlativeMilestones[id][`${kind}Tied`] = ids.length > 1;
+    }
+  }
+
   _handleJoin(newId, name, forceNew) {
-    if (this.state.players[newId]) {
+    if (!isValidPlayerId(newId)) return;
+    if (Object.hasOwn(this.state.players, newId)) {
       if (!forceNew) this._handleRejoin(newId, name);
       return;
     }
-    const disconnected = Object.values(this.state.players).filter(
-      (p) => !p.connected || this._pendingDisconnects.has(p.id),
-    );
-    if (!forceNew && disconnected.length > 0) {
-      this._send({
-        t: 'claimOffer',
-        to: newId,
-        options: disconnected.map((p) => ({ id: p.id, name: p.name, seat: p.seat })),
-        allowNew: true,
-      });
-      return;
-    }
-    const safeName = (name || '').trim() || 'Player';
+    const safeName = (typeof name === 'string' ? name.trim().slice(0, 20) : '') || 'Player';
     if (this.state.started) {
       // Brand-new seats mid-game need the host's go-ahead first -- only one
       // request can be pending at a time.
@@ -1312,7 +1710,11 @@ export class GameClient {
         this._send({ t: 'joinRejected', to: newId, reason: 'busy' });
         return;
       }
-      this.state.pendingJoinRequest = { id: newId, name: safeName };
+      this.state.pendingJoinRequest = {
+        id: newId,
+        name: safeName,
+        avatar: randomAvatar(Object.values(this.state.players).map((player) => player.avatar)),
+      };
       this._send({ t: 'joinPending', to: newId });
       this._emitState();
       this._send({ t: 'state', state: this.state });
@@ -1344,13 +1746,13 @@ export class GameClient {
   // since it's how a disconnected host/player resumes their same seat (and,
   // for the original host, automatically regains host authority).
   _handleRejoin(id, name) {
-    const player = this.state.players[id];
+    const player = isValidPlayerId(id) && Object.hasOwn(this.state.players, id) ? this.state.players[id] : null;
     if (!player) {
       this._send({ t: 'rejoinFailed', to: id });
       return;
     }
     player.connected = true;
-    const trimmed = (name || '').trim();
+    const trimmed = typeof name === 'string' ? name.trim().slice(0, 20) : '';
     if (trimmed) player.name = trimmed;
     if (!player.avatar) {
       player.avatar = randomAvatar(
@@ -1363,6 +1765,7 @@ export class GameClient {
     this._send({ t: 'welcome', to: id, state: this.state });
     this._emitState();
     this._send({ t: 'state', state: this.state });
+    this._drainClaimQueue();
   }
 
   _onPromotedToHost() {
@@ -1375,8 +1778,18 @@ export class GameClient {
 
   _applyAction(fromId, action) {
     const state = this.state;
-    const player = state.players[fromId];
-    if (!player) return;
+    const player = Object.hasOwn(state.players, fromId) ? state.players[fromId] : null;
+    if (!player || typeof player !== 'object' || !action || typeof action !== 'object') return;
+
+    if (action.t === 'recordTropeView') {
+      if (state.gameOver || typeof action.text !== 'string' || !state.tropePool.includes(action.text)) return;
+      const stats = this._superlativeStats(fromId);
+      stats.views += 1;
+      if (!stats.viewedTropes.includes(action.text)) stats.viewedTropes.push(action.text);
+      this._emitState();
+      this._send({ t: 'state', state });
+      return;
+    }
 
     if (action.t === 'setWager') {
       if (state.started) return;
@@ -1436,18 +1849,14 @@ export class GameClient {
       if (!Number.isInteger(index) || index < 0 || index >= 25) return;
       if (state.freeSpace && index === CENTER_INDEX) return;
       const kind = player.marked.includes(index) ? 'unmark' : 'mark';
-      if (state.pendingClaim) {
-        if (kind !== 'mark' || !this._mergeDuplicateMarkProposal(fromId, player.board[index])) return;
-        return;
-      }
-      this._startClaim(fromId, player.board[index], kind);
+      this._submitTropeProposal(fromId, player.board[index], kind, {}, action.sceneContext);
       return;
     }
 
     if (action.t === 'challenge') {
-      if (!state.started || state.gameOver || state.pendingClaim) return;
+      if (!state.started || state.gameOver) return;
       if (typeof action.text !== 'string' || !state.acceptedTropes.includes(action.text)) return;
-      this._startClaim(fromId, action.text, 'unmark');
+      this._submitTropeProposal(fromId, action.text, 'unmark', {}, action.sceneContext);
       return;
     }
 
@@ -1471,13 +1880,34 @@ export class GameClient {
       state.calls ||= {};
       state.callStats ||= {};
       if (state.calls[fromId] === action.text) {
+        this._finishCall(fromId, 'withdrawn');
         delete state.calls[fromId];
       } else {
+        this._finishCall(fromId, 'changed');
         state.calls[fromId] = action.text;
         state.callStats[fromId] = { ...state.callStats[fromId], made: (state.callStats[fromId]?.made || 0) + 1 };
+        state.callHistory ||= {};
+        state.callHistory[fromId] ||= [];
+        state.callHistory[fromId].push({
+          id: `${fromId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          text: action.text,
+          status: 'active',
+        });
       }
       this._emitState();
       this._send({ t: 'state', state: this.state });
+      return;
+    }
+
+    if (action.t === 'withdrawQueuedClaim') {
+      const entry = (state.claimQueue || []).find((item) => item.id === action.queueId);
+      if (!entry?.proposedBy.includes(fromId)) return;
+      entry.proposedBy = entry.proposedBy.filter((id) => id !== fromId);
+      entry.sceneContexts = entry.sceneContexts.filter((context) => context.playerId !== fromId);
+      if (!entry.proposedBy.length) state.claimQueue = state.claimQueue.filter((item) => item !== entry);
+      else entry.byId = entry.proposedBy[0];
+      this._emitState();
+      this._send({ t: 'state', state });
       return;
     }
 
@@ -1490,6 +1920,7 @@ export class GameClient {
       this._emitState();
       this._send({ t: 'state', state: this.state });
       this.onEvent({ type: 'claimCancelled', text: pc.text });
+      this._drainClaimQueue();
       return;
     }
 
@@ -1528,11 +1959,18 @@ export class GameClient {
       state.started = false;
       state.gameOver = false;
       state.pendingClaim = null;
+      state.claimQueue = [];
+      state.claimHistory = [];
       state.pendingJoinRequest = null;
       state.pendingProfileChanges = {};
       state.acceptedTropes = [];
+      state.acceptedTropeProposers = {};
+      state.acceptedCalls = {};
       state.calls = {};
       state.callStats = {};
+      state.callHistory = {};
+      state.superlativeStats = {};
+      state.superlativeMilestones = {};
       state.bingoEvents = [];
       state.activityLog = [];
       this._logActivity(
@@ -1548,7 +1986,7 @@ export class GameClient {
     }
 
     if (action.t === 'changeName') {
-      const trimmed = (action.name || '').trim().slice(0, 20);
+      const trimmed = typeof action.name === 'string' ? action.name.trim().slice(0, 20) : '';
       if (!trimmed) return;
       player.name = trimmed;
       this._emitState();
@@ -1581,6 +2019,120 @@ export class GameClient {
       return;
     }
 
+    if (action.t === 'restoreDisconnectedBoard') {
+      const sourceId = action.sourceId;
+      const targetId = action.targetId;
+      const source = state.players[sourceId];
+      const target = state.players[targetId];
+      if (
+        !this._isActiveHostId(fromId) ||
+        !state.started ||
+        state.gameOver ||
+        state.pendingClaim ||
+        state.pendingReplacement ||
+        state.claimQueue?.length ||
+        !source ||
+        !target ||
+        sourceId === targetId ||
+        source.connected ||
+        this._pendingDisconnects.has(sourceId) ||
+        target.connected !== true ||
+        this._isHostId(sourceId) ||
+        state.pendingProfileChanges?.[sourceId] ||
+        state.pendingProfileChanges?.[targetId]
+      ) {
+        return;
+      }
+
+      target.board = [...source.board];
+      target.marked = [...source.marked];
+      target.wagered = [...source.wagered];
+
+      state.calls ||= {};
+      this._finishCall(targetId, 'changed');
+      if (state.calls[sourceId]) state.calls[targetId] = state.calls[sourceId];
+      else delete state.calls[targetId];
+      delete state.calls[sourceId];
+      state.callHistory ||= {};
+      state.callHistory[targetId] = [...(state.callHistory[targetId] || []), ...(state.callHistory[sourceId] || [])];
+      delete state.callHistory[sourceId];
+
+      state.callStats ||= {};
+      const oldCallStats = state.callStats[sourceId];
+      const currentCallStats = state.callStats[targetId] || {};
+      if (oldCallStats) {
+        state.callStats[targetId] = {
+          made: (currentCallStats.made || 0) + (oldCallStats.made || 0),
+          correct: (currentCallStats.correct || 0) + (oldCallStats.correct || 0),
+        };
+      }
+      delete state.callStats[sourceId];
+
+      state.superlativeStats ||= {};
+      const oldStats = state.superlativeStats[sourceId];
+      const currentStats = state.superlativeStats[targetId];
+      if (oldStats) {
+        const mergedStats = { ...oldStats, ...currentStats };
+        for (const key of Object.keys(oldStats)) {
+          if (key !== 'viewedTropes' && typeof oldStats[key] === 'number') {
+            mergedStats[key] = (oldStats[key] || 0) + (currentStats?.[key] || 0);
+          }
+        }
+        mergedStats.viewedTropes = [
+          ...new Set([...(oldStats.viewedTropes || []), ...(currentStats?.viewedTropes || [])]),
+        ];
+        state.superlativeStats[targetId] = mergedStats;
+      }
+      delete state.superlativeStats[sourceId];
+
+      state.superlativeMilestones ||= {};
+      if (state.superlativeMilestones[sourceId]) {
+        state.superlativeMilestones[targetId] = {
+          ...state.superlativeMilestones[sourceId],
+          ...state.superlativeMilestones[targetId],
+        };
+      }
+      delete state.superlativeMilestones[sourceId];
+
+      for (const proposers of Object.values(state.acceptedTropeProposers || {})) {
+        for (let index = 0; index < proposers.length; index++) {
+          if (proposers[index] === sourceId) proposers[index] = targetId;
+        }
+      }
+      for (const callers of Object.values(state.acceptedCalls || {})) {
+        const oldCaller = callers.find((caller) => caller.id === sourceId);
+        if (oldCaller && !callers.some((caller) => caller.id === targetId)) {
+          callers.push({ ...oldCaller, id: targetId, name: target.name, avatar: target.avatar });
+        }
+        for (let index = callers.length - 1; index >= 0; index--) {
+          if (callers[index].id === sourceId) callers.splice(index, 1);
+        }
+      }
+      for (const event of state.bingoEvents || []) {
+        if (event.playerId === sourceId) event.playerId = targetId;
+      }
+      for (const entry of state.claimHistory || []) {
+        entry.proposerIds = (entry.proposerIds || []).map((id) => (id === sourceId ? targetId : id));
+        entry.proposerIds = [...new Set(entry.proposerIds)];
+        for (const proposer of entry.proposers || []) {
+          if (proposer.id === sourceId)
+            Object.assign(proposer, { id: targetId, name: target.name, avatar: target.avatar });
+        }
+        for (const context of entry.sceneContexts || []) {
+          if (context.playerId === sourceId) context.playerId = targetId;
+        }
+      }
+
+      delete state.players[sourceId];
+      state.seatOrder = state.seatOrder.filter((id) => id !== sourceId);
+      this._logActivity(
+        `🔄 ${formatPlayerName(target)} restored the board from disconnected player ${formatPlayerName(source)}.`,
+      );
+      this._emitState();
+      this._send({ t: 'state', state: this.state });
+      return;
+    }
+
     if (action.t === 'respondToProfileChange') {
       const proposal = state.pendingProfileChanges?.[fromId];
       if (!proposal || !player) return;
@@ -1595,16 +2147,16 @@ export class GameClient {
     }
 
     if (action.t === 'proposeCustom') {
-      if (state.gameOver || state.pendingClaim) return;
+      if (state.gameOver) return;
       if (typeof action.text !== 'string') return;
       const trimmed = action.text.trim().slice(0, MAX_CUSTOM_TROPE_LENGTH);
       if (!trimmed || trimmed === FREE_SPACE_TEXT || state.tropePool.includes(trimmed)) return;
-      this._startClaim(fromId, trimmed, 'mark', { custom: true });
+      this._submitTropeProposal(fromId, trimmed, 'mark', { custom: true }, action.sceneContext);
       return;
     }
 
     if (action.t === 'proposeReplace') {
-      if (state.gameOver || state.pendingClaim) return;
+      if (state.gameOver) return;
       if (
         typeof action.text !== 'string' ||
         action.text === FREE_SPACE_TEXT ||
@@ -1614,7 +2166,13 @@ export class GameClient {
         return;
       const safeGenre = VALID_GENRES.has(action.genre) ? action.genre : state.genres[0];
       const safeSubgenre = isValidSubgenre(safeGenre, action.subgenre) ? action.subgenre : 'general';
-      this._startClaim(fromId, action.text, 'replace', { genre: safeGenre, subgenre: safeSubgenre });
+      this._submitTropeProposal(
+        fromId,
+        action.text,
+        'replace',
+        { genre: safeGenre, subgenre: safeSubgenre },
+        action.sceneContext,
+      );
       return;
     }
 
@@ -1623,7 +2181,7 @@ export class GameClient {
       if (!replacement || replacement.byId !== fromId) return;
       if (action.t === 'cancelReplacement') {
         state.pendingReplacement = null;
-        this._logActivity(`🔁 ${player.name} cancelled the replacement for "${replacement.oldText}".`);
+        this._logActivity(`🔁 ${formatPlayerName(player)} cancelled the replacement for "${replacement.oldText}".`);
       } else if (action.t === 'cycleReplacement') {
         replacement.index = (replacement.index + 1) % replacement.candidates.length;
       } else {
@@ -1634,6 +2192,7 @@ export class GameClient {
       }
       this._emitState();
       this._send({ t: 'state', state: this.state });
+      if (!state.pendingReplacement) this._drainClaimQueue();
       return;
     }
 
@@ -1641,11 +2200,7 @@ export class GameClient {
       if (state.gameOver) return;
       if (typeof action.text !== 'string' || !state.tropePool.includes(action.text)) return;
       if (state.acceptedTropes.includes(action.text)) return;
-      if (state.pendingClaim) {
-        this._mergeDuplicateMarkProposal(fromId, action.text);
-        return;
-      }
-      this._startClaim(fromId, action.text, 'mark');
+      this._submitTropeProposal(fromId, action.text, 'mark', {}, action.sceneContext);
       return;
     }
 
@@ -1675,6 +2230,12 @@ export class GameClient {
             year: action.movie.year || null,
             type: action.movie.type || null,
             poster: action.movie.poster || null,
+            imdbID: action.movie.imdbID || null,
+            director: action.movie.director || null,
+            actors: action.movie.actors || null,
+            genres: Array.isArray(action.movie.genres) ? action.movie.genres : [],
+            unmapped: Array.isArray(action.movie.unmapped) ? action.movie.unmapped : [],
+            subgenreSelections: Array.isArray(action.movie.subgenreSelections) ? themeSelection.subgenreSelections : [],
             themeGenres: Array.isArray(action.movie?.genres) ? themeSelection.genres : null,
             themeSubgenreSelections: Array.isArray(action.movie?.subgenreSelections)
               ? themeSelection.subgenreSelections
@@ -1690,6 +2251,7 @@ export class GameClient {
       if (!this._isActiveHostId(fromId)) return;
       if (!state.started || state.gameOver || state.pendingClaim) return;
       state.gameOver = true;
+      state.claimQueue = [];
       this._logActivity('🏁 The game has ended.');
       this._send({ t: 'gameOverAnnounced' });
       GameClient.clearSavedSession();
@@ -1717,7 +2279,7 @@ export class GameClient {
       const targetId = action.targetId;
       if (!state.players[targetId]?.connected || this._isHostId(targetId)) return;
       state.hostIds = [...this._hostIds(), targetId];
-      this._logActivity(`👑 ${state.players[targetId].name} is now a host.`);
+      this._logActivity(`👑 ${formatPlayerName(state.players[targetId])} is now a host.`);
       this._send({ t: 'hostAdded', to: targetId, byName: player.name, byAvatar: player.avatar });
       this._emitState();
       return this._send({ t: 'state', state: this.state });
@@ -1726,7 +2288,7 @@ export class GameClient {
     if (action.t === 'resignHost') {
       if (!this._isHostId(fromId) || this._hostIds().length < 2) return;
       state.hostIds = this._hostIds().filter((id) => id !== fromId);
-      this._logActivity(`👑 ${state.players[fromId].name} resigned as host.`);
+      this._logActivity(`👑 ${formatPlayerName(state.players[fromId])} resigned as host.`);
       this._emitState();
       return this._send({ t: 'state', state: this.state });
     }
@@ -1735,7 +2297,7 @@ export class GameClient {
       if (!this._isActiveHostId(fromId)) return;
       const targetId = action.targetId;
       if (targetId === fromId || !state.players[targetId]) return;
-      const removedName = state.players[targetId].name;
+      const removedName = formatPlayerName(state.players[targetId]);
       delete state.players[targetId];
       state.seatOrder = state.seatOrder.filter((id) => id !== targetId);
       state.hostIds = this._hostIds().filter((id) => id !== targetId);
@@ -1761,14 +2323,14 @@ export class GameClient {
         name: req.name,
         seat,
         connected: true,
-        avatar: randomAvatar(Object.values(state.players).map((p) => p.avatar)),
+        avatar: req.avatar || randomAvatar(Object.values(state.players).map((p) => p.avatar)),
         board,
         wagered: [],
         marked,
       };
       state.seatOrder.push(req.id);
       state.pendingJoinRequest = null;
-      this._logActivity(`🙋 ${req.name} joined mid-game.`);
+      this._logActivity(`🙋 ${formatPlayerName(state.players[req.id])} joined mid-game.`);
       this._send({ t: 'welcome', to: req.id, state });
       this._emitState();
       this._send({ t: 'state', state: this.state });
@@ -1782,7 +2344,7 @@ export class GameClient {
       state.pendingJoinRequest = null;
       this._send({ t: 'joinRejected', to: req.id, reason: 'denied' });
       if (action.rotateCode) {
-        this._rotateCode(`🔒 The game code was rotated after denying ${req.name}.`);
+        this._rotateCode(`🔒 The game code was rotated after denying ${formatPlayerName(req)}.`);
       } else {
         this._emitState();
         this._send({ t: 'state', state: this.state });
@@ -1799,18 +2361,114 @@ export class GameClient {
     const newCode = randomCode();
     state.code = newCode;
     if (activityText) this._logActivity(activityText);
-    this._send({ t: 'migrate', newCode, state });
+    const migration = this._send({ t: 'migrate', newCode, state });
     this._emitState();
     this.onEvent({ type: 'codeChanged', code: newCode });
-    this._migrateToCode(newCode).catch(() => {});
+    migration.then((sent) => sent && this._migrateToCode(newCode).catch(() => {}));
   }
 
   _connectedCount() {
     return Object.values(this.state.players).filter((p) => p.connected).length;
   }
 
+  _sceneContext(fromId, value) {
+    const note = typeof value?.note === 'string' ? value.note.trim().slice(0, 240) : '';
+    const timestamp = typeof value?.timestamp === 'string' ? value.timestamp.trim().slice(0, 16) : '';
+    const validTime = /^(?:\d{1,2}:[0-5]\d|\d{1,3}):[0-5]\d$/.test(timestamp);
+    return note || validTime ? { playerId: fromId, note, timestamp: validTime ? timestamp : '' } : null;
+  }
+
+  _submitTropeProposal(fromId, text, kind, meta = {}, context) {
+    const scene = this._sceneContext(fromId, context);
+    if (
+      this.state.pendingClaim?.kind === 'mark' &&
+      kind === 'mark' &&
+      this.state.pendingClaim.text === text &&
+      !!this.state.pendingClaim.custom === !!meta.custom
+    ) {
+      this._mergeDuplicateMarkProposal(fromId, text, scene);
+      return;
+    }
+    if (!this.state.pendingClaim && !this.state.pendingReplacement && !(this.state.claimQueue || []).length) {
+      this._startClaim(fromId, text, kind, { ...meta, sceneContexts: scene ? [scene] : [] });
+      return;
+    }
+    this.state.claimQueue ||= [];
+    const duplicate = this.state.claimQueue.find(
+      (item) =>
+        item.text === text &&
+        item.kind === kind &&
+        item.meta.genre === meta.genre &&
+        item.meta.subgenre === meta.subgenre &&
+        !!item.meta.custom === !!meta.custom,
+    );
+    if (duplicate) {
+      if (!duplicate.proposedBy.includes(fromId)) {
+        duplicate.proposedBy.push(fromId);
+        if (scene) duplicate.sceneContexts.push(scene);
+      }
+    } else {
+      if (
+        this.state.claimQueue.length >= 30 ||
+        this.state.claimQueue.filter((item) => item.proposedBy.includes(fromId)).length >= 5
+      ) {
+        const message =
+          'The claim queue is full or you already have five waiting proposals. Withdraw one before adding another.';
+        if (fromId === this.myId) this.onEvent({ type: 'proposalRejected', message });
+        this._send({ t: 'proposalRejected', to: fromId, message });
+        return;
+      }
+      this.state.claimQueue.push({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        byId: fromId,
+        proposedBy: [fromId],
+        text,
+        kind,
+        meta,
+        sceneContexts: scene ? [scene] : [],
+      });
+    }
+    this._emitState();
+    this._send({ t: 'state', state: this.state });
+  }
+
+  _drainClaimQueue() {
+    const state = this.state;
+    if (state.gameOver || state.pendingClaim || state.pendingReplacement) return;
+    while (state.claimQueue?.length) {
+      const eligibleIndex = state.claimQueue.findIndex((item) =>
+        item.proposedBy.some((id) => state.players[id]?.connected),
+      );
+      if (eligibleIndex === -1) break;
+      const [entry] = state.claimQueue.splice(eligibleIndex, 1);
+      const proposers = entry.proposedBy.filter((id) => state.players[id]?.connected);
+      if (!proposers.length) continue;
+      const accepted = state.acceptedTropes.includes(entry.text);
+      if ((entry.kind === 'unmark' && !accepted) || (entry.kind !== 'unmark' && accepted)) continue;
+      if (!entry.meta.custom && !state.tropePool.includes(entry.text)) continue;
+      for (const id of proposers.slice(1)) this._superlativeStats(id).submissions += 1;
+      this._startClaim(proposers[0], entry.text, entry.kind, {
+        ...entry.meta,
+        proposedBy: proposers,
+        sceneContexts: entry.sceneContexts.filter((context) => proposers.includes(context.playerId)),
+      });
+      return;
+    }
+    this._emitState();
+    this._send({ t: 'state', state });
+  }
+
   _startClaim(fromId, text, kind, meta = {}) {
     const state = this.state;
+    if (['mark', 'unmark', 'replace'].includes(kind)) {
+      if (
+        !state.acceptedTropes.length &&
+        Object.values(state.superlativeStats || {}).every((stats) => !stats.submissions)
+      ) {
+        this._recordSuperlativeMilestone('firstProposal', [fromId]);
+      }
+      this._superlativeStats(fromId).submissions += 1;
+    }
     const claimId = `${state.code}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     state.pendingClaim = {
       claimId,
@@ -1819,7 +2477,7 @@ export class GameClient {
       kind,
       proposedBy: [fromId],
       ...meta,
-      votes: { [fromId]: true },
+      votes: Object.fromEntries((meta.proposedBy || [fromId]).map((id) => [id, true])),
       totalPlayers: this._connectedCount(),
     };
     clearTimeout(this.claimTimeout);
@@ -1829,14 +2487,19 @@ export class GameClient {
     this._send({ t: 'state', state: this.state });
   }
 
-  _mergeDuplicateMarkProposal(fromId, text) {
+  _mergeDuplicateMarkProposal(fromId, text, scene) {
     const pc = this.state.pendingClaim;
-    if (!pc || pc.kind !== 'mark' || pc.text !== text || pc.custom || pc.byId === fromId) return false;
+    if (!pc || pc.kind !== 'mark' || pc.text !== text || pc.byId === fromId || pc.votes[fromId] === false) return false;
     if (!Array.isArray(pc.proposedBy)) pc.proposedBy = [pc.byId];
     if (pc.proposedBy.includes(fromId)) return false;
+    this._superlativeStats(fromId).submissions += 1;
     pc.proposedBy.push(fromId);
+    if (scene) {
+      pc.sceneContexts ||= [];
+      pc.sceneContexts.push(scene);
+    }
     pc.votes[fromId] = true;
-    this._logActivity(`👥 ${this.state.players[fromId].name} also proposed "${text}".`);
+    this._logActivity(`👥 ${formatPlayerName(this.state.players[fromId])} also proposed "${text}".`);
     if (this._maybeAutoResolve()) return true;
     this._emitState();
     this._send({ t: 'state', state: this.state });
@@ -1882,6 +2545,13 @@ export class GameClient {
     const disagreeRationaleCounts = approved ? {} : pc.disagreeRationaleCounts || {};
     const approvedByText = approvalSentence(approvedBy);
     const wagerFreedIds = [];
+    const missedCalls = [];
+    const previousBingoLines = Object.fromEntries(
+      Object.values(this.state.players).map((player) => [
+        player.id,
+        new Set(getCompletedLines(player.marked).map((line) => line.join(','))),
+      ]),
+    );
 
     if (approved) {
       if (pc.kind === 'replace') {
@@ -1916,7 +2586,7 @@ export class GameClient {
             if (proposer.wagered.includes(idx) || proposer.marked.includes(idx)) continue;
             proposer.wagered.push(idx);
           }
-          this._logActivity(`🎯 ${proposer.name} updated their wagers.${approvedByText}`);
+          this._logActivity(`🎯 ${formatPlayerName(proposer)} updated their wagers.${approvedByText}`);
         }
       } else if (pc.kind === 'reroll') {
         const proposer = this.state.players[pc.byId];
@@ -1928,7 +2598,7 @@ export class GameClient {
           // they're cleared and can be re-placed via the usual wager proposal.
           if (proposer.wagered.length > 0) wagerFreedIds.push(proposer.id);
           proposer.wagered = [];
-          this._logActivity(`🔀 ${proposer.name} was dealt a fresh board.${approvedByText}`);
+          this._logActivity(`🔀 ${formatPlayerName(proposer)} was dealt a fresh board.${approvedByText}`);
         }
       } else {
         for (const p of Object.values(this.state.players)) {
@@ -1943,10 +2613,38 @@ export class GameClient {
         }
         if (pc.kind === 'unmark') {
           this.state.acceptedTropes = this.state.acceptedTropes.filter((t) => t !== pc.text);
+          delete this.state.acceptedTropeProposers?.[pc.text];
+          delete this.state.acceptedCalls?.[pc.text];
           this._logActivity(`↩️ "${pc.text}" was unmarked.${approvedByText}`);
         } else {
-          if (!this.state.acceptedTropes.includes(pc.text)) {
+          const newlyAccepted = !this.state.acceptedTropes.includes(pc.text);
+          if (newlyAccepted) {
             this.state.acceptedTropes.push(pc.text);
+            const proposerIds = pc.proposedBy || [pc.byId];
+            this.state.acceptedTropeProposers ||= {};
+            this.state.acceptedTropeProposers[pc.text] = [...proposerIds];
+            for (const proposerId of proposerIds) {
+              const stats = this._superlativeStats(proposerId);
+              stats.acceptedProposals = (stats.acceptedProposals || 0) + 1;
+              if (stats.rejections > 0) stats.acceptedAfterRejection += 1;
+            }
+            for (const voter of approvedBy) {
+              const stats = this._superlativeStats(voter.id);
+              stats.approvalVotes += 1;
+              if (!proposerIds.includes(voter.id)) stats.otherApprovalVotes = (stats.otherApprovalVotes || 0) + 1;
+            }
+            for (const player of Object.values(this.state.players)) {
+              const stats = this.state.superlativeStats?.[player.id];
+              if (stats?.rejections > 0 && player.board.includes(pc.text)) stats.marksAfterRejection += 1;
+            }
+            if (this.state.acceptedTropes.length === 1) this._recordSuperlativeMilestone('firstAccepted', proposerIds);
+            const wagerHits = Object.values(this.state.players).filter((player) =>
+              player.wagered.includes(player.board.indexOf(pc.text)),
+            );
+            this._recordSuperlativeMilestone(
+              'firstWagerHit',
+              wagerHits.map((player) => player.id),
+            );
           }
           if (pc.custom) {
             if (!this.state.tropePool.includes(pc.text)) this.state.tropePool.push(pc.text);
@@ -1955,20 +2653,72 @@ export class GameClient {
             this._logActivity(`✅ "${pc.text}" was marked as happened.${approvedByText}`);
           }
           for (const [playerId, calledText] of Object.entries(this.state.calls || {})) {
-            if (calledText !== pc.text) continue;
+            if (calledText !== pc.text) {
+              if (newlyAccepted) missedCalls.push({ playerId, text: calledText });
+              continue;
+            }
+            this._finishCall(playerId, 'scored');
             this.state.callStats ||= {};
             this.state.callStats[playerId] = {
               ...this.state.callStats[playerId],
               correct: (this.state.callStats[playerId]?.correct || 0) + 1,
             };
+            this.state.acceptedCalls ||= {};
+            this.state.acceptedCalls[pc.text] ||= [];
+            const caller = this.state.players[playerId];
+            if (!this.state.acceptedCalls[pc.text].some((entry) => entry.id === playerId)) {
+              this.state.acceptedCalls[pc.text].push({
+                id: playerId,
+                name: caller?.name || 'Unknown player',
+                avatar: caller?.avatar || '👤',
+              });
+            }
             delete this.state.calls[playerId];
           }
-          this._recordBingoEvents();
+          this._recordBingoEvents(previousBingoLines, pc.claimId);
         }
       }
+    } else if (['mark', 'unmark', 'replace'].includes(pc.kind)) {
+      for (const id of pc.proposedBy || [pc.byId]) this._superlativeStats(id).rejections += 1;
+      const proposers = (pc.proposedBy || [pc.byId]).map((id) => formatPlayerName(this.state.players[id]));
+      const proposal =
+        pc.kind === 'replace'
+          ? `replacing "${pc.text}"`
+          : pc.kind === 'unmark'
+            ? `unmarking "${pc.text}"`
+            : pc.custom
+              ? `adding "${pc.text}" as a custom trope`
+              : `"${pc.text}" as happened`;
+      const reasons = Object.entries(disagreeRationaleCounts).map(([reason, count]) => `${reason} (${count})`);
+      const reasonText = reasons.length ? ` Reasons: ${reasons.join(', ')}.` : ' No decline reasons were provided.';
+      this._logActivity(
+        `❌ ${formatNameList(proposers)} proposed ${proposal}, but it did not reach majority approval.${reasonText}`,
+      );
     }
 
     this.state.pendingClaim = null;
+    this.state.claimHistory ||= [];
+    this.state.claimHistory.push({
+      id: pc.claimId,
+      text: pc.text,
+      kind: pc.kind,
+      approved,
+      proposerIds: pc.proposedBy || [pc.byId],
+      proposers: (pc.proposedBy || [pc.byId]).map((id) => ({
+        id,
+        name: this.state.players[id]?.name || 'Unknown player',
+        avatar: this.state.players[id]?.avatar || '👤',
+      })),
+      sceneContexts: pc.sceneContexts || [],
+      reasons: disagreeRationaleCounts,
+      ts: Date.now(),
+    });
+    this.state.claimHistory = this.state.claimHistory.slice(-100);
+    const sceneText = (pc.sceneContexts || [])
+      .map((context) => [context.timestamp, context.note].filter(Boolean).join(' · '))
+      .filter(Boolean)
+      .join(' | ');
+    if (sceneText && this.state.activityLog?.length) this.state.activityLog.at(-1).text += ` Scene: ${sceneText}`;
     const payload = {
       text: pc.text,
       kind: pc.kind,
@@ -1978,12 +2728,24 @@ export class GameClient {
       approvedBy,
       disagreeRationaleCounts,
       wagerFreedIds,
+      missedCalls,
       proposedBy: pc.proposedBy || [pc.byId],
     };
     this.onEvent({ type: 'claimResolved', ...payload, wagerFreed: wagerFreedIds.includes(this.myId) });
     this._send({ t: 'resolved', ...payload });
     this._emitState();
     this._send({ t: 'state', state: this.state });
+    this._drainClaimQueue();
+  }
+
+  _finishCall(playerId, status) {
+    const text = this.state.calls?.[playerId];
+    if (!text) return;
+    this.state.callHistory ||= {};
+    const history = (this.state.callHistory[playerId] ||= []);
+    const entry = history.findLast((call) => call.status === 'active' && call.text === text);
+    if (entry) entry.status = status;
+    else history.push({ id: `${playerId}-${Date.now()}-legacy`, text, status });
   }
 
   _applyReplacement(replacement, newText) {
@@ -1999,28 +2761,43 @@ export class GameClient {
       if (this.state.acceptedTropes.includes(newText)) p.marked.push(idx);
     }
     for (const [playerId, calledText] of Object.entries(this.state.calls || {})) {
-      if (calledText === replacement.oldText) delete this.state.calls[playerId];
+      if (calledText === replacement.oldText) {
+        this._finishCall(playerId, 'replaced');
+        delete this.state.calls[playerId];
+      }
     }
     if (!this.state.tropePool.includes(newText)) this.state.tropePool.push(newText);
     this.state.acceptedTropes = this.state.acceptedTropes.filter((text) => text !== replacement.oldText);
+    delete this.state.acceptedTropeProposers?.[replacement.oldText];
+    delete this.state.acceptedCalls?.[replacement.oldText];
     this._logActivity(`🔁 "${replacement.oldText}" was swapped out for "${newText}".`);
     return wagerFreedIds;
   }
 
-  _recordBingoEvents() {
+  _recordBingoEvents(previousBingoLines, claimId) {
     if (!Array.isArray(this.state.bingoEvents)) this.state.bingoEvents = [];
+    const firstBingo = this.state.bingoEvents.length === 0;
+    const firstBingoIds = [];
     for (const player of Object.values(this.state.players)) {
-      const bingoCount = getCompletedLines(player.marked).length;
-      const recordedCount = this.state.bingoEvents.filter((event) => event.playerId === player.id).length;
-      for (let count = recordedCount + 1; count <= bingoCount; count++) {
+      const lines = getCompletedLines(player.marked);
+      const newlyCompleted = lines.filter((line) => !previousBingoLines[player.id]?.has(line.join(',')));
+      if (firstBingo && newlyCompleted.length > 0) firstBingoIds.push(player.id);
+      for (let index = 0; index < newlyCompleted.length; index++) {
+        const count = lines.length - newlyCompleted.length + index + 1;
         this.state.bingoEvents.push({
-          id: `${this.state.code}-${player.id}-${count}-${Date.now()}`,
+          id: `${claimId}-${player.id}-${count}`,
           playerId: player.id,
+          playerName: player.name,
+          playerAvatar: player.avatar,
           count,
+          claimId,
+          newLines: newlyCompleted.length,
+          totalLines: lines.length,
           ts: Date.now(),
         });
       }
     }
+    if (firstBingo) this._recordSuperlativeMilestone('firstBingo', firstBingoIds);
     this.state.bingoEvents = this.state.bingoEvents.slice(-50);
   }
 }

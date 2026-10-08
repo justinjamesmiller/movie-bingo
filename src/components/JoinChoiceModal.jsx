@@ -1,4 +1,5 @@
 import ModalShell from './ModalShell.jsx';
+import { formatPlayerName } from '../utils/playerName.js';
 
 export default function JoinChoiceModal({ name, options, allowNew, busy, onClaimSeat, onJoinAsNew, onCancel }) {
   return (
@@ -7,14 +8,14 @@ export default function JoinChoiceModal({ name, options, allowNew, busy, onClaim
         <h3>Reconnect as an existing player?</h3>
         <p className="hint">
           This game has disconnected players. If one of these is you, pick your name below to take back your board (with
-          your marks and wagers intact) as "{name}".
+          your marks and wagers intact) as "{formatPlayerName({ name })}".
         </p>
         <div className="modal-scroll-area">
           <ul className="challenge-list">
             {options.map((opt) => (
               <li key={opt.id}>
                 <button className="btn challenge-item" disabled={busy} onClick={() => onClaimSeat(opt.id)}>
-                  {opt.name}
+                  {formatPlayerName(opt)}
                 </button>
               </li>
             ))}

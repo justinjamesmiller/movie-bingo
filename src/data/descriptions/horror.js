@@ -250,7 +250,7 @@ export default {
     what: 'Suspicion lands on someone the audience did not consider.',
     example: 'The quiet kid who has been in the background all film.',
   },
-  'A familiar weapon': {
+  'Earlier object becomes a weapon': {
     what: 'An ordinary object established earlier comes back as a weapon.',
     example: 'The garden shears from the opening montage.',
   },
@@ -399,10 +399,6 @@ export default {
   'Creepy doll': {
     what: 'A doll, puppet or figurine that seems aware.',
     example: 'A porcelain doll that keeps ending up in a different chair.',
-  },
-  'A cemetery': {
-    what: 'A scene set in a graveyard, crypt or burial ground.',
-    example: 'Reading a headstone that shares their own surname.',
   },
   'A moving shadow': {
     what: 'A shadow moves independently of anything casting it.',
@@ -1055,10 +1051,6 @@ export default {
   'Glimpsed only in shadow': {
     what: 'The creature is kept mostly unseen, shown in fragments or silhouette.',
     example: 'A shape crossing the doorway, too tall.',
-  },
-  "A local's dire warning": {
-    what: 'Someone who lives nearby warns the characters off.',
-    example: 'The bait-shop owner telling them not to go past the point.',
   },
   'Smarter than expected': {
     what: 'The creature displays intelligence, planning or problem-solving.',

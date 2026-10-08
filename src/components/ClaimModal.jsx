@@ -2,8 +2,18 @@ import { useEffect, useState } from 'react';
 import { GENRES, SUBGENRES_BY_GENRE } from '../data/tropes.js';
 import { getDisagreeRationales } from '../data/disagreeRationales.js';
 import { useTropeDescription } from '../hooks/useTropeDescription.js';
+import { formatPlayerName } from '../utils/playerName.js';
 
-export default function ClaimModal({ pendingClaim, myId, players, onAgree, onDisagree, onCancel }) {
+export default function ClaimModal({
+  pendingClaim,
+  myId,
+  players,
+  onAgree,
+  onDisagree,
+  onCancel,
+  onBrowseQueue,
+  onShowQueue,
+}) {
   const [choosingRationale, setChoosingRationale] = useState(false);
   const { description } = useTropeDescription(pendingClaim?.text);
   useEffect(() => setChoosingRationale(false), [pendingClaim?.claimId]);
@@ -30,11 +40,12 @@ export default function ClaimModal({ pendingClaim, myId, players, onAgree, onDis
     ? (SUBGENRES_BY_GENRE[pendingClaim.genre] || []).find((s) => s.id === pendingClaim.subgenre)?.label ||
       pendingClaim.subgenre
     : null;
-  const claimantLabel = claimant ? `${claimant.avatar ? `${claimant.avatar} ` : ''}${claimant.name}` : 'A player';
+  const claimantLabel = formatPlayerName(claimant, 'A player');
   const additionalProposers = (pendingClaim.proposedBy || [])
     .slice(1)
-    .map((id) => players.find((p) => p.id === id)?.name)
-    .filter(Boolean);
+    .map((id) => players.find((p) => p.id === id))
+    .filter(Boolean)
+    .map((player) => formatPlayerName(player));
   const rationaleCounts = pendingClaim.disagreeRationaleCounts || {};
 
   return (
@@ -87,6 +98,19 @@ export default function ClaimModal({ pendingClaim, myId, players, onAgree, onDis
           <p className="claim-text">{pendingClaim.text}</p>
         )}
         {additionalProposers.length > 0 && <p className="hint">Also proposed by: {additionalProposers.join(', ')}</p>}
+        {pendingClaim.sceneContexts?.length > 0 && (
+          <section className="claim-scene-context">
+            <h4>Scene context</h4>
+            {pendingClaim.sceneContexts.map((context) => (
+              <p key={context.playerId}>
+                <strong>{formatPlayerName(players.find((player) => player.id === context.playerId))}</strong>
+                {context.timestamp && ` · ${context.timestamp}`}
+                <br />
+                {context.note}
+              </p>
+            ))}
+          </section>
+        )}
         {description && !isWagerChange && !isReroll && (
           <p className="hint">
             <em>{description.what}</em>
@@ -171,6 +195,16 @@ export default function ClaimModal({ pendingClaim, myId, players, onAgree, onDis
         {isClaimant && (
           <button className="btn disagree cancel-claim-btn" onClick={onCancel}>
             Cancel / undo my claim
+          </button>
+        )}
+        {onBrowseQueue && (
+          <button className="btn secondary-action" onClick={onBrowseQueue}>
+            Queue another trope
+          </button>
+        )}
+        {onShowQueue && (
+          <button className="btn secondary-action" onClick={onShowQueue}>
+            View waiting proposals
           </button>
         )}
         <p className="hint">

@@ -1,10 +1,329 @@
 // Canonical cross-genre tropes. A shared trope owns its label, explanation,
 // example, and every genre/subgenre membership in one declaration.
-function sharedTrope(text, what, example, memberships) {
-  return { text, what, example, memberships };
+function sharedTrope(text, what, example, memberships, optional = false) {
+  return { text, what, example, memberships, optional };
 }
 
 export const SHARED_TROPES = [
+  sharedTrope(
+    'Product placement',
+    'A recognizable real-world brand is prominently shown or explicitly named. Incidental background logos do not count. Players need not establish whether the appearance was paid or sponsored.',
+    'A close-up makes a soda-can label clearly readable while a character drinks.',
+    [
+      ['comedy', ['general']],
+      ['action', ['general']],
+      ['thriller', ['general']],
+      ['romance', ['general']],
+      ['drama', ['general']],
+      ['tv', ['reality-tv', 'lifestyle']],
+    ],
+    true,
+  ),
+  sharedTrope(
+    'A fictional business is named',
+    'An invented company, restaurant, shop, or commercial brand is named or shown on a sign. A real business using a fictional branch does not count.',
+    'Characters order lunch at Big Kahuna Burger.',
+    [
+      ['comedy', ['general', 'workplace']],
+      ['action', ['general']],
+      ['sci-fi', ['general', 'dystopian']],
+      ['fantasy', ['general']],
+      ['thriller', ['general']],
+      ['animation', ['general']],
+    ],
+  ),
+  sharedTrope(
+    'A montage',
+    'A sequence of short shots compresses an extended activity or passage of time. Ordinary cuts within one continuous scene do not count.',
+    'Several shots show a character training over successive days.',
+    [
+      ['comedy', ['general']],
+      ['action', ['general', 'martial-arts']],
+      ['romance', ['general']],
+      ['drama', ['general']],
+      ['biography', ['general', 'sports-biopic']],
+      ['music', ['general']],
+      ['sport', ['general', 'underdog-story']],
+    ],
+  ),
+  sharedTrope(
+    'Bullying',
+    'Someone uses a power advantage to intimidate, humiliate, or exclude another person. Mutual arguments and clearly welcome teasing do not count.',
+    "A group blocks a student's path and mocks them while others watch.",
+    [
+      ['drama', ['general', 'family-drama']],
+      ['family', ['general']],
+      ['comedy', ['general', 'workplace']],
+      ['sport', ['general', 'sports-drama', 'underdog-story']],
+    ],
+  ),
+  sharedTrope(
+    'A slur is used',
+    'Spoken or written language clearly demeans someone because of their identity or group membership. General profanity does not count, and no player needs to repeat the wording.',
+    'A character directs a discriminatory insult at another character.',
+    [
+      ['drama', ['general']],
+      ['thriller', ['general', 'noir-crime']],
+      ['biography', ['general']],
+      ['history', ['general', 'historical-drama']],
+      ['war', ['general', 'war-drama']],
+      ['documentary', ['true-crime']],
+    ],
+    true,
+  ),
+  sharedTrope(
+    'An old verse is quoted',
+    'Someone quotes a recognizable passage from scripture, an older poem, or traditional verse. A newly invented prediction is not automatically a quotation.',
+    'A character recites a line from an old poem while explaining a decision.',
+    [
+      ['drama', ['general']],
+      ['fantasy', ['general', 'epic-fantasy']],
+      ['history', ['general']],
+      ['biography', ['general']],
+      ['horror', ['supernatural', 'psychological']],
+      ['romance', ['period-romance']],
+    ],
+  ),
+  sharedTrope(
+    'An ominous warning',
+    'A person warns the characters of serious danger ahead. The warning need not be believed, and an unexplained visual omen alone does not count.',
+    'A resident urges visitors to leave before nightfall but refuses to explain why.',
+    [
+      ['horror', ['general', 'supernatural', 'creature']],
+      ['thriller', ['general']],
+      ['adventure', ['general']],
+      ['fantasy', ['epic-fantasy']],
+    ],
+  ),
+  sharedTrope(
+    'Alcohol, tobacco, or drugs are used',
+    'Someone visibly drinks alcohol, smokes or vapes tobacco, or uses an intoxicating drug. Merely holding a container, discussing drugs, or taking ordinary prescribed medicine does not count. This does not imply illegality, dependence, or impairment.',
+    'A character pours whiskey and takes a sip.',
+    [
+      ['drama', ['general']],
+      ['comedy', ['general']],
+      ['thriller', ['general', 'noir-crime']],
+      ['romance', ['general']],
+      ['biography', ['general', 'music-biopic']],
+      ['western', ['general']],
+      ['music', ['music-industry']],
+    ],
+    true,
+  ),
+  sharedTrope(
+    'A scene in a burial ground',
+    'Meaningful scene action takes place in a cemetery, graveyard, crypt, or burial ground. A passing shot of a gravestone does not count.',
+    'Two characters discuss a secret beside a family grave.',
+    [
+      ['horror', ['general', 'supernatural']],
+      ['drama', ['general']],
+      ['thriller', ['general']],
+      ['history', ['general']],
+      ['western', ['general']],
+      ['fantasy', ['epic-fantasy']],
+      ['romance', ['romantic-drama']],
+    ],
+  ),
+  sharedTrope(
+    'A relationship switches sides',
+    'Characters established as friends or allies become openly opposed, or established opponents willingly cooperate toward a shared goal. Temporary arguments and being forced into the same situation do not count; the change must be demonstrated through words or actions.',
+    'Former friends choose opposing sides and refuse to help each other, or two enemies agree to share information and work together against a common threat.',
+    [
+      ['action', ['general']],
+      ['adventure', ['general']],
+      ['drama', ['general']],
+      ['fantasy', ['general']],
+      ['thriller', ['general']],
+      ['comedy', ['buddy-comedy']],
+      ['sci-fi', ['space-opera']],
+      ['war', ['combat', 'war-drama']],
+    ],
+  ),
+  sharedTrope(
+    'Unconvincing visual effects',
+    'An effect visibly fails to fit the surrounding scene through mismatched lighting, motion, or contact. Intentional cartoon styling does not count, and players need not identify whether CGI was used.',
+    'A creature seems to float above the floor and has lighting inconsistent with the room.',
+    [
+      ['sci-fi', ['general']],
+      ['fantasy', ['general']],
+      ['horror', ['creature']],
+      ['action', ['disaster']],
+    ],
+    true,
+  ),
+  sharedTrope(
+    '"How did they film that?"',
+    'A striking shot or sequence makes viewers wonder how it was executed rather than what happens in the story. This is a subjective group judgment, not a claim about the technique used.',
+    'A seamless-looking shot follows someone through several difficult-to-access spaces.',
+    [
+      ['action', ['general']],
+      ['adventure', ['general']],
+      ['sci-fi', ['general']],
+      ['fantasy', ['general']],
+    ],
+    true,
+  ),
+  sharedTrope(
+    'Killer appears impossibly far ahead',
+    'A pursuing killer reaches a new position without a plausible route or enough apparent time. Explained teleportation and clear time jumps do not count.',
+    'A fleeing character reaches a destination, but the killer who was behind them is already waiting.',
+    [
+      ['horror', ['slasher']],
+      ['comedy', ['spoof-parody']],
+    ],
+  ),
+  sharedTrope(
+    'A swerve causes a crash',
+    'A driver swerves to avoid an obstacle and crashes as a result.',
+    'A driver avoids an animal but hits a roadside barrier.',
+    [
+      ['action', ['general', 'disaster']],
+      ['thriller', ['general']],
+      ['horror', ['general']],
+    ],
+  ),
+  sharedTrope(
+    'Misses an obvious hint',
+    'A character fails to understand a plainly communicated social cue. Being unaware of a nearby threat belongs to Danger just out of sight instead.',
+    'Everyone signals someone to stop talking, but they continue revealing a secret.',
+    [
+      ['comedy', ['general', 'rom-com', 'workplace']],
+      ['romance', ['general']],
+    ],
+  ),
+  sharedTrope(
+    'An everyday object becomes deadly',
+    'A death involves an object not ordinarily presented as a weapon. Conventional weapons do not count; unlike Earlier object becomes a weapon, no earlier setup is required.',
+    'An ordinary room prop unexpectedly becomes the cause of an on-screen death.',
+    [
+      ['horror', ['slasher']],
+      ['thriller', ['noir-crime']],
+      ['action', ['general']],
+    ],
+  ),
+  sharedTrope(
+    'A continuity error',
+    'A prop, costume, or position changes inconsistently between cuts within the same continuous scene. Time jumps, dreams, and intentional distortions do not count.',
+    'A half-empty glass becomes full in the reverse angle without anyone refilling it.',
+    [
+      ['horror', ['general']],
+      ['comedy', ['general']],
+      ['action', ['general']],
+      ['sci-fi', ['general']],
+      ['fantasy', ['general']],
+      ['thriller', ['general']],
+      ['romance', ['general']],
+      ['drama', ['general']],
+    ],
+    true,
+  ),
+  sharedTrope(
+    "Something doesn't fit the period",
+    'An object or detail contradicts the established historical period. Explained time travel and deliberately mixed settings do not count; unlike An anachronistic joke, this need not be an intentional joke.',
+    'A digital wristwatch appears in a scene explicitly set in ancient Rome.',
+    [
+      ['history', ['general']],
+      ['biography', ['general']],
+      ['romance', ['period-romance']],
+      ['western', ['general']],
+    ],
+    true,
+  ),
+  sharedTrope(
+    'An implausible explosion',
+    'An explosion seems disproportionate or unsupported by what the scene establishes. An evident or explained cause, such as fuel or pressure, rules it out; this is a subjective group judgment.',
+    'A minor collision produces a huge fireball with no evident justification.',
+    [
+      ['action', ['general', 'disaster']],
+      ['comedy', ['spoof-parody']],
+    ],
+    true,
+  ),
+  sharedTrope(
+    'Celebrates too soon',
+    'Someone celebrates an apparent success before the problem is resolved, and the celebration is then undercut.',
+    'The group cheers that a plan worked just before an alarm sounds.',
+    [
+      ['comedy', ['general']],
+      ['action', ['general']],
+      ['horror', ['general']],
+      ['thriller', ['general']],
+      ['sport', ['general']],
+    ],
+  ),
+  sharedTrope(
+    '"This isn\'t funny, guys."',
+    'A character mistakes a real threat or troubling event for a prank. The exact line is not required, but an actual prank does not count.',
+    'Someone calls out to their friends about a joke, but no friend is responsible.',
+    [
+      ['horror', ['general', 'slasher']],
+      ['thriller', ['general']],
+    ],
+  ),
+  sharedTrope(
+    'Heavy-handed foreshadowing',
+    'Repeated warnings or conspicuous emphasis strongly telegraph a later event. Count it once the payoff confirms the setup; how heavy-handed it feels is a subjective group judgment.',
+    'A dangerous railing is repeatedly emphasized before it gives way.',
+    [
+      ['horror', ['general']],
+      ['thriller', ['general']],
+      ['action', ['general']],
+      ['adventure', ['general']],
+    ],
+    true,
+  ),
+  sharedTrope(
+    'Destroyed object returns intact',
+    'An object clearly destroyed earlier returns whole at story level, through restoration, magic, or an unexplained return. A prop resetting between cuts is a continuity error, not this trope.',
+    'A shattered magical relic later appears whole again.',
+    [
+      ['fantasy', ['general']],
+      ['horror', ['supernatural']],
+      ['sci-fi', ['general']],
+    ],
+  ),
+  sharedTrope(
+    'Unwanted attention persists',
+    'A character continues unwanted flirting or personal attention after a clear refusal or boundary. Appearance alone or a single friendly approach does not count.',
+    'A stranger keeps approaching someone after being told to leave them alone.',
+    [
+      ['thriller', ['general']],
+      ['horror', ['psychological']],
+      ['drama', ['general']],
+      ['romance', ['romantic-drama']],
+    ],
+  ),
+  sharedTrope(
+    'An ominous phone ring',
+    'The film frames a ringing phone as threatening through timing, sound, or a visible reaction. An ordinary incoming call does not count; a scary phone call concerns what is heard after answering.',
+    'During a suspenseful silence, someone hesitates while staring at the ringing phone.',
+    [
+      ['horror', ['general']],
+      ['thriller', ['general']],
+    ],
+  ),
+  sharedTrope(
+    'A woman is called a bitch',
+    'That specific insult is directed at, or explicitly used about, a female character. Other insults or hostile tone do not count. This is an optional language-sensitive dialogue trope.',
+    'During an argument, someone uses the exact word about a woman.',
+    [
+      ['drama', ['general']],
+      ['thriller', ['noir-crime']],
+      ['horror', ['slasher']],
+    ],
+    true,
+  ),
+  sharedTrope(
+    'Police dismiss a disappearance',
+    'Police refuse or postpone investigating a missing-person report, dismissing the concern or imposing a waiting period within the story. This describes the story, not a real-world reporting requirement.',
+    'An officer says the missing person probably left voluntarily and tells the family to return later.',
+    [
+      ['thriller', ['general', 'mystery-whodunit', 'noir-crime']],
+      ['horror', ['general']],
+      ['drama', ['family-drama']],
+      ['documentary', ['true-crime']],
+    ],
+  ),
   sharedTrope(
     'A scene plays in slow motion',
     'An otherwise ordinary moment is deliberately shown at reduced speed for emphasis.',
@@ -219,8 +538,8 @@ export const SHARED_TROPES = [
   ),
 ];
 
-export const SHARED_TROPE_ROWS = SHARED_TROPES.flatMap(({ text, memberships }) =>
-  memberships.map(([genre, subgenres]) => ({ text, genre, subgenres })),
+export const SHARED_TROPE_ROWS = SHARED_TROPES.flatMap(({ text, memberships, optional }) =>
+  memberships.map(([genre, subgenres]) => ({ text, genre, subgenres, optional })),
 );
 
 export const SHARED_TROPE_DESCRIPTIONS = Object.fromEntries(

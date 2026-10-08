@@ -120,6 +120,20 @@ describe('Landing', () => {
     expect(onJoin).toHaveBeenCalledWith('Sidney', 'ABCD');
   });
 
+  it('forwards an optional host recovery password without requiring one for normal joins', () => {
+    const onJoin = vi.fn();
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    renderLanding({ onJoin });
+    fireEvent.change(screen.getByPlaceholderText('e.g. Sidney'), { target: { value: 'Alice' } });
+    fireEvent.change(screen.getByPlaceholderText('ABCD'), { target: { value: 'ABCD' } });
+    fireEvent.change(screen.getByLabelText('Host recovery password (optional)'), {
+      target: { value: 'long secure phrase' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Join Game' }));
+    expect(onJoin).toHaveBeenCalledWith('Alice', 'ABCD', 'long secure phrase');
+    expect(screen.getByLabelText('Host recovery password (optional)')).toHaveValue('');
+  });
+
   it('shows only the name field when a join code is already provided', () => {
     vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     renderLanding();

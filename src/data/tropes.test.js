@@ -18,8 +18,50 @@ import {
   TROPES,
 } from './tropes.js';
 import { SHARED_TROPE_DESCRIPTIONS, SHARED_TROPES } from './sharedTropes.js';
+import { EXPANDED_GENRES, EXPANDED_TROPES } from './expandedGenres.js';
 
 describe('GENRES / SUBGENRES_BY_GENRE data integrity', () => {
+  it('keeps optional judgments and language tropes documented but out of automatic game and replacement draws', () => {
+    const optional = TROPES.filter((trope) => trope.optional);
+    expect(optional).toHaveLength(10);
+    const texts = new Set(optional.map((trope) => trope.text));
+    for (const genre of GENRES) {
+      for (const subgenre of SUBGENRES_BY_GENRE[genre.id]) {
+        expect(getEligibleTropeTexts(genre.id, subgenre.id).some((text) => texts.has(text))).toBe(false);
+      }
+    }
+    const genres = GENRES.map((genre) => genre.id);
+    const selections = genres.flatMap((genre) =>
+      SUBGENRES_BY_GENRE[genre]
+        .filter((subgenre) => subgenre.id !== 'general')
+        .map((subgenre) => ({ genre, subgenre: subgenre.id })),
+    );
+    const pool = pickTropePool(genres, selections, {}, 60);
+    expect(pool).toHaveLength(60);
+    expect(pool.some((text) => texts.has(text))).toBe(false);
+  });
+
+  it('uses unprefixed scene beats in every expanded general genre pool', () => {
+    for (const genre of EXPANDED_GENRES) {
+      const general = EXPANDED_TROPES.filter(
+        (trope) => trope.genre === genre.id && trope.subgenres.includes('general'),
+      );
+      expect(general).toHaveLength(40);
+      expect(general.some((trope) => trope.text.startsWith(`${genre.label} `))).toBe(false);
+      expect(general.map((trope) => trope.text)).toContain('Wrong turn');
+      const shared = TROPES.find((trope) => trope.text === 'Wrong turn');
+      expect(tropeHasSubgenre(shared, genre.id, 'general')).toBe(true);
+    }
+  });
+
+  it('preserves meaningful genre words and specific subgenre context', () => {
+    const texts = new Set(TROPES.map((trope) => trope.text));
+    expect(texts.has('Family dinner turns tense')).toBe(true);
+    expect(texts.has('A war hero returns home')).toBe(true);
+    expect(texts.has('Pirate wrong turn')).toBe(true);
+    expect(texts.has('Music Biopic opening hook')).toBe(true);
+  });
+
   it('has a subgenre list (including "general") for every genre', () => {
     for (const genre of GENRES) {
       const subs = SUBGENRES_BY_GENRE[genre.id];
@@ -86,7 +128,7 @@ describe('GENRES / SUBGENRES_BY_GENRE data integrity', () => {
   it('has at least 40 tropes for every subgenre (including "general") of every genre', () => {
     for (const genre of GENRES) {
       for (const sub of SUBGENRES_BY_GENRE[genre.id]) {
-        const count = TROPES.filter((tr) => tropeHasSubgenre(tr, genre.id, sub.id)).length;
+        const count = TROPES.filter((tr) => !tr.optional && tropeHasSubgenre(tr, genre.id, sub.id)).length;
         expect(count, `${genre.id}/${sub.id} should have >=40 tropes`).toBeGreaterThanOrEqual(40);
       }
     }
@@ -118,14 +160,14 @@ describe('getEligibleTropeTexts', () => {
   it('returns the union of general and the specific subgenre for that genre', () => {
     const texts = getEligibleTropeTexts('horror', 'slasher');
     const expectedCount = TROPES.filter(
-      (tr) => tropeHasSubgenre(tr, 'horror', 'general') || tropeHasSubgenre(tr, 'horror', 'slasher'),
+      (tr) => !tr.optional && (tropeHasSubgenre(tr, 'horror', 'general') || tropeHasSubgenre(tr, 'horror', 'slasher')),
     ).length;
     expect(texts).toHaveLength(expectedCount);
   });
 
   it('returns only general tropes when the subgenre does not match anything', () => {
     const texts = getEligibleTropeTexts('horror', 'not-a-real-subgenre');
-    const generalCount = TROPES.filter((tr) => tropeHasSubgenre(tr, 'horror', 'general')).length;
+    const generalCount = TROPES.filter((tr) => !tr.optional && tropeHasSubgenre(tr, 'horror', 'general')).length;
     expect(texts).toHaveLength(generalCount);
   });
 
@@ -164,13 +206,17 @@ describe('pickTropePool', () => {
     const comedyGeneralTexts = new Set(
       TROPES.filter((tr) => tropeHasSubgenre(tr, 'comedy', 'general')).map((tr) => tr.text),
     );
-    const comedyInPool = pool.filter((text) => TROPES.some((tr) => tr.text === text && tropeHasGenre(tr, 'comedy')));
+    const horrorSpecificTexts = new Set(
+      TROPES.filter((trope) => !trope.optional && tropeHasSubgenre(trope, 'horror', 'slasher')).map(
+        (trope) => trope.text,
+      ),
+    );
 
     // Horror at 0% general should never draw a horror-only general trope.
     // Shared Horror/Comedy tropes can still be selected from Comedy's allocation.
     expect(pool.every((text) => !horrorGeneralOnlyTexts.has(text))).toBe(true);
-    // Comedy at 100% general should draw exclusively from its general pool.
-    expect(comedyInPool.every((text) => comedyGeneralTexts.has(text))).toBe(true);
+    // Shared entries may come from Horror's selected pool, not Comedy's allocation.
+    expect(pool.every((text) => comedyGeneralTexts.has(text) || horrorSpecificTexts.has(text))).toBe(true);
   });
 
   it('splits the total as evenly as possible across multiple genres', () => {

@@ -6,9 +6,9 @@ describe('KickConfirmModal', () => {
   it('confirms removal or cancels from the backdrop', () => {
     const onConfirm = vi.fn();
     const onCancel = vi.fn();
-    render(<KickConfirmModal playerName="Bob" onConfirm={onConfirm} onCancel={onCancel} />);
+    render(<KickConfirmModal playerName="Bob" playerAvatar="🍿" onConfirm={onConfirm} onCancel={onCancel} />);
 
-    expect(screen.getByRole('heading', { name: 'Remove Bob from the game?' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Remove 🍿 Bob from the game?' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Remove Player' }));
     fireEvent.mouseDown(document.querySelector('.modal'));
 

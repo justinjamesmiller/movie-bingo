@@ -1,0 +1,112 @@
+name: Release Please
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-please-main
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm audit --audit-level=high
+      - run: npm run test
+      - name: Verify configured production build
+        run: |
+          if [[ -z "$VITE_SUPABASE_URL" || -z "$VITE_SUPABASE_ANON_KEY" ]]; then
+            echo '::error::Set SUPABASE_URL and SUPABASE_ANON_KEY repository secrets before releasing.'
+            exit 1
+          fi
+          npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+
+  release-please:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          target-branch: main
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  publish-asset:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ needs.release-please.outputs.tag_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run release:check -- "$RELEASE_TAG"
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm audit --audit-level=high
+      - run: npm run test
+      - name: Build tagged release
+        run: |
+          if [[ -z "$VITE_SUPABASE_URL" || -z "$VITE_SUPABASE_ANON_KEY" ]]; then
+            echo '::error::Set SUPABASE_URL and SUPABASE_ANON_KEY repository secrets before releasing.'
+            exit 1
+          fi
+          npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      - name: Package static app
+        run: |
+          cd dist
+          zip -r "../movie-tv-trope-bingo-${RELEASE_TAG}.zip" .
+      - name: Retain downloadable build for recovery
+        uses: actions/upload-artifact@v4
+        with:
+          name: movie-tv-trope-bingo-${{ env.RELEASE_TAG }}
+          path: movie-tv-trope-bingo-${{ env.RELEASE_TAG }}.zip
+          if-no-files-found: error
+      - name: Attach build to the managed GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          asset="movie-tv-trope-bingo-${RELEASE_TAG}.zip"
+          if gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name' | grep -Fxq "$asset"; then
+            echo "Asset $asset already exists; leaving it unchanged."
+            exit 0
+          fi
+          gh release upload "$RELEASE_TAG" "$asset"

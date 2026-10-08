@@ -8,6 +8,24 @@ describe('ActivityFeedModal', () => {
     expect(screen.getByText('Nothing has happened yet.')).toBeInTheDocument();
   });
 
+  it('preserves avatar-bearing player names in logged activity', () => {
+    render(
+      <ActivityFeedModal
+        activityLog={[
+          { id: '1', text: '👑 🍿 Bob is now a host.', ts: Date.UTC(2026, 0, 1) },
+          {
+            id: '2',
+            text: '✅ "Jump Scare" was marked as happened. Approved by 🎬 Alice and 🍿 Bob.',
+            ts: Date.UTC(2026, 0, 2),
+          },
+        ]}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/is now a host/)).toHaveTextContent('🍿 Bob');
+    expect(screen.getByText(/Approved by/)).toHaveTextContent('🎬 Alice and 🍿 Bob');
+  });
+
   it('lists newest activity first and closes from the backdrop', () => {
     const onClose = vi.fn();
     render(

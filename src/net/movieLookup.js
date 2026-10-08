@@ -1,9 +1,31 @@
 // Looks up a movie or TV show's genres via the OMDb API (which sources its
 // data from IMDb) so a host can auto-populate this app's genre selection
-// from just a title instead of picking genres manually. Requires a free API
-// key from https://www.omdbapi.com (VITE_OMDB_API_KEY) -- if missing, lookup
-// is simply unavailable (callers should hide/disable the search UI).
-const OMDB_API_KEY = import.meta.env.VITE_OMDB_API_KEY;
+// from just a title instead of picking genres manually. Requests use the
+// authenticated Supabase proxy; the OMDb API key stays on the server.
+import { createClient } from '@supabase/supabase-js';
+
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+let lookupClient;
+let sessionRequest;
+
+async function lookupSession() {
+  lookupClient ||= createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  if (!sessionRequest) {
+    sessionRequest = (async () => {
+      const { data, error } = await lookupClient.auth.getSession();
+      if (error) throw error;
+      if (data.session) return data.session;
+      const signedIn = await lookupClient.auth.signInAnonymously();
+      if (signedIn.error) throw signedIn.error;
+      if (!signedIn.data.session) throw new Error('Could not sign in for movie lookup.');
+      return signedIn.data.session;
+    })().finally(() => {
+      sessionRequest = null;
+    });
+  }
+  return sessionRequest;
+}
 
 // OMDb/IMDb genre strings mapped to this app's internal genre ids. Genres
 // IMDb reports that this app doesn't model are left unmapped -- surfaced to
@@ -37,7 +59,7 @@ const GENRE_MAP = {
 };
 
 export function isMovieLookupAvailable() {
-  return !!OMDB_API_KEY;
+  return !!SUPABASE_URL && !!SUPABASE_ANON_KEY;
 }
 
 function mapGenres(genreString) {
@@ -58,16 +80,26 @@ function mapGenres(genreString) {
   return { genres, unmapped };
 }
 
-async function omdbFetch(params) {
-  if (!OMDB_API_KEY) throw new Error("Movie lookup isn't configured (missing VITE_OMDB_API_KEY).");
+async function omdbFetch(mode, query) {
+  if (!isMovieLookupAvailable()) throw new Error("Movie lookup isn't configured (missing Supabase configuration).");
   let res;
   try {
-    res = await fetch(`https://www.omdbapi.com/?apikey=${encodeURIComponent(OMDB_API_KEY)}&${params}`);
+    const session = await lookupSession();
+    res = await fetch(`${SUPABASE_URL}/functions/v1/movie-lookup`, {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ mode, query }),
+    });
   } catch {
     throw new Error('Could not reach the movie database. Check your connection and try again.');
   }
-  if (!res.ok) throw new Error('Could not reach the movie database.');
-  return res.json();
+  const data = await res.json();
+  if (!res.ok) throw new Error(typeof data.error === 'string' ? data.error : 'Could not reach the movie database.');
+  return data;
 }
 
 // Searches by (partial) title across BOTH movies and TV series, returning up
@@ -79,23 +111,25 @@ async function omdbFetch(params) {
 export async function searchMovies(title) {
   const trimmed = (title || '').trim();
   if (!trimmed) throw new Error('Enter a movie or TV show title to search.');
-  const data = await omdbFetch(`s=${encodeURIComponent(trimmed)}`);
+  const data = await omdbFetch('search', trimmed);
   if (data.Response === 'False') throw new Error(data.Error || 'Nothing found with that title.');
 
-  return data.Search.filter((m) => m.Type === 'movie' || m.Type === 'series').map((m) => ({
-    imdbID: m.imdbID,
-    title: m.Title,
-    year: m.Year,
-    type: m.Type,
-    poster: m.Poster && m.Poster !== 'N/A' ? m.Poster : null,
-  }));
+  return (Array.isArray(data.Search) ? data.Search : [])
+    .filter((m) => m.Type === 'movie' || m.Type === 'series')
+    .map((m) => ({
+      imdbID: m.imdbID,
+      title: m.Title,
+      year: m.Year,
+      type: m.Type,
+      poster: m.Poster && m.Poster !== 'N/A' ? m.Poster : null,
+    }));
 }
 
 // Fetches full details for one title by IMDb id (from searchMovies) --
 // includes genre plus other identifying info (director, actors, poster) to
 // help confirm it's the right pick. Works for both movies and TV series.
 export async function getMovieDetails(imdbID) {
-  const data = await omdbFetch(`i=${encodeURIComponent(imdbID)}`);
+  const data = await omdbFetch('details', imdbID);
   if (data.Response === 'False') throw new Error(data.Error || 'Title not found.');
 
   const { genres, unmapped } = mapGenres(data.Genre);
@@ -116,7 +150,7 @@ export async function getMovieDetails(imdbID) {
 export async function lookupMovie(title) {
   const trimmed = (title || '').trim();
   if (!trimmed) throw new Error('Enter a movie or TV show title to search.');
-  const data = await omdbFetch(`t=${encodeURIComponent(trimmed)}`);
+  const data = await omdbFetch('title', trimmed);
   if (data.Response === 'False') throw new Error(data.Error || 'Title not found.');
 
   const { genres, unmapped } = mapGenres(data.Genre);

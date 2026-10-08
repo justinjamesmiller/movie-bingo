@@ -5,6 +5,7 @@ import GenreSubgenrePicker from './GenreSubgenrePicker.jsx';
 import GeneralPercentSliders from './GeneralPercentSliders.jsx';
 import CustomTropesEditor from './CustomTropesEditor.jsx';
 import { balancedRatios } from '../utils/ratios.js';
+import { formatPlayerName } from '../utils/playerName.js';
 import ModalShell from './ModalShell.jsx';
 import ErrorModal from './ErrorModal.jsx';
 
@@ -33,6 +34,7 @@ export default function Landing({
   const [hostCustomTropes, setHostCustomTropes] = useState([]);
   const [hostMovie, setHostMovie] = useState(null);
   const [joinName, setJoinName] = useState('');
+  const [joinHostRecoveryPassword, setJoinHostRecoveryPassword] = useState('');
   const [joinCode, setJoinCode] = useState(() => {
     const fromUrl = new URLSearchParams(window.location.search).get('code');
     return fromUrl ? fromUrl.trim().toUpperCase().slice(0, 4) : '';
@@ -133,7 +135,9 @@ export default function Landing({
       return;
     }
     setLocalError('');
-    onJoin(name, normalizedCode);
+    if (joinHostRecoveryPassword) onJoin(name, normalizedCode, joinHostRecoveryPassword);
+    else onJoin(name, normalizedCode);
+    setJoinHostRecoveryPassword('');
   }
 
   function handleSubmitJoinSetup() {
@@ -144,7 +148,9 @@ export default function Landing({
     setJoinCode(code);
     setJoinSetupIssues(null);
     setLocalError('');
-    onJoin(name, code);
+    if (joinHostRecoveryPassword) onJoin(name, code, joinHostRecoveryPassword);
+    else onJoin(name, code);
+    setJoinHostRecoveryPassword('');
   }
 
   return (
@@ -162,8 +168,8 @@ export default function Landing({
         <div className="card rejoin-card">
           <h2>Reconnect</h2>
           <p className="hint">
-            You were previously in game <strong>{savedSession.code}</strong> as {savedSession.name}. If you got
-            disconnected (e.g. as the host), you can reconnect to the same seat.
+            You were previously in game <strong>{savedSession.code}</strong> as {formatPlayerName(savedSession)}. If you
+            got disconnected (e.g. as the host), you can reconnect to the same seat.
           </p>
           <button className="btn primary" disabled={busy} onClick={onRejoin}>
             Reconnect to {savedSession.code}
@@ -190,6 +196,15 @@ export default function Landing({
           className="code-input"
           value={joinCode}
           onChange={(e) => setJoinCode(e.target.value.toUpperCase().slice(0, 4))}
+        />
+        <label htmlFor="join-host-recovery-password">Host recovery password (optional)</label>
+        <input
+          id="join-host-recovery-password"
+          type="password"
+          autoComplete="current-password"
+          maxLength={128}
+          value={joinHostRecoveryPassword}
+          onChange={(event) => setJoinHostRecoveryPassword(event.target.value)}
         />
         <button className="btn primary" disabled={busy} onClick={handleJoinClick}>
           Join Game

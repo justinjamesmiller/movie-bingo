@@ -16,6 +16,8 @@ describe('PlayerStatsModal', () => {
 
     expect(screen.getByRole('heading', { name: /Alice's Stats/ })).toBeInTheDocument();
     expect(screen.getByText('Marathon tropes')).toBeInTheDocument();
+    expect(screen.queryByText('Calls')).toBeNull();
+    expect(screen.queryByText('Marathon calls')).toBeNull();
     expect(screen.queryByText(/points/i)).toBeNull();
   });
 });

@@ -44,6 +44,23 @@ function renderMenu(overrides = {}) {
 }
 
 describe('GameMenu', () => {
+  it('offers tutorial restart in simple mode and pause when active', () => {
+    const onStartTutorial = vi.fn();
+    const onPauseTutorial = vi.fn();
+    const props = renderMenu({ advancedGameplay: false, onStartTutorial, onPauseTutorial });
+    fireEvent.click(screen.getByRole('button', { name: '📖 Start tutorial' }));
+    expect(onStartTutorial).toHaveBeenCalledTimes(1);
+    expect(props.onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers tutorial pause without disabling other menu controls', () => {
+    const onPauseTutorial = vi.fn();
+    renderMenu({ tutorialActive: true, onPauseTutorial });
+    fireEvent.click(screen.getByRole('button', { name: '📖 Pause tutorial' }));
+    expect(onPauseTutorial).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Accepted Tropes (2)' })).toBeInTheDocument();
+  });
+
   it('shows game info and started-game actions', () => {
     renderMenu();
 

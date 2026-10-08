@@ -60,7 +60,18 @@ describe('MovieLookup', () => {
 
     expect(await screen.findByText(/Picked "Example Show"/)).toBeInTheDocument();
     expect(onFound).toHaveBeenCalledWith(['horror'], [{ genre: 'horror', subgenre: 'slasher' }]);
-    expect(onMovieSelected).toHaveBeenCalledWith({ title: 'Example Show', year: '2024', type: 'series', poster: null });
+    expect(onMovieSelected).toHaveBeenCalledWith({
+      title: 'Example Show',
+      year: '2024',
+      type: 'series',
+      poster: null,
+      director: 'A Director',
+      actors: 'An Actor',
+      genres: ['horror'],
+      unmapped: [],
+      imdbID: 'tt1',
+      subgenreSelections: [{ genre: 'horror', subgenre: 'slasher' }],
+    });
     expect(screen.getByText(/Slasher/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Search a different title' }));

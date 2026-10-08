@@ -1,7 +1,7 @@
 import { getCurrentPlayerMetrics, getMarathonMetrics } from '../utils/gameStats.js';
 import ModalShell from './ModalShell.jsx';
 
-export default function PlayerStatsModal({ player, marathon, freeSpace, callStats, onClose }) {
+export default function PlayerStatsModal({ player, marathon, freeSpace, callStats, onCallScoreClick, onClose }) {
   const current = getCurrentPlayerMetrics(player, freeSpace, callStats);
   const marathonTotals = getMarathonMetrics(marathon?.watches).find((entry) => entry.id === player.id);
   const hasMarathon = (marathon?.watches?.length || 0) > 0;
@@ -22,17 +22,25 @@ export default function PlayerStatsModal({ player, marathon, freeSpace, callStat
           <strong>
             {current.wagerHits} / {current.wagers}
           </strong>
-          <span>Calls</span>
-          <strong>
-            {current.callsMade} made · {current.correctCalls} correct
-          </strong>
+          {current.callsMade > 0 && (
+            <>
+              <span>Calls</span>
+              <button
+                className="player-profile-button"
+                onClick={() => onCallScoreClick?.(player)}
+                title="About call-it scores"
+              >
+                {current.callsMade} made · {current.correctCalls} correct
+              </button>
+            </>
+          )}
           {hasMarathon && (
             <>
               <span>Marathon watches</span>
               <strong>{marathonTotals?.watches || 0}</strong>
             </>
           )}
-          {hasMarathon && (
+          {hasMarathon && marathonTotals?.callsMade > 0 && (
             <>
               <span>Marathon calls</span>
               <strong>

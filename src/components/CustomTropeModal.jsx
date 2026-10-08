@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import ModalShell from './ModalShell.jsx';
+import SceneContextFields, { suppliedSceneContext, validSceneContext } from './SceneContextFields.jsx';
 
 const MAX_LENGTH = 60;
 
@@ -8,6 +9,7 @@ const MAX_LENGTH = 60;
 export default function CustomTropeModal({ onSubmit, onCancel, playerCount = 2 }) {
   const isSolo = playerCount === 1;
   const [text, setText] = useState('');
+  const [sceneContext, setSceneContext] = useState({ note: '', timestamp: '' });
   const trimmed = text.trim();
 
   return (
@@ -33,8 +35,17 @@ export default function CustomTropeModal({ onSubmit, onCancel, playerCount = 2 }
         <p className="hint">
           {trimmed.length} / {MAX_LENGTH}
         </p>
+        <SceneContextFields value={sceneContext} onChange={setSceneContext} />
         <div className="claim-vote-buttons cancel-claim-btn">
-          <button className="btn agree" disabled={!trimmed} onClick={() => onSubmit(trimmed)}>
+          <button
+            className="btn agree"
+            disabled={!trimmed || !validSceneContext(sceneContext)}
+            onClick={() =>
+              suppliedSceneContext(sceneContext)
+                ? onSubmit(trimmed, suppliedSceneContext(sceneContext))
+                : onSubmit(trimmed)
+            }
+          >
             {isSolo ? 'Submit' : 'Submit for approval'}
           </button>
           <button className="btn" onClick={onCancel}>

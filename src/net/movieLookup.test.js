@@ -1,13 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// VITE_OMDB_API_KEY is read once at module load time, so we stub the env and
-// re-import fresh for tests that need lookup to be "configured".
+vi.mock('@supabase/supabase-js', () => ({
+  createClient: () => ({
+    auth: {
+      getSession: vi.fn().mockResolvedValue({ data: { session: { access_token: 'test-session' } }, error: null }),
+      signInAnonymously: vi.fn(),
+    },
+  }),
+}));
+
 async function freshMovieLookup(apiKey) {
   vi.resetModules();
   if (apiKey === undefined) {
     vi.unstubAllEnvs();
   } else {
-    vi.stubEnv('VITE_OMDB_API_KEY', apiKey);
+    vi.stubEnv('VITE_SUPABASE_URL', apiKey ? 'https://example.supabase.co' : '');
+    vi.stubEnv('VITE_SUPABASE_ANON_KEY', apiKey);
   }
   return import('./movieLookup.js');
 }
@@ -41,7 +49,7 @@ describe('searchMovies', () => {
 
   it('rejects when lookup is not configured', async () => {
     const { searchMovies } = await freshMovieLookup('');
-    await expect(searchMovies('Alien')).rejects.toThrow(/not configured|VITE_OMDB_API_KEY/i);
+    await expect(searchMovies('Alien')).rejects.toThrow(/missing Supabase configuration/i);
   });
 
   it('rejects on a blank title', async () => {
@@ -60,6 +68,11 @@ describe('searchMovies', () => {
       ],
     });
     const results = await searchMovies('Alien');
+    expect(global.fetch).toHaveBeenCalledWith('https://example.supabase.co/functions/v1/movie-lookup', {
+      method: 'POST',
+      headers: { apikey: 'test-key', Authorization: 'Bearer test-session', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'search', query: 'Alien' }),
+    });
     // Episodes are filtered out -- only movie/series results are useful here.
     expect(results).toHaveLength(2);
     expect(results[0]).toEqual({
@@ -82,6 +95,14 @@ describe('searchMovies', () => {
     const { searchMovies } = await freshMovieLookup('test-key');
     global.fetch = vi.fn().mockRejectedValue(new Error('network down'));
     await expect(searchMovies('Alien')).rejects.toThrow(/could not reach/i);
+  });
+
+  it('shows the proxy quota error without falling back to direct OMDb requests', async () => {
+    const { searchMovies } = await freshMovieLookup('test-key');
+    mockFetchOnce({ error: 'Movie lookup limit reached. Please try again later.' }, false);
+    await expect(searchMovies('Alien')).rejects.toThrow(/limit reached/i);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(global.fetch.mock.calls[0][0]).not.toContain('omdbapi.com');
   });
 });
 

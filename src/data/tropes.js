@@ -154,7 +154,7 @@ const RAW_TROPES = [
   t('Picked off one by one', 'horror', ['slasher']),
   t('Final fight, back home', 'horror', ['slasher']),
   t('An unlikely suspect', 'horror', ['slasher']),
-  t('A familiar weapon', 'horror', ['slasher']),
+  t('Earlier object becomes a weapon', 'horror', ['slasher']),
   t('Weapon dropped at worst time', 'horror', ['slasher']),
   t('Killer appears behind someone', 'horror', ['slasher']),
   t('Killer walks, victim runs', 'horror', ['slasher']),
@@ -194,7 +194,6 @@ const RAW_TROPES = [
   t('Ghost seen in reflection', 'horror', ['supernatural']),
   t('Creepy doll', 'horror', ['supernatural']),
   t('A toy activates itself', 'horror', ['supernatural']),
-  t('A cemetery', 'horror', ['supernatural']),
   t('A moving shadow', 'horror', ['supernatural']),
   t('Whispering voices', 'horror', ['supernatural', 'psychological']),
   t('A clock stops nightly', 'horror', ['supernatural']),
@@ -363,7 +362,6 @@ const RAW_TROPES = [
 
   // ---------- Creature Feature / Monster ----------
   t('Glimpsed only in shadow', 'horror', ['creature']),
-  t("A local's dire warning", 'horror', ['creature']),
   t('Smarter than expected', 'horror', ['creature']),
   t('Snatched just out of reach', 'horror', ['creature']),
   t('A failed lab experiment', 'horror', ['creature']),
@@ -418,7 +416,7 @@ const RAW_TROPES = [
   t('A misunderstanding spirals out', 'comedy', ['general']),
   t('An over-the-top slow clap', 'comedy', ['general']),
   t('A food fight breaks out', 'comedy', ['general']),
-  t('A talking animal reaction shot', 'comedy', ['general']),
+  t('An animal reacts like a person', 'comedy', ['general']),
   t('Breaks the fourth wall', 'comedy', ['general']),
   t('A costume mix-up', 'comedy', ['general']),
   t('A joke at a funeral', 'comedy', ['general']),
@@ -440,7 +438,7 @@ const RAW_TROPES = [
   t('An exaggerated sneeze', 'comedy', ['general']),
   t('A comedic villain monologue', 'comedy', ['general']),
   t('Stuck somewhere ridiculous', 'comedy', ['general']),
-  t('An unexpected celebrity cameo', 'comedy', ['general']),
+  t('Someone tries to hide laughter', 'comedy', ['general']),
   t('A road trip derails', 'comedy', ['general']),
   t('A lie that snowballs', 'comedy', ['general']),
   t('A karaoke scene goes wrong', 'comedy', ['general']),
@@ -559,7 +557,6 @@ const RAW_TROPES = [
   t('A parody love interest cliché', 'comedy', ['spoof-parody']),
   t('A silly superhero parody', 'comedy', ['spoof-parody']),
   t('A parody of a training montage', 'comedy', ['spoof-parody']),
-  t('An over-the-top explosion parody', 'comedy', ['spoof-parody']),
   t('A parody of a courtroom drama', 'comedy', ['spoof-parody']),
   t('A ridiculous disguise reveal', 'comedy', ['spoof-parody']),
   t('A parody of a horror trope', 'comedy', ['spoof-parody']),
@@ -582,7 +579,6 @@ const RAW_TROPES = [
   t('Bickering hides deep loyalty', 'comedy', ['buddy-comedy']),
   t('A road trip mishap', 'comedy', ['buddy-comedy']),
   t('One bails the other out', 'comedy', ['buddy-comedy']),
-  t('A rivalry turns friendly', 'comedy', ['buddy-comedy']),
   t('Opposite approaches to a problem', 'comedy', ['buddy-comedy']),
   t('A shared secret bonds them', 'comedy', ['buddy-comedy']),
   t('An argument over something trivial', 'comedy', ['buddy-comedy']),
@@ -656,8 +652,8 @@ const RAW_TROPES = [
   t('A getaway car peels out', 'action', ['general']),
   t('A wound the hero ignores', 'action', ['general']),
   t('A crew assembles for a job', 'action', ['general']),
-  t('An underwater escape scene', 'action', ['general']),
-  t('A train-top fight scene', 'action', ['general']),
+  t('Someone hides during a chase', 'action', ['general']),
+  t('A fight knocks furniture over', 'action', ['general']),
   t('A convoy ambush', 'action', ['general']),
   t('A safehouse is compromised', 'action', ['general']),
   t('A weapon exchange gone wrong', 'action', ['general']),
@@ -847,7 +843,7 @@ const RAW_TROPES = [
   t('A cryosleep pod opens', 'sci-fi', ['general']),
   t('A malfunctioning robot', 'sci-fi', ['general']),
   t('A distress signal received', 'sci-fi', ['general']),
-  t('Terraforming a new planet', 'sci-fi', ['general']),
+  t('A warning flashes on screen', 'sci-fi', ['general']),
   t('A rogue AI takes over', 'sci-fi', ['general']),
   t('A teleporter malfunction', 'sci-fi', ['general']),
   t('An alien language decoded', 'sci-fi', ['general']),
@@ -877,7 +873,7 @@ const RAW_TROPES = [
   t('Mission control loses contact', 'sci-fi', ['general']),
   t('An airlock override', 'sci-fi', ['general']),
   t('A memory wipe procedure', 'sci-fi', ['general']),
-  t('A galaxy-spanning conflict', 'sci-fi', ['general']),
+  t('Someone questions the mission', 'sci-fi', ['general']),
   t('A final transmission home', 'sci-fi', ['general']),
 
   // ---------- Space Opera ----------
@@ -1106,7 +1102,7 @@ const RAW_TROPES = [
   t('A hidden camera reveals the truth', 'thriller', ['general']),
   t('A secret identity uncovered', 'thriller', ['general']),
   t('A witness goes missing', 'thriller', ['general']),
-  t('A locked room mystery', 'thriller', ['general']),
+  t('Someone refuses to answer', 'thriller', ['general']),
   t('An unreliable narrator', 'thriller', ['general']),
   t('A conspiracy runs deep', 'thriller', ['general']),
   t("There's no time to explain", 'thriller', ['general']),
@@ -1250,7 +1246,7 @@ const RAW_TROPES = [
   t('A forbidden attraction', 'romance', ['general']),
   t('A whirlwind romance', 'romance', ['general']),
   t('A love that crosses social lines', 'romance', ['general']),
-  t('A proposal under the stars', 'romance', ['general']),
+  t('Someone proposes marriage', 'romance', ['general']),
   t('A heartbreak that changes everything', 'romance', ['general']),
   t('A love triangle resolved', 'romance', ['general']),
   t('A letter reveals true feelings', 'romance', ['general']),
@@ -1265,7 +1261,7 @@ const RAW_TROPES = [
   t('A quiet moment of understanding', 'romance', ['general']),
   t('A love that outlasts the odds', 'romance', ['general']),
   t('A final choice between two loves', 'romance', ['general']),
-  t('A love letter found decades later', 'romance', ['general']),
+  t('An old message is rediscovered', 'romance', ['general']),
   t('A love that starts as rivalry', 'romance', ['general']),
   t('A tearful confession of love', 'romance', ['general']),
   t('A love that surprises everyone', 'romance', ['general']),
@@ -1630,6 +1626,7 @@ function consolidateTropes(tropes) {
       existing = {
         text: trope.text,
         genre: trope.genre,
+        optional: !!trope.optional,
         subgenres: [],
         genres: [],
         subgenresByGenre: {},
@@ -1697,9 +1694,9 @@ function shuffle(arr) {
 // draw a replacement trope from a specific sub-genre when a swap-out is
 // approved (see GameClient proposeReplace / _resolveClaim).
 export function getEligibleTropeTexts(genre, subgenre) {
-  return TROPES.filter((tr) => tropeHasSubgenre(tr, genre, 'general') || tropeHasSubgenre(tr, genre, subgenre)).map(
-    (tr) => tr.text,
-  );
+  return TROPES.filter(
+    (tr) => !tr.optional && (tropeHasSubgenre(tr, genre, 'general') || tropeHasSubgenre(tr, genre, subgenre)),
+  ).map((tr) => tr.text);
 }
 
 // Picks `totalTropes` distinct trope texts for a game's shared pool. Supports
@@ -1727,10 +1724,13 @@ export function pickTropePool(
   const chosen = [];
   const used = new Set();
   const leftoverPool = [];
+  const automaticTropes = TROPES.filter((trope) => !trope.optional);
 
   for (const genre of genres) {
     const allocation = Math.round((totalTropes * (genrePercents[genre] ?? 100 / genres.length)) / 100);
-    const generalPool = shuffle(TROPES.filter((tr) => tropeHasSubgenre(tr, genre, 'general')).map((tr) => tr.text));
+    const generalPool = shuffle(
+      automaticTropes.filter((tr) => tropeHasSubgenre(tr, genre, 'general')).map((tr) => tr.text),
+    );
     const selectedSubgenres = subgenreSelections.filter((s) => s.genre === genre).map((s) => s.subgenre);
     const legacyGeneralPercent = generalPercents[genre] ?? DEFAULT_GENERAL_PERCENT;
     const ratios =
@@ -1747,7 +1747,7 @@ export function pickTropePool(
     for (const subgenre of selectedSubgenres) {
       pools.push({
         key: subgenre,
-        texts: shuffle(TROPES.filter((tr) => tropeHasSubgenre(tr, genre, subgenre)).map((tr) => tr.text)),
+        texts: shuffle(automaticTropes.filter((tr) => tropeHasSubgenre(tr, genre, subgenre)).map((tr) => tr.text)),
       });
     }
     const totalRatio = Object.values(ratios).reduce((sum, value) => sum + value, 0) || 100;

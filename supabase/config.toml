@@ -1,0 +1,7 @@
+[functions.game-relay]
+verify_jwt = true
+entrypoint = "./functions/game-relay/index.js"
+
+[functions.movie-lookup]
+verify_jwt = true
+entrypoint = "./functions/movie-lookup/index.js"

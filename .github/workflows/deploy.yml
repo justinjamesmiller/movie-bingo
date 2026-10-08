@@ -22,16 +22,17 @@ jobs:
       - uses: actions/configure-pages@v5
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm run format:check
       - run: npm run lint
+      - run: npm audit --audit-level=high
       - run: npm run test
       - run: npm run build
         env:
           VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          VITE_OMDB_API_KEY: ${{ secrets.OMDB_API_KEY }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

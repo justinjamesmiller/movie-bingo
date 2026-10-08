@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { version as appVersion } from '../package.json';
 import { GameClient } from './net/relay.js';
 import { GENRES, SUBGENRES_BY_GENRE, CENTER_INDEX } from './data/tropes.js';
 import { getCompletedLines, getCompletedLineCells } from './utils/bingoLines.js';
@@ -25,12 +26,15 @@ import ReactionBar from './components/ReactionBar.jsx';
 import ReactionOverlay from './components/ReactionOverlay.jsx';
 import CustomTropeModal from './components/CustomTropeModal.jsx';
 import ClaimModal from './components/ClaimModal.jsx';
+import ClaimQueueModal from './components/ClaimQueueModal.jsx';
+import AccessibilityModal from './components/AccessibilityModal.jsx';
 import ResetModal from './components/ResetModal.jsx';
 import AcceptedTropesModal from './components/AcceptedTropesModal.jsx';
 import AllTropesModal from './components/AllTropesModal.jsx';
 import AllWagersModal from './components/AllWagersModal.jsx';
 import ActivityFeedModal from './components/ActivityFeedModal.jsx';
 import GameOverModal from './components/GameOverModal.jsx';
+import CallInfoModal from './components/CallInfoModal.jsx';
 import ConfirmModal from './components/ConfirmModal.jsx';
 import TropeInfoModal from './components/TropeInfoModal.jsx';
 import ProposeReplaceModal from './components/ProposeReplaceModal.jsx';
@@ -41,6 +45,7 @@ import JoinRequestModal from './components/JoinRequestModal.jsx';
 import KickConfirmModal from './components/KickConfirmModal.jsx';
 import ChangeNameModal from './components/ChangeNameModal.jsx';
 import HelpModal from './components/HelpModal.jsx';
+import GuidedTutorial from './components/GuidedTutorial.jsx';
 import GameMenu from './components/GameMenu.jsx';
 import InviteQrModal from './components/InviteQrModal.jsx';
 import WagerIntroModal from './components/WagerIntroModal.jsx';
@@ -49,9 +54,11 @@ import PlayerManagementModal from './components/PlayerManagementModal.jsx';
 import ProfileChangeProposalModal from './components/ProfileChangeProposalModal.jsx';
 import HostPromotionModal from './components/HostPromotionModal.jsx';
 import SessionLifetimeModal from './components/SessionLifetimeModal.jsx';
+import HostRecoveryPasswordModal from './components/HostRecoveryPasswordModal.jsx';
 import MovieIdentityModal from './components/MovieIdentityModal.jsx';
 import ReplacementPickerModal from './components/ReplacementPickerModal.jsx';
 import SuperlativeModal from './components/SuperlativeModal.jsx';
+import { formatPlayerName } from './utils/playerName.js';
 import MarathonStandingsModal from './components/MarathonStandingsModal.jsx';
 import PlayerStatsModal from './components/PlayerStatsModal.jsx';
 import StatsDashboardModal from './components/StatsDashboardModal.jsx';
@@ -61,6 +68,44 @@ import { getGameTheme } from './utils/gameTheme.js';
 
 const MAX_WAGERS = 5;
 const CONNECTION_LOST_GRACE_MS = 4000;
+const TUTORIAL_PREFERENCE_KEY = 'bingo-tutorial-enabled';
+const ACCESSIBILITY_KEY = 'bingo-accessibility';
+
+function initialTheme() {
+  try {
+    const saved = localStorage.getItem('bingo-theme');
+    if (saved === 'dark' || saved === 'light') return saved;
+  } catch {
+    // Theme preference is optional; blocked storage should not prevent startup.
+  }
+  try {
+    return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-color-scheme: dark)').matches
+      ? 'dark'
+      : 'light';
+  } catch {
+    return 'light';
+  }
+}
+
+function initialAccessibility() {
+  let saved = {};
+  try {
+    saved = JSON.parse(localStorage.getItem(ACCESSIBILITY_KEY) || '{}') || {};
+  } catch {
+    saved = {};
+  }
+  return Object.fromEntries(
+    ['largeText', 'listView', 'showStateLabels', 'reduceMotion'].map((key) => [key, saved[key] === true]),
+  );
+}
+
+function initialTutorialPreference() {
+  try {
+    return localStorage.getItem(TUTORIAL_PREFERENCE_KEY) !== 'false';
+  } catch {
+    return true;
+  }
+}
 
 function formatNameList(names) {
   if (names.length <= 1) return names[0] || '';
@@ -74,9 +119,7 @@ function blurActiveTextField() {
 }
 
 function formatApprovedBy(approvedBy) {
-  const names = (approvedBy || [])
-    .map((player) => (typeof player === 'string' ? player : player?.name))
-    .filter(Boolean);
+  const names = (approvedBy || []).map((player) => formatPlayerName(player)).filter(Boolean);
   return names.length > 0 ? ` Approved by ${formatNameList(names)}.` : '';
 }
 
@@ -97,6 +140,9 @@ function App() {
   const [resetModalOpen, setResetModalOpen] = useState(false);
   const [tropesModalOpen, setTropesModalOpen] = useState(false);
   const [allTropesModalOpen, setAllTropesModalOpen] = useState(false);
+  const [claimQueueOpen, setClaimQueueOpen] = useState(false);
+  const [accessibilityOpen, setAccessibilityOpen] = useState(false);
+  const [accessibility, setAccessibility] = useState(initialAccessibility);
   const [allWagersModalOpen, setAllWagersModalOpen] = useState(false);
   const [replaceProposal, setReplaceProposal] = useState(null);
   const [manageWagersOpen, setManageWagersOpen] = useState(false);
@@ -105,6 +151,9 @@ function App() {
   const [advancedGameplay, setAdvancedGameplay] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
   const [savedSession, setSavedSession] = useState(() => GameClient.getSavedSession());
+  const [savedSessionStatus, setSavedSessionStatus] = useState(() =>
+    GameClient.getSavedSession() ? 'checking' : 'none',
+  );
   const [joinChoice, setJoinChoice] = useState(null);
   const [joinApprovalPending, setJoinApprovalPending] = useState(false);
   const [kickTarget, setKickTarget] = useState(null);
@@ -113,6 +162,9 @@ function App() {
   const [profileProposalTarget, setProfileProposalTarget] = useState(null);
   const [hostPromotion, setHostPromotion] = useState(null);
   const [helpModalOpen, setHelpModalOpen] = useState(false);
+  const [tutorialEnabled, setTutorialEnabled] = useState(initialTutorialPreference);
+  const [tutorialActive, setTutorialActive] = useState(false);
+  const [tutorialRun, setTutorialRun] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const [activityFeedOpen, setActivityFeedOpen] = useState(false);
   const [gameOverModalOpen, setGameOverModalOpen] = useState(false);
@@ -120,6 +172,7 @@ function App() {
   const [hostTransferOpen, setHostTransferOpen] = useState(false);
   const [hostTransferLeaves, setHostTransferLeaves] = useState(false);
   const [sessionLifetimeModalOpen, setSessionLifetimeModalOpen] = useState(false);
+  const [hostRecoveryPasswordOpen, setHostRecoveryPasswordOpen] = useState(false);
   const [movieIdentityModalOpen, setMovieIdentityModalOpen] = useState(false);
   const [endGameConfirmOpen, setEndGameConfirmOpen] = useState(false);
   const [inviteQrOpen, setInviteQrOpen] = useState(false);
@@ -135,32 +188,44 @@ function App() {
   const [bingoBanner, setBingoBanner] = useState(null);
   const [finaleBanner, setFinaleBanner] = useState(false);
   const [highlightedCells, setHighlightedCells] = useState(new Set());
-  const [personalSuperlativeStats, setPersonalSuperlativeStats] = useState({ views: 0, submissions: 0, rejections: 0 });
-  const [superlativeMilestones, setSuperlativeMilestones] = useState({});
   const [superlativeInfo, setSuperlativeInfo] = useState(null);
+  const [callInfoPlayer, setCallInfoPlayer] = useState(null);
   const [marathonStandingsOpen, setMarathonStandingsOpen] = useState(false);
   const [playerStatsTargetId, setPlayerStatsTargetId] = useState(null);
   const [statsDashboardOpen, setStatsDashboardOpen] = useState(false);
   const [tropeAdvancedActions, setTropeAdvancedActions] = useState(null);
+  const [missedCall, setMissedCall] = useState(null);
   const loadingRequestRef = useRef(0);
   const prevClaimIdRef = useRef(null);
   const prevJoinRequestIdRef = useRef(null);
   const gameStateRef = useRef(null);
   const myIdRef = useRef(null);
-  const prevGameCodeRef = useRef(null);
-  const prevBingoCountsRef = useRef({});
   const bingoBannerTimeoutRef = useRef(null);
+  const bingoBannerIdRef = useRef(0);
   const finaleBannerTimeoutRef = useRef(null);
-  const seenBingoEventIdsRef = useRef(new Set());
-  const [theme, setTheme] = useState(
-    localStorage.getItem('bingo-theme') ||
-      (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
-  );
+  const [theme, setTheme] = useState(initialTheme);
 
   useEffect(() => {
     document.body.classList.toggle('dark', theme === 'dark');
-    localStorage.setItem('bingo-theme', theme);
+    try {
+      localStorage.setItem('bingo-theme', theme);
+    } catch {
+      // Theme preference is optional; blocked storage should not break toggling.
+    }
   }, [theme]);
+
+  useEffect(() => {
+    document.body.classList.toggle('large-text', accessibility.largeText);
+    document.body.classList.toggle('reduce-motion', accessibility.reduceMotion);
+    try {
+      localStorage.setItem(ACCESSIBILITY_KEY, JSON.stringify(accessibility));
+    } catch {
+      return;
+    }
+    return () => {
+      document.body.classList.remove('large-text', 'reduce-motion');
+    };
+  }, [accessibility]);
 
   useEffect(() => {
     const gameTheme = gameState
@@ -202,6 +267,40 @@ function App() {
     };
   }, []);
 
+  useEffect(() => {
+    let current = true;
+    if (!savedSession) {
+      setSavedSessionStatus('none');
+      return () => {
+        current = false;
+      };
+    }
+    if (browserOffline) {
+      setSavedSessionStatus('unavailable');
+      return () => {
+        current = false;
+      };
+    }
+    setSavedSessionStatus('checking');
+    GameClient.isSavedSessionActive(savedSession)
+      .then((active) => {
+        if (!current) return;
+        if (active) {
+          setSavedSessionStatus('active');
+        } else {
+          GameClient.clearSavedSession();
+          setSavedSession(null);
+          setSavedSessionStatus('none');
+        }
+      })
+      .catch(() => {
+        if (current) setSavedSessionStatus('unavailable');
+      });
+    return () => {
+      current = false;
+    };
+  }, [savedSession, browserOffline]);
+
   // Only surface a drop that persists -- a transient websocket blip usually
   // heals within a second or two and isn't worth alarming the table over.
   useEffect(() => {
@@ -214,46 +313,37 @@ function App() {
     return () => clearTimeout(timer);
   }, [connectionStatus, browserOffline]);
 
-  // Detects newly-completed bingo lines for every player from the replicated
-  // marked arrays. Each client shows the celebration locally, with a different
-  // message when the bingo belongs to someone else.
+  useEffect(() => {
+    setTutorialActive(tutorialEnabled && screen === 'game' && !gameState?.gameOver);
+  }, [screen, gameState?.started, gameState?.gameOver, tutorialEnabled]);
+
+  function saveTutorialPreference(enabled) {
+    setTutorialEnabled(enabled);
+    try {
+      localStorage.setItem(TUTORIAL_PREFERENCE_KEY, String(enabled));
+    } catch {
+      return;
+    }
+  }
+
+  function pauseTutorial() {
+    setTutorialActive(false);
+    document.querySelector('[data-tutorial="menu"]')?.focus({ preventScroll: true });
+  }
+
+  function startTutorial() {
+    saveTutorialPreference(true);
+    setTutorialRun((run) => run + 1);
+    setTutorialActive(true);
+    setFocusMode(false);
+  }
+
+  // Highlights every completed line on the local board.
   useEffect(() => {
     if (!gameState || !myId) return;
     const me = gameState.players[myId];
     if (!me) return;
     setHighlightedCells(getCompletedLineCells(me.marked));
-    if (Array.isArray(gameState.bingoEvents)) return;
-    const nextCounts = Object.fromEntries(
-      Object.entries(gameState.players).map(([id, player]) => [id, getCompletedLines(player.marked).length]),
-    );
-    if (prevGameCodeRef.current !== gameState.code) {
-      prevGameCodeRef.current = gameState.code;
-      prevBingoCountsRef.current = nextCounts;
-      return;
-    }
-    const previousCounts = prevBingoCountsRef.current;
-    const newBingo = gameState.seatOrder
-      .map((id) => ({
-        id,
-        player: gameState.players[id],
-        count: nextCounts[id],
-        previous: Object.prototype.hasOwnProperty.call(previousCounts, id) ? previousCounts[id] : nextCounts[id],
-      }))
-      .find(({ player, count, previous }) => player && count > previous);
-    if (newBingo) {
-      const multiple = newBingo.count > 1 ? ` (${newBingo.count} lines!)` : '';
-      const name = newBingo.id === myId ? '' : ` for ${newBingo.player.name}`;
-      setBingoBanner(`🎉 BINGO${name}!${multiple}`);
-      playBingoSound();
-      if (newBingo.id === myId) vibrate(VIBRATE_PATTERN_BINGO);
-      clearTimeout(bingoBannerTimeoutRef.current);
-      bingoBannerTimeoutRef.current = setTimeout(() => setBingoBanner(null), 4000);
-      setSuperlativeMilestones((previous) => {
-        if (Object.values(previous).some((milestone) => milestone.firstBingo)) return previous;
-        return { ...previous, [newBingo.id]: { ...previous[newBingo.id], firstBingo: true } };
-      });
-    }
-    prevBingoCountsRef.current = nextCounts;
   }, [gameState, myId]);
 
   // Alerts a player, on their device, that the group is waiting on their vote.
@@ -310,12 +400,8 @@ function App() {
     clientRef.current.sendReaction(emoji);
   }
 
-  function handleSubmitCustomTrope(text) {
-    if (gameState.pendingClaim) {
-      showToast('A claim is already being voted on.');
-      return;
-    }
-    clientRef.current.proposeCustomTrope(text);
+  function handleSubmitCustomTrope(text, sceneContext) {
+    clientRef.current.proposeCustomTrope(text, sceneContext);
     setCustomTropeModalOpen(false);
   }
 
@@ -413,26 +499,42 @@ function App() {
   }, []);
 
   function makeClient() {
+    let previousBingoCounts = null;
+    let previousBingoCode = null;
     const client = new GameClient({
       onState: (state, id) => {
-        for (const event of state.bingoEvents || []) {
-          if (seenBingoEventIdsRef.current.has(event.id)) continue;
-          seenBingoEventIdsRef.current.add(event.id);
-          const player = state.players[event.playerId];
-          if (!player) continue;
-          const name = event.playerId === id ? '' : ` for ${player.name}`;
-          setBingoBanner(`🎉 BINGO${name}!${event.count > 1 ? ` (${event.count} lines!)` : ''}`);
+        const nextCounts = Object.fromEntries(
+          Object.entries(state.players).map(([playerId, player]) => [
+            playerId,
+            getCompletedLines(player.marked).length,
+          ]),
+        );
+        const completions =
+          previousBingoCounts && previousBingoCode === state.code
+            ? state.seatOrder
+                .map((playerId) => ({ playerId, player: state.players[playerId], count: nextCounts[playerId] }))
+                .filter(({ playerId, player, count }) => player && count > (previousBingoCounts[playerId] ?? count))
+            : [];
+        const completion = completions.find((event) => event.playerId === id) || completions[0];
+        previousBingoCounts = nextCounts;
+        previousBingoCode = state.code;
+        if (completion) {
+          const name = completion.playerId === id ? '' : ` for ${formatPlayerName(completion.player)}`;
+          bingoBannerIdRef.current += 1;
+          setBingoBanner({
+            id: bingoBannerIdRef.current,
+            message: `🎉 BINGO${name}!${completion.count > 1 ? ` (${completion.count} lines!)` : ''}`,
+          });
           playBingoSound();
-          if (event.playerId === id) vibrate(VIBRATE_PATTERN_BINGO);
+          if (completion.playerId === id) vibrate(VIBRATE_PATTERN_BINGO);
           clearTimeout(bingoBannerTimeoutRef.current);
           bingoBannerTimeoutRef.current = setTimeout(() => setBingoBanner(null), 4000);
-          setSuperlativeMilestones((previous) => {
-            if (Object.values(previous).some((milestone) => milestone.firstBingo)) return previous;
-            return { ...previous, [event.playerId]: { ...previous[event.playerId], firstBingo: true } };
-          });
         }
         setGameState({ ...state });
         setMyId(id);
+        setMissedCall((previous) =>
+          previous && state.started && !state.gameOver && state.calls?.[id] === previous.text ? previous : null,
+        );
         gameStateRef.current = state;
         myIdRef.current = id;
       },
@@ -446,6 +548,8 @@ function App() {
           const state = gameStateRef.current;
           const me = state && myIdRef.current ? state.players[myIdRef.current] : null;
           const affectsMe = mark && !!me && (evt.byId === myIdRef.current || me.board.includes(evt.text));
+          const missed = evt.approved && mark && evt.missedCalls?.find((call) => call.playerId === myIdRef.current);
+          if (missed) setMissedCall({ text: missed.text, acceptedText: evt.text });
           if (evt.approved) {
             const approvedByText = formatApprovedBy(evt.approvedBy);
             if (mark && affectsMe) {
@@ -481,9 +585,6 @@ function App() {
             }
           } else {
             playDeniedSound();
-            if (evt.byId === myIdRef.current) {
-              setPersonalSuperlativeStats((previous) => ({ ...previous, rejections: previous.rejections + 1 }));
-            }
             showToast(
               wagerChange
                 ? '❌ The proposed wager changes did not reach majority agreement.'
@@ -492,25 +593,12 @@ function App() {
                   : `❌ "${evt.text}" did not reach majority agreement.${formatDisagreeRationales(evt.disagreeRationaleCounts)}`,
             );
           }
-          if (evt.approved && evt.kind === 'mark') {
-            setSuperlativeMilestones((previous) => {
-              const next = { ...previous };
-              if (!Object.values(previous).some((milestone) => milestone.firstAccepted)) {
-                next[evt.byId] = { ...next[evt.byId], firstAccepted: true };
-              }
-              const state = gameStateRef.current;
-              const wageredPlayers = Object.values(state?.players || {}).filter((player) => {
-                const index = player.board.indexOf(evt.text);
-                return index !== -1 && player.wagered.includes(index);
-              });
-              if (wageredPlayers.length > 0 && !Object.values(previous).some((milestone) => milestone.firstWagerHit)) {
-                wageredPlayers.forEach((player) => {
-                  next[player.id] = { ...next[player.id], firstWagerHit: true };
-                });
-              }
-              return next;
-            });
-          }
+        } else if (evt.type === 'proposalRejected') {
+          showToast(evt.message);
+        } else if (evt.type === 'stateConflict') {
+          showToast('Another host saved newer game state. Your change was not saved; please retry.');
+        } else if (evt.type === 'relayError') {
+          showToast(evt.message || 'The secure game relay rejected an update.');
         } else if (evt.type === 'reaction') {
           const state = gameStateRef.current;
           const from = state?.players?.[evt.from];
@@ -518,7 +606,7 @@ function App() {
           const entry = {
             id,
             emoji: evt.emoji,
-            name: from ? `${from.avatar ? `${from.avatar} ` : ''}${from.name}` : 'Someone',
+            name: from ? formatPlayerName(from) : 'Someone',
             offset: 10 + Math.random() * 80,
           };
           setReactions((prev) => [...prev, entry]);
@@ -530,12 +618,11 @@ function App() {
         } else if (evt.type === 'hostAdded') {
           setHostPromotion({ byName: evt.byName, byAvatar: evt.byAvatar });
         } else if (evt.type === 'gameReset') {
+          setMissedCall(null);
           showToast('The host reset the game — new boards have been dealt.');
           setGameOverModalOpen(false);
           setWageringEnabled(false);
           setAdvancedGameplay(false);
-          setSuperlativeMilestones({});
-          setPersonalSuperlativeStats({ views: 0, submissions: 0, rejections: 0 });
         } else if (evt.type === 'gameRestored') {
           showToast('Nobody else was still connected — your game was restored from where you left off.');
         } else if (evt.type === 'gameOver') {
@@ -649,7 +736,7 @@ function App() {
     }
   }
 
-  async function handleJoin(name, code) {
+  async function handleJoin(name, code, hostRecoveryPassword) {
     setError('');
     setWageringEnabled(false);
     setAdvancedGameplay(false);
@@ -662,7 +749,7 @@ function App() {
     setBusy(true);
     try {
       const client = makeClient();
-      const result = await client.joinGame(code, name);
+      const result = await client.joinGame(code, name, hostRecoveryPassword);
       if (loadingRequestRef.current !== requestId) return;
       if (result.needsChoice) {
         setJoinChoice({ name: result.name, options: result.options, allowNew: result.allowNew });
@@ -681,6 +768,16 @@ function App() {
         setBusy(false);
         setLoadingMessage('');
       }
+    }
+  }
+
+  async function handleSetHostRecoveryPassword(password) {
+    try {
+      await clientRef.current.setHostRecoveryPassword(password);
+      setHostRecoveryPasswordOpen(false);
+      showToast('Host recovery password saved. Keep it somewhere safe.');
+    } catch (err) {
+      showToast(err.message || 'Could not save the host recovery password.');
     }
   }
 
@@ -769,9 +866,9 @@ function App() {
 
   function handleCellClick(index) {
     if (!gameState) return;
-    recordTropeView();
     if (gameState.freeSpace && index === CENTER_INDEX) return;
     const me = gameState.players[myId];
+    recordTropeView(me.board[index]);
 
     if (!gameState.started) {
       const wagered = me.wagered.includes(index);
@@ -795,15 +892,15 @@ function App() {
     setTropeInfo({
       text: me.board[index],
       marked: me.marked.includes(index),
-      onConfirm: () => handleConfirmTropeClaim(index),
+      onConfirm: (sceneContext) => handleConfirmTropeClaim(index, sceneContext),
       onAdvancedActions: gameState.acceptedTropes.includes(me.board[index])
         ? undefined
         : () => setTropeAdvancedActions({ text: me.board[index] }),
     });
   }
 
-  function recordTropeView() {
-    setPersonalSuperlativeStats((previous) => ({ ...previous, views: previous.views + 1 }));
+  function recordTropeView(text) {
+    clientRef.current?.recordTropeView(text);
   }
 
   function handleStartWagering() {
@@ -834,31 +931,26 @@ function App() {
     clientRef.current.setWager(next);
   }
 
-  function handleConfirmTropeClaim(index) {
+  function handleConfirmTropeClaim(index, sceneContext) {
     setTropeInfo(null);
     if (index == null) return;
-    if (gameState.pendingClaim) {
-      showToast('A claim is already being voted on.');
-      return;
-    }
-    setPersonalSuperlativeStats((previous) => ({ ...previous, submissions: previous.submissions + 1 }));
-    clientRef.current.claim(index);
+    clientRef.current.claim(index, sceneContext);
   }
 
   function handleAcceptedTropeInfo(text) {
-    recordTropeView();
+    recordTropeView(text);
     setTropeInfo({
       text,
       marked: true,
       title: 'Challenge this trope?',
       actionHint: 'This asks the group to vote on undoing this accepted trope.',
       confirmLabel: '👍 Challenge it',
-      onConfirm: () => handleChallenge(text),
+      onConfirm: (sceneContext) => handleChallenge(text, sceneContext),
     });
   }
 
   function handlePoolTropeInfo(text, accepted) {
-    recordTropeView();
+    recordTropeView(text);
     setTropeInfo({
       text,
       marked: accepted,
@@ -867,13 +959,14 @@ function App() {
         ? 'The group already accepted this trope. You can still challenge it.'
         : "This asks the group to vote on marking it as having happened, even if it's not on your board.",
       confirmLabel: accepted ? '👍 Challenge it' : '👍 Propose it happened',
-      onConfirm: () => (accepted ? handleChallenge(text) : handleProposeAccept(text)),
+      onConfirm: (sceneContext) =>
+        accepted ? handleChallenge(text, sceneContext) : handleProposeAccept(text, sceneContext),
       onProposeSwap: accepted ? undefined : () => handleProposeSwapFromInfo(text),
     });
   }
 
   function handleReadOnlyTropeInfo(text, accepted = false) {
-    recordTropeView();
+    recordTropeView(text);
     setTropeInfo({
       text,
       marked: accepted,
@@ -887,7 +980,7 @@ function App() {
   }
 
   function handleManagedWagerInfo({ text, marked, title, actionHint, confirmLabel, onConfirm }) {
-    recordTropeView();
+    recordTropeView(text);
     setTropeInfo({
       text,
       marked,
@@ -935,22 +1028,18 @@ function App() {
     );
   }
 
-  function handleChallenge(text) {
-    clientRef.current.challengeTrope(text);
+  function handleChallenge(text, sceneContext) {
+    clientRef.current.challengeTrope(text, sceneContext);
     setTropeInfo(null);
   }
 
   function handleRequestReplace(text) {
     if (!gameState || !text) return;
-    if (gameState.pendingClaim) {
-      showToast('A claim is already being voted on.');
-      return;
-    }
     setReplaceProposal({ text });
   }
 
-  function handleConfirmReplace(genre, subgenre) {
-    clientRef.current.proposeReplace(replaceProposal.text, genre, subgenre);
+  function handleConfirmReplace(genre, subgenre, sceneContext) {
+    clientRef.current.proposeReplace(replaceProposal.text, genre, subgenre, sceneContext);
     setReplaceProposal(null);
     setTropeInfo(null);
   }
@@ -959,13 +1048,9 @@ function App() {
     setReplaceProposal(null);
   }
 
-  function handleProposeAccept(text) {
+  function handleProposeAccept(text, sceneContext) {
     if (!gameState) return;
-    if (gameState.pendingClaim) {
-      showToast('A claim is already being voted on.');
-      return;
-    }
-    clientRef.current.proposeAccept(text);
+    clientRef.current.proposeAccept(text, sceneContext);
     setTropeInfo(null);
   }
 
@@ -1009,7 +1094,7 @@ function App() {
   }
 
   function handleKickPlayer(id, name) {
-    setKickTarget({ id, name });
+    setKickTarget({ id, name, avatar: gameState.players[id]?.avatar });
   }
 
   function handleConfirmKick() {
@@ -1036,11 +1121,16 @@ function App() {
   }
 
   function handleManagePlayer(player) {
-    if (isHost && player.id !== myId) setManagedPlayer(player);
+    if (player.id === myId || isHost) setManagedPlayer(player);
   }
 
   function handleAddManagedHost() {
     clientRef.current?.addHost(managedPlayer.id);
+    setManagedPlayer(null);
+  }
+
+  function handleRestoreDisconnectedBoard(sourceId) {
+    clientRef.current?.restoreDisconnectedBoard(managedPlayer.id, sourceId);
     setManagedPlayer(null);
   }
 
@@ -1062,6 +1152,14 @@ function App() {
     setMyId(null);
     setSavedSession(null);
     setConnectionStatus('connected');
+    setMissedCall(null);
+  }
+
+  function handleDropMissedCall() {
+    if (gameStateRef.current?.calls?.[myIdRef.current] === missedCall?.text) {
+      clientRef.current?.toggleCall(missedCall.text);
+    }
+    setMissedCall(null);
   }
 
   function handleCancelReconnect() {
@@ -1077,11 +1175,15 @@ function App() {
       <>
         {connectionLost && <div className="connection-banner">⚠️ Connection lost — trying to reconnect…</div>}
         <header className="app-header">
-          <h1>🎬 Movie/TV Trope Bingo</h1>
+          <div className="app-brand">
+            <h1>🎬 Movie/TV Trope Bingo</h1>
+            <span className="app-version">v{appVersion}</span>
+          </div>
           <div className="header-actions">
             <button
               className="icon-btn"
               onClick={toggleSoundMuted}
+              data-tutorial="sound"
               aria-label={soundMuted ? 'Unmute sound' : 'Mute sound'}
               title={soundMuted ? 'Unmute sound' : 'Mute sound'}
             >
@@ -1102,7 +1204,7 @@ function App() {
             busy={busy}
             loadingMessage={loadingMessage}
             onCancelLoading={handleCancelLoading}
-            savedSession={savedSession}
+            savedSession={savedSessionStatus === 'active' ? savedSession : null}
             onRejoin={handleRejoin}
           />
         </main>
@@ -1129,7 +1231,22 @@ function App() {
   const playerStatsTarget = players.find((player) => player.id === playerStatsTargetId) || null;
   const calledText = gameState.calls?.[myId];
   const calledIndexes = calledText ? [me.board.indexOf(calledText)].filter((index) => index !== -1) : [];
+  const callersByText = Object.create(null);
+  for (const player of players) {
+    const text = gameState.calls?.[player.id];
+    if (!text) continue;
+    callersByText[text] ||= [];
+    callersByText[text].push(player);
+  }
   const activePlayerCount = players.filter((player) => player.connected).length;
+  const successfulCallersByText = Object.fromEntries(
+    Object.entries(gameState.acceptedCalls || {})
+      .filter(([text]) => gameState.acceptedTropes.includes(text))
+      .map(([text, callers]) => [
+        text,
+        callers.map((caller) => players.find((player) => player.id === caller.id) || caller),
+      ]),
+  );
   const bingoCounts = Object.fromEntries(players.map((p) => [p.id, getCompletedLines(p.marked).length]));
   const hostIds = gameState.hostIds?.length ? gameState.hostIds : [gameState.seatOrder[0]];
   const isHost = hostIds.includes(myId);
@@ -1144,24 +1261,26 @@ function App() {
     .map((id) => `${GENRES.find((g) => g.id === id)?.label || id} ${gameState.generalPercents[id]}%`)
     .join(', ');
   const inviteUrl = `${window.location.origin}${window.location.pathname}?code=${gameState.code}`;
-  const playerSuperlatives = gameState.acceptedTropes.length
-    ? getPlayerSuperlatives(players, gameState, { [myId]: personalSuperlativeStats }, superlativeMilestones)
-    : {};
+  const playerSuperlatives = getPlayerSuperlatives(players, gameState);
 
   return (
     <>
       {connectionLost && (
-        <div className="connection-banner">
+        <div className="connection-banner" role="status" aria-live="polite">
           {reconnectCancelled ? '⚠️ Connection lost — reconnect paused.' : '⚠️ Connection lost — trying to reconnect…'}
         </div>
       )}
       {!focusMode && (
         <header className="app-header">
-          <h1>🎬 Movie/TV Trope Bingo</h1>
+          <div className="app-brand">
+            <h1>🎬 Movie/TV Trope Bingo</h1>
+            <span className="app-version">v{appVersion}</span>
+          </div>
           <div className="header-actions">
             <button
               className="icon-btn"
               onClick={toggleSoundMuted}
+              data-tutorial="sound"
               aria-label={soundMuted ? 'Unmute sound' : 'Mute sound'}
               title={soundMuted ? 'Unmute sound' : 'Mute sound'}
             >
@@ -1174,7 +1293,7 @@ function App() {
           </div>
         </header>
       )}
-      <BingoBanner message={bingoBanner} />
+      <BingoBanner key={bingoBanner?.id} message={bingoBanner?.message} />
       <FinaleBanner visible={finaleBanner} onDismiss={handleDismissFinaleBanner} />
       <ReactionOverlay reactions={reactions} />
       <main id="app" className={focusMode ? 'focus-mode' : ''}>
@@ -1189,7 +1308,7 @@ function App() {
               {gameState.movie && (
                 <button
                   className={`movie-banner${isHost ? ' movie-banner-editable' : ''}`}
-                  onClick={() => isHost && setMovieIdentityModalOpen(true)}
+                  onClick={() => setMovieIdentityModalOpen(true)}
                 >
                   {gameState.movie.poster && <img src={gameState.movie.poster} alt="" />}
                   <span className="movie-banner-copy">
@@ -1198,18 +1317,16 @@ function App() {
                   </span>
                 </button>
               )}
-              <div className="game-status">
-                {gameState.started
-                  ? 'Game in progress — click a space when it happens on screen!'
-                  : 'Waiting for players — the host can start when everyone is ready.'}
-              </div>
+              {!gameState.started && (
+                <div className="game-status">Waiting for players — the host can start when everyone is ready.</div>
+              )}
               {!gameState.started && isHost && (
-                <button className="btn primary" onClick={() => clientRef.current.startGame()}>
+                <button className="btn primary" data-tutorial="start" onClick={() => clientRef.current.startGame()}>
                   Start Game
                 </button>
               )}
               {!gameState.started && (
-                <button className="btn" onClick={() => setWagerIntroOpen(true)}>
+                <button className="btn" data-tutorial="wagers" onClick={() => setWagerIntroOpen(true)}>
                   🎯 {wageringEnabled ? 'Choose Wagers' : 'Optional Wagers'}
                 </button>
               )}
@@ -1237,6 +1354,9 @@ function App() {
                 onEndGame={() => setEndGameConfirmOpen(true)}
                 onResumeGame={handleResumeGame}
                 onConfigureSession={() => setSessionLifetimeModalOpen(true)}
+                onSetHostRecoveryPassword={
+                  isHost && myId === gameState.seatOrder[0] ? () => setHostRecoveryPasswordOpen(true) : undefined
+                }
                 onViewRecap={() => setGameOverModalOpen(true)}
                 onLeaveGame={() => setLeaveConfirmOpen(true)}
                 onCopyInviteLink={handleCopyInviteLink}
@@ -1247,6 +1367,12 @@ function App() {
                 onRequestBoardSwap={handleRequestBoardSwap}
                 onShowMarathonStandings={() => setMarathonStandingsOpen(true)}
                 onShowStatsDashboard={() => setStatsDashboardOpen(true)}
+                queueCount={gameState.claimQueue?.length || 0}
+                onShowClaimQueue={() => setClaimQueueOpen(true)}
+                onAccessibility={() => setAccessibilityOpen(true)}
+                tutorialActive={tutorialActive}
+                onStartTutorial={startTutorial}
+                onPauseTutorial={pauseTutorial}
               />
             </div>
           )}
@@ -1265,19 +1391,20 @@ function App() {
                 started={gameState.started}
                 bingoCounts={bingoCounts}
                 onKick={handleKickPlayer}
-                onEditSelf={() => setChangeNameModalOpen(true)}
+                onEditSelf={() => handleManagePlayer(me)}
                 onManagePlayer={handleManagePlayer}
                 onViewPlayerStats={(player) => setPlayerStatsTargetId(player.id)}
                 callStats={gameState.callStats}
+                onCallScoreClick={setCallInfoPlayer}
                 wageringEnabled={wageringEnabled}
                 superlatives={playerSuperlatives}
                 onSuperlativeClick={(player) =>
-                  setSuperlativeInfo({ award: playerSuperlatives[player.id], name: player.name })
+                  setSuperlativeInfo({ award: playerSuperlatives[player.id], name: player.name, avatar: player.avatar })
                 }
               />
             )}
-            <div className="board-wrap">
-              {connectionLost && (
+            <div className="board-wrap" data-tutorial="board">
+              {connectionLost && !gameState.started && (
                 <div className="reconnect-panel" role="status" aria-live="polite">
                   {reconnectCancelled ? (
                     <>
@@ -1304,6 +1431,10 @@ function App() {
                 wagered={me.wagered}
                 marked={me.marked}
                 calledIndexes={calledIndexes}
+                callersByText={callersByText}
+                successfulCallersByText={successfulCallersByText}
+                listView={accessibility.listView}
+                showStateLabels={accessibility.showStateLabels}
                 freeSpace={gameState.freeSpace}
                 pending={!!gameState.pendingClaim}
                 highlightedCells={highlightedCells}
@@ -1321,7 +1452,22 @@ function App() {
         onAgree={() => clientRef.current.vote(gameState.pendingClaim.claimId, true)}
         onDisagree={(rationale) => clientRef.current.vote(gameState.pendingClaim.claimId, false, rationale)}
         onCancel={() => clientRef.current.cancelClaim(gameState.pendingClaim.claimId)}
+        onBrowseQueue={() => setAllTropesModalOpen(true)}
+        onShowQueue={() => setClaimQueueOpen(true)}
       />
+      {claimQueueOpen && (
+        <ClaimQueueModal
+          queue={gameState.claimQueue || []}
+          players={players}
+          myId={myId}
+          onWithdraw={(id) => clientRef.current.withdrawQueuedClaim(id)}
+          onBrowse={() => {
+            setClaimQueueOpen(false);
+            setAllTropesModalOpen(true);
+          }}
+          onClose={() => setClaimQueueOpen(false)}
+        />
+      )}
 
       {wagerIntroOpen && <WagerIntroModal onAddWagers={handleStartWagering} onSkip={handleSkipWagering} />}
 
@@ -1343,6 +1489,9 @@ function App() {
 
       {tropesModalOpen && (
         <AcceptedTropesModal
+          board={me.board}
+          wageredTexts={me.wagered.map((index) => me.board[index])}
+          calledTexts={[...Object.values(gameState.calls || {}), ...Object.keys(gameState.acceptedCalls || {})]}
           acceptedTropes={gameState.acceptedTropes}
           onTropeClick={handleAcceptedTropeInfo}
           onClose={() => setTropesModalOpen(false)}
@@ -1351,6 +1500,9 @@ function App() {
 
       {allTropesModalOpen && (
         <AllTropesModal
+          board={me.board}
+          wageredTexts={me.wagered.map((index) => me.board[index])}
+          calledTexts={[...Object.values(gameState.calls || {}), ...Object.keys(gameState.acceptedCalls || {})]}
           tropePool={gameState.tropePool}
           acceptedTropes={gameState.acceptedTropes}
           onTropeClick={handlePoolTropeInfo}
@@ -1394,6 +1546,7 @@ function App() {
       {kickTarget && (
         <KickConfirmModal
           playerName={kickTarget.name}
+          playerAvatar={kickTarget.avatar}
           onConfirm={handleConfirmKick}
           onCancel={() => setKickTarget(null)}
         />
@@ -1402,6 +1555,7 @@ function App() {
       {isHost && gameState.pendingJoinRequest && (
         <JoinRequestModal
           name={gameState.pendingJoinRequest.name}
+          avatar={gameState.pendingJoinRequest.avatar}
           onApprove={handleApproveJoin}
           onDeny={handleDenyJoin}
           onDenyAndRotate={handleDenyAndRotateJoin}
@@ -1421,8 +1575,26 @@ function App() {
         <PlayerManagementModal
           player={managedPlayer}
           isHost={hostIds.includes(managedPlayer.id)}
+          isSelf={managedPlayer.id === myId}
+          canRestoreBoard={
+            isHost &&
+            managedPlayer.connected &&
+            gameState.started &&
+            !gameState.gameOver &&
+            !gameState.pendingClaim &&
+            !gameState.pendingReplacement &&
+            !gameState.claimQueue?.length
+          }
+          disconnectedPlayers={players.filter(
+            (player) => !player.connected && !hostIds.includes(player.id) && player.id !== managedPlayer.id,
+          )}
           onAddHost={handleAddManagedHost}
+          onRestoreBoard={handleRestoreDisconnectedBoard}
           onProposeProfile={handleOpenProfileProposal}
+          onEditProfile={() => {
+            setManagedPlayer(null);
+            setChangeNameModalOpen(true);
+          }}
           onViewStats={() => {
             setPlayerStatsTargetId(managedPlayer.id);
             setManagedPlayer(null);
@@ -1435,7 +1607,7 @@ function App() {
         <ChangeNameModal
           currentName={profileProposalTarget.name}
           currentAvatar={profileProposalTarget.avatar}
-          title={`Propose a name & avatar for ${profileProposalTarget.name}`}
+          title={`Propose a name & avatar for ${formatPlayerName(profileProposalTarget)}`}
           confirmLabel="Send Proposal"
           onConfirm={handleProposeProfileChange}
           onCancel={() => setProfileProposalTarget(null)}
@@ -1472,6 +1644,7 @@ function App() {
           marathon={gameState.marathon}
           freeSpace={gameState.freeSpace}
           callStats={gameState.callStats?.[playerStatsTarget.id]}
+          onCallScoreClick={setCallInfoPlayer}
           onClose={() => setPlayerStatsTargetId(null)}
         />
       )}
@@ -1482,12 +1655,15 @@ function App() {
           acceptedTropes={gameState.acceptedTropes}
           freeSpace={gameState.freeSpace}
           callStats={gameState.callStats}
+          onCallScoreClick={setCallInfoPlayer}
           onClose={() => setStatsDashboardOpen(false)}
         />
       )}
 
       {gameOverModalOpen && (
         <GameOverModal
+          watchState={gameState}
+          onCallScoreClick={setCallInfoPlayer}
           players={players}
           bingoCounts={bingoCounts}
           callStats={gameState.callStats}
@@ -1496,9 +1672,21 @@ function App() {
           onMovieClick={() => setMovieIdentityModalOpen(true)}
           superlatives={playerSuperlatives}
           onSuperlativeClick={(player) =>
-            setSuperlativeInfo({ award: playerSuperlatives[player.id], name: player.name })
+            setSuperlativeInfo({ award: playerSuperlatives[player.id], name: player.name, avatar: player.avatar })
           }
           onClose={() => setGameOverModalOpen(false)}
+        />
+      )}
+
+      {callInfoPlayer && (
+        <CallInfoModal
+          player={players.find((player) => player.id === callInfoPlayer.id) || callInfoPlayer}
+          stats={gameState.callStats?.[callInfoPlayer.id]}
+          history={gameState.callHistory?.[callInfoPlayer.id]}
+          activeCall={gameState.calls?.[callInfoPlayer.id]}
+          successfulCalls={gameState.acceptedCalls}
+          gameOver={gameState.gameOver}
+          onClose={() => setCallInfoPlayer(null)}
         />
       )}
 
@@ -1511,9 +1699,17 @@ function App() {
         />
       )}
 
+      {hostRecoveryPasswordOpen && (
+        <HostRecoveryPasswordModal
+          onConfirm={handleSetHostRecoveryPassword}
+          onCancel={() => setHostRecoveryPasswordOpen(false)}
+        />
+      )}
+
       {movieIdentityModalOpen && (
         <MovieIdentityModal
           currentMovie={gameState.movie}
+          readOnly={!isHost}
           onConfirm={handleUpdateMovie}
           onCancel={() => setMovieIdentityModalOpen(false)}
         />
@@ -1532,6 +1728,7 @@ function App() {
         <SuperlativeModal
           award={superlativeInfo.award}
           playerName={superlativeInfo.name}
+          playerAvatar={superlativeInfo.avatar}
           onClose={() => setSuperlativeInfo(null)}
         />
       )}
@@ -1565,6 +1762,14 @@ function App() {
         />
       )}
 
+      {accessibilityOpen && (
+        <AccessibilityModal
+          value={accessibility}
+          onChange={setAccessibility}
+          onClose={() => setAccessibilityOpen(false)}
+        />
+      )}
+
       {customTropeModalOpen && (
         <CustomTropeModal
           playerCount={activePlayerCount}
@@ -1575,6 +1780,7 @@ function App() {
 
       {tropeInfo && (
         <TropeInfoModal
+          key={tropeInfo.text}
           text={tropeInfo.text}
           marked={tropeInfo.marked}
           title={tropeInfo.title}
@@ -1582,10 +1788,13 @@ function App() {
           confirmLabel={tropeInfo.confirmLabel}
           playerCount={activePlayerCount}
           onConfirm={tropeInfo.onConfirm}
+          callers={callersByText[tropeInfo.text] || []}
+          successfulCallers={successfulCallersByText[tropeInfo.text] || []}
           onCancel={handleCloseTropeInfo}
           onProposeSwap={tropeInfo.onProposeSwap}
           onAdvancedActions={tropeInfo.onAdvancedActions}
           actionsAvailable={!gameState.acceptedTropes.includes(tropeInfo.text)}
+          allowSceneContext={gameState.started && !gameState.gameOver}
         />
       )}
 
@@ -1614,6 +1823,54 @@ function App() {
       )}
 
       {helpModalOpen && <HelpModal onClose={() => setHelpModalOpen(false)} />}
+
+      {tutorialEnabled && tutorialActive && !gameState.gameOver && (
+        <GuidedTutorial
+          key={tutorialRun}
+          isHost={isHost}
+          started={gameState.started}
+          soundMuted={soundMuted}
+          suspended={focusMode || connectionLost || !!bingoBanner || finaleBanner}
+          onEnableSound={() => {
+            setSoundMuted(false);
+            setSoundMutedState(false);
+          }}
+          onToggleTheme={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))}
+          onBrowse={() => {
+            const index = me.board.findIndex(
+              (text, position) => !me.marked.includes(position) && !(gameState.freeSpace && position === CENTER_INDEX),
+            );
+            handleCellClick(index === -1 ? 0 : index);
+          }}
+          onWagers={() => setWagerIntroOpen(true)}
+          onMenu={() => setMenuOpen(true)}
+          onAdvanced={() => {
+            setAdvancedGameplay(true);
+            setMenuOpen(true);
+          }}
+          onPause={pauseTutorial}
+          onFinish={pauseTutorial}
+          onDisable={() => {
+            saveTutorialPreference(false);
+            pauseTutorial();
+          }}
+        />
+      )}
+
+      {missedCall &&
+        calledText === missedCall.text &&
+        !gameState.gameOver &&
+        !gameState.pendingClaim &&
+        !gameState.pendingReplacement && (
+          <ConfirmModal
+            title="Your call didn't happen next"
+            message={`"${missedCall.acceptedText}" was accepted after your call of "${missedCall.text}", so your called trope didn't happen next. Would you like to keep the call or drop it?`}
+            confirmLabel="Drop my call"
+            cancelLabel="Keep my call"
+            onConfirm={handleDropMissedCall}
+            onCancel={() => setMissedCall(null)}
+          />
+        )}
 
       {toast && <div className="toast">{toast}</div>}
     </>

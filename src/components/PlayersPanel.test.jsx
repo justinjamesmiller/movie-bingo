@@ -62,17 +62,21 @@ describe('PlayersPanel', () => {
   });
 
   it('shows call metrics only after a player makes a call', () => {
-    renderPanel({ callStats: { p1: { made: 2, correct: 1 } } });
+    const onCallScoreClick = vi.fn();
+    renderPanel({ callStats: { p1: { made: 2, correct: 1 }, p2: { made: 0, correct: 0 } }, onCallScoreClick });
 
-    expect(screen.getByText(/2 marked.*📣 1\/2 calls/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '📣 1/2 calls' }).closest('.player-stats')).toHaveTextContent('2 marked');
     expect(screen.getByText('0 marked · 0 bingos · 0/1 wagered marked')).not.toHaveTextContent('calls');
+    fireEvent.click(screen.getByRole('button', { name: '📣 1/2 calls' }));
+    expect(onCallScoreClick).toHaveBeenCalledWith(players[0]);
+    expect(screen.queryByRole('button', { name: '📣 0/0 calls' })).toBeNull();
   });
 
-  it('opens the profile editor when the current player clicks their name or avatar', () => {
+  it('opens player options when the current player clicks their name or avatar', () => {
     const onEditSelf = vi.fn();
     renderPanel({ onEditSelf });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Edit name and avatar' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Your player options' }));
     expect(onEditSelf).toHaveBeenCalledTimes(1);
   });
 

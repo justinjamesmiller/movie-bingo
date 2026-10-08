@@ -18,5 +18,6 @@ describe('StatsDashboardModal', () => {
     expect(screen.getByText('Accepted tropes')).toBeInTheDocument();
     expect(screen.getByText('Total marked spaces')).toBeInTheDocument();
     expect(screen.getByText(/Alice/)).toBeInTheDocument();
+    expect(screen.queryByText(/0\/0 calls/)).toBeNull();
   });
 });

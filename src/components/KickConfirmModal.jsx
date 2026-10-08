@@ -1,10 +1,11 @@
 import ModalShell from './ModalShell.jsx';
+import { formatPlayerName } from '../utils/playerName.js';
 
-export default function KickConfirmModal({ playerName, onConfirm, onCancel }) {
+export default function KickConfirmModal({ playerName, playerAvatar, onConfirm, onCancel }) {
   return (
     <ModalShell onClose={onCancel}>
       <div className="modal-content">
-        <h3>Remove {playerName} from the game?</h3>
+        <h3>Remove {formatPlayerName({ name: playerName, avatar: playerAvatar })} from the game?</h3>
         <p className="hint">
           This also rotates the game code as a security measure, in case the old code leaked. You won't need to
           reconnect, but anyone else who's disconnected will need the new code to get back in.

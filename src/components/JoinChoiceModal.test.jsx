@@ -9,7 +9,7 @@ describe('JoinChoiceModal', () => {
     render(
       <JoinChoiceModal
         name="Bob"
-        options={[{ id: 'p1', name: 'Old Bob' }]}
+        options={[{ id: 'p1', name: 'Old Bob', avatar: '🍿' }]}
         allowNew
         busy={false}
         onClaimSeat={onClaimSeat}
@@ -18,7 +18,7 @@ describe('JoinChoiceModal', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Old Bob' }));
+    fireEvent.click(screen.getByRole('button', { name: '🍿 Old Bob' }));
     fireEvent.click(screen.getByRole('button', { name: /join as a new player/i }));
     expect(onClaimSeat).toHaveBeenCalledWith('p1');
     expect(onJoinAsNew).toHaveBeenCalledTimes(1);

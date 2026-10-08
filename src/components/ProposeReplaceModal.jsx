@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { GENRES, SUBGENRES_BY_GENRE } from '../data/tropes.js';
 import ModalShell from './ModalShell.jsx';
+import SceneContextFields, { suppliedSceneContext, validSceneContext } from './SceneContextFields.jsx';
 
 export default function ProposeReplaceModal({
   text,
@@ -11,6 +12,7 @@ export default function ProposeReplaceModal({
   playerCount = 2,
 }) {
   const [genre, setGenre] = useState(defaultGenre);
+  const [sceneContext, setSceneContext] = useState({ note: '', timestamp: '' });
   const [subgenre, setSubgenre] = useState(defaultSubgenre);
 
   function handleGenreChange(newGenre) {
@@ -45,8 +47,17 @@ export default function ProposeReplaceModal({
             ? 'This immediately swaps it out for a new trope from that sub-genre.'
             : 'This asks the group to vote on swapping it out for a new trope from that sub-genre.'}
         </p>
+        <SceneContextFields value={sceneContext} onChange={setSceneContext} />
         <div className="claim-vote-buttons cancel-claim-btn">
-          <button className="btn agree" onClick={() => onConfirm(genre, subgenre)}>
+          <button
+            className="btn agree"
+            disabled={!validSceneContext(sceneContext)}
+            onClick={() =>
+              suppliedSceneContext(sceneContext)
+                ? onConfirm(genre, subgenre, suppliedSceneContext(sceneContext))
+                : onConfirm(genre, subgenre)
+            }
+          >
             👍 {playerCount === 1 ? 'Swap it' : 'Propose it'}
           </button>
           <button className="btn disagree" onClick={onCancel}>

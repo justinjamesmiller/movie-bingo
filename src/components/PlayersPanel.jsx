@@ -14,12 +14,13 @@ export default function PlayersPanel({
   onManagePlayer,
   onViewPlayerStats,
   callStats = {},
+  onCallScoreClick,
   wageringEnabled,
   superlatives = {},
   onSuperlativeClick,
 }) {
   return (
-    <aside className="players-panel">
+    <aside className="players-panel" data-tutorial="players">
       <h3>Players</h3>
       <ul className="players-list">
         {players.map((p) => {
@@ -30,7 +31,7 @@ export default function PlayersPanel({
             <li key={p.id}>
               <div className="player-row">
                 {p.id === myId ? (
-                  <button className="player-profile-button" onClick={onEditSelf} aria-label="Edit name and avatar">
+                  <button className="player-profile-button" onClick={onEditSelf} aria-label="Your player options">
                     {p.avatar ? `${p.avatar} ` : ''}
                     {p.name}
                     {!p.connected ? ' (disconnected)' : ''}
@@ -61,7 +62,18 @@ export default function PlayersPanel({
               <div className="hint player-stats">
                 {p.marked.length} marked · {bingoCounts[p.id] || 0} bingo{(bingoCounts[p.id] || 0) === 1 ? '' : 's'}
                 {p.wagered.length > 0 && ` · ${wageredMarked}/${p.wagered.length} wagered marked`}
-                {calls.made > 0 && ` · 📣 ${calls.correct || 0}/${calls.made} calls`}
+                {calls.made > 0 && (
+                  <>
+                    {' · '}
+                    <button
+                      className="player-profile-button"
+                      onClick={() => onCallScoreClick?.(p)}
+                      title="About call-it scores"
+                    >
+                      📣 {calls.correct || 0}/{calls.made} calls
+                    </button>
+                  </>
+                )}
               </div>
               {superlatives[p.id] && (
                 <SuperlativeBadge award={superlatives[p.id]} onClick={() => onSuperlativeClick?.(p)} />

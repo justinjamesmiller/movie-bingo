@@ -26,6 +26,7 @@ export default function GameMenu({
   onEndGame,
   onResumeGame,
   onConfigureSession,
+  onSetHostRecoveryPassword,
   onViewRecap,
   onLeaveGame,
   onCopyInviteLink,
@@ -36,6 +37,12 @@ export default function GameMenu({
   onRequestBoardSwap,
   onShowMarathonStandings,
   onShowStatsDashboard,
+  tutorialActive = false,
+  onStartTutorial,
+  onPauseTutorial,
+  queueCount = 0,
+  onShowClaimQueue,
+  onAccessibility,
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [advancedSection, setAdvancedSection] = useState(null);
@@ -56,7 +63,7 @@ export default function GameMenu({
 
   return (
     <div className="game-menu">
-      <button className="btn hamburger-btn" onClick={onToggle} aria-label="Menu">
+      <button className="btn hamburger-btn" data-tutorial="menu" onClick={onToggle} aria-label="Menu">
         ☰ Menu
       </button>
       {open && (
@@ -87,6 +94,21 @@ export default function GameMenu({
               </div>
             </div>
             <div className="game-menu-actions">
+              {onAccessibility && (
+                <button className="btn" onClick={() => pick(onAccessibility)}>
+                  Accessibility
+                </button>
+              )}
+              {started && !gameOver && onShowClaimQueue && (
+                <button className="btn" onClick={() => pick(onShowClaimQueue)}>
+                  Claim Queue ({queueCount})
+                </button>
+              )}
+              {(onStartTutorial || onPauseTutorial) && (
+                <button className="btn" onClick={() => pick(tutorialActive ? onPauseTutorial : onStartTutorial)}>
+                  📖 {tutorialActive ? 'Pause tutorial' : 'Start tutorial'}
+                </button>
+              )}
               <button className="btn menu-expander" aria-expanded={advancedGameplay} onClick={toggleAdvancedOptions}>
                 {advancedGameplay ? 'Use Simple Options' : 'Advanced Options'}
               </button>
@@ -162,6 +184,11 @@ export default function GameMenu({
               )}
               {advancedGameplay && isHost && advancedSection === 'host' && (
                 <div className="game-menu-section">
+                  {!gameOver && onSetHostRecoveryPassword && (
+                    <button className="btn" onClick={() => pick(onSetHostRecoveryPassword)}>
+                      🔑 Host recovery password
+                    </button>
+                  )}
                   {hostCount > 1 && (
                     <button className="btn" onClick={() => pick(onResignHost)}>
                       Resign as Host

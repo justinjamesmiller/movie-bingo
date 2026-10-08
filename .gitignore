@@ -5,3 +5,4 @@ coverage/
 *.local
 .env
 .env.local
+supabase/.temp/

@@ -1,7 +1,7 @@
 // Additional broad movie/TV genre coverage, kept separate from the hand-curated
 // original pools so the main tropes.js file stays readable. Each genre and each
-// listed sub-genre receives the same 40 reusable scene beats with a genre-specific
-// prefix, which guarantees every new pool is large enough for board generation
+// listed sub-genre receives the same 40 reusable scene beats with optional sub-genre
+// context, which guarantees every new pool is large enough for board generation
 // and every generated trope has a matching explanation/example.
 export const EXPANDED_GENRES = [
   { id: 'adventure', label: 'Adventure' },
@@ -310,14 +310,14 @@ const BEATS = [
 
 const contextByKey = new Map();
 for (const genre of EXPANDED_GENRES) {
-  contextByKey.set(`${genre.id}:general`, genre.label);
+  contextByKey.set(`${genre.id}:general`, '');
   for (const subgenre of EXPANDED_SUBGENRES_BY_GENRE[genre.id].filter((s) => s.id !== 'general')) {
     contextByKey.set(`${genre.id}:${subgenre.id}`, subgenre.label);
   }
 }
 
 function tropeText(context, beat) {
-  return `${context} ${beat.text}`;
+  return context ? `${context} ${beat.text}` : `${beat.text.charAt(0).toUpperCase()}${beat.text.slice(1)}`;
 }
 
 export const EXPANDED_TROPES = [];
@@ -329,8 +329,8 @@ for (const [key, context] of contextByKey) {
     const text = tropeText(context, beat);
     EXPANDED_TROPES.push({ text, genre, subgenres: [subgenre] });
     EXPANDED_DESCRIPTIONS[text] = {
-      what: `A ${context.toLowerCase()} beat where ${beat.what}.`,
-      example: `${beat.example} in a ${context.toLowerCase()} scene.`,
+      what: context ? `A ${context.toLowerCase()} beat where ${beat.what}.` : `A scene where ${beat.what}.`,
+      example: context ? `${beat.example} in a ${context.toLowerCase()} scene.` : `${beat.example}.`,
     };
   }
 }

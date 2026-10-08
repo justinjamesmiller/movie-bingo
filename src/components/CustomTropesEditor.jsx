@@ -1,7 +1,9 @@
 import { useState } from 'react';
+import { SHARED_TROPES } from '../data/sharedTropes.js';
 
 const MAX_LENGTH = 60;
 const MAX_COUNT = 20;
+const OPTIONAL_PRESETS = SHARED_TROPES.filter((trope) => trope.optional);
 
 // Shared "add custom trope(s) before the game starts" editor used by both
 // the Host card and the Reset modal -- builds a plain string[] passed
@@ -64,6 +66,24 @@ export default function CustomTropesEditor({ customTropes, onChange }) {
           ))}
         </ul>
       )}
+      <details className="optional-trope-presets">
+        <summary>Optional trope presets</summary>
+        {OPTIONAL_PRESETS.map((trope) => (
+          <label key={trope.text} className="optional-trope-choice" title={trope.what}>
+            <input
+              type="checkbox"
+              checked={customTropes.includes(trope.text)}
+              disabled={!customTropes.includes(trope.text) && customTropes.length >= MAX_COUNT}
+              onChange={(event) => {
+                if (!event.target.checked) handleRemove(trope.text);
+                else if (!customTropes.includes(trope.text) && customTropes.length < MAX_COUNT)
+                  onChange([...customTropes, trope.text]);
+              }}
+            />
+            <span>{trope.text}</span>
+          </label>
+        ))}
+      </details>
     </div>
   );
 }

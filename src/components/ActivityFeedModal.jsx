@@ -1,5 +1,5 @@
-// Chronological log of notable approved events (marks, replaces, wager
-// changes, resets, etc.) -- replicated via `state.activityLog` so everyone
+// Chronological log of notable events (approved marks, declined trope proposals,
+// replaces, wager changes, resets, etc.) -- replicated via `state.activityLog` so everyone
 // sees the exact same feed, including anyone who looked away mid-game.
 import ModalShell from './ModalShell.jsx';
 

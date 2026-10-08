@@ -129,13 +129,13 @@ export default {
     what: 'A team is gathered, each introduced by speciality.',
     example: 'Four recruitment scenes in a row, one per skill.',
   },
-  'An underwater escape scene': {
-    what: 'A character escapes while submerged.',
-    example: 'Kicking free of a sinking car in the dark.',
+  'Someone hides during a chase': {
+    what: 'A pursued character hides to avoid being seen or caught.',
+    example: 'Someone ducks behind a parked van while their pursuer runs past.',
   },
-  'A train-top fight scene': {
-    what: 'Combat takes place on a moving train.',
-    example: 'Fighting on the roof while a tunnel approaches.',
+  'A fight knocks furniture over': {
+    what: 'A fight causes a table, chair, shelf, or other piece of furniture to topple over.',
+    example: 'A scuffle sends a chair toppling and tips a table onto its side.',
   },
   'A convoy ambush': {
     what: 'A column of vehicles is attacked.',

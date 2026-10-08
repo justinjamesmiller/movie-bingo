@@ -42,7 +42,7 @@ export default function MovieLookup({ onFound, onMovieSelected }) {
       setSuggestedSubgenres(subgenres);
       setResults(null);
       onFound(details.genres, subgenres);
-      onMovieSelected?.({ title: details.title, year: details.year, type: details.type, poster: details.poster });
+      onMovieSelected?.({ ...details, imdbID, subgenreSelections: subgenres });
     } catch (err) {
       setError(err.message || 'Could not load that title.');
     } finally {

@@ -608,7 +608,13 @@ export class GameClient {
       this._watchJoinApproval(normalized, this.myId, trimmedName).catch(() => {});
       return { needsApproval: true };
     }
-    await this._connectChannel(normalized);
+    this._pendingJoin = { name: trimmedName };
+    try {
+      await this._connectChannel(normalized);
+    } catch (error) {
+      this._pendingJoin = null;
+      throw error;
+    }
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         this._pendingJoin = null;

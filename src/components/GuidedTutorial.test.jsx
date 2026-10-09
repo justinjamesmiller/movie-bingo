@@ -68,6 +68,23 @@ describe('GuidedTutorial', () => {
     expect(callbacks.onAdvanced).toHaveBeenCalledTimes(1);
   });
 
+  it('lists current menu groups in the optional advanced branch', () => {
+    render(<GuidedTutorial {...props()} />);
+    for (let index = 0; index < 5; index++) fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Explore advanced options' }));
+
+    expect(
+      screen.getByText(
+        /Explore & Stats includes the trope pool, accepted tropes, claim queue, game stats, and marathon history/,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /My Tools includes Accessibility, wager management, custom tropes, board swapping, and Board Focus/,
+      ),
+    ).toBeInTheDocument();
+  });
+
   it('allows skipping, pausing with Escape, and finishing', () => {
     const callbacks = props();
     render(<GuidedTutorial {...callbacks} />);

@@ -24,6 +24,7 @@ import { isValidDisagreeRationale } from '../data/disagreeRationales.js';
 import { DEFAULT_SESSION_LIFETIME_HOURS, SESSION_LIFETIME_OPTIONS } from '../data/session.js';
 import { getCompletedLines } from '../utils/bingoLines.js';
 import { formatPlayerName } from '../utils/playerName.js';
+import { recordAwardTransitions } from '../utils/superlatives.js';
 
 const SUPABASE_URL = import.meta.env?.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env?.VITE_SUPABASE_ANON_KEY;
@@ -108,6 +109,7 @@ export function applyServerGameAction(snapshot, playerId, action, viewBatch) {
       if (message.t !== 'state') messages.push(structuredClone(message));
     },
   });
+  const previousAwardState = structuredClone(engine.state);
   if (engine.state.pendingClaim) engine.state.pendingClaim.serverManaged = true;
   if (engine.state.pendingClaim && !Number.isFinite(engine.state.pendingClaim.expiresAt)) {
     const createdAt = Number(engine.state.pendingClaim.claimId.split('-')[1]);
@@ -128,6 +130,7 @@ export function applyServerGameAction(snapshot, playerId, action, viewBatch) {
     }
   }
   if (action.t !== 'settleClaim') engine._applyAction(playerId, action);
+  recordAwardTransitions(previousAwardState, engine.state);
   return { state: engine.state, messages };
 }
 
@@ -845,7 +848,7 @@ export class GameClient {
   }
 
   setWager(indices) {
-    this._dispatch({ t: 'setWager', indices });
+    return this._dispatch({ t: 'setWager', indices });
   }
 
   // Proposes adding and/or removing wagers after the game has started (e.g. a
@@ -854,13 +857,13 @@ export class GameClient {
   // approval from the other players since it happens mid-game. All removals
   // and additions picked at once are submitted together as a single proposal.
   proposeWagerChange(add, remove) {
-    this._dispatch({ t: 'proposeWagerChange', add, remove });
+    return this._dispatch({ t: 'proposeWagerChange', add, remove });
   }
 
   // Asks the group to deal this player a brand new board (majority approval,
   // same as any other mid-game change).
   proposeBoardSwap() {
-    this._dispatch({ t: 'proposeBoardSwap' });
+    return this._dispatch({ t: 'proposeBoardSwap' });
   }
 
   startGame() {
@@ -868,11 +871,11 @@ export class GameClient {
   }
 
   claim(index, sceneContext) {
-    this._dispatch({ t: 'claim', index, sceneContext });
+    return this._dispatch({ t: 'claim', index, sceneContext });
   }
 
   challengeTrope(text, sceneContext) {
-    this._dispatch({ t: 'challenge', text, sceneContext });
+    return this._dispatch({ t: 'challenge', text, sceneContext });
   }
 
   vote(claimId, agree, rationale) {
@@ -933,7 +936,7 @@ export class GameClient {
   // independent of the game's own configured genres -- swapping a trope out
   // for something from a totally different genre is intentional.
   proposeReplace(text, genre, subgenre, sceneContext) {
-    this._dispatch({ t: 'proposeReplace', text, genre, subgenre, sceneContext });
+    return this._dispatch({ t: 'proposeReplace', text, genre, subgenre, sceneContext });
   }
 
   chooseReplacement(text) {
@@ -949,7 +952,7 @@ export class GameClient {
   }
 
   proposeAccept(text, sceneContext) {
-    this._dispatch({ t: 'proposeAccept', text, sceneContext });
+    return this._dispatch({ t: 'proposeAccept', text, sceneContext });
   }
 
   // Host-only: marks the game as over and broadcasts a recap trigger to
@@ -988,7 +991,7 @@ export class GameClient {
   // majority approval mid-game -- if approved it's added to the accepted
   // list AND the trope pool (so it shows up in "All Tropes" going forward).
   proposeCustomTrope(text, sceneContext) {
-    this._dispatch({ t: 'proposeCustom', text, sceneContext });
+    return this._dispatch({ t: 'proposeCustom', text, sceneContext });
   }
 
   // Ephemeral -- not part of replicated game state, just a fire-and-forget
@@ -1393,6 +1396,10 @@ export class GameClient {
     }
     this._viewWatch = watch;
     this._viewStarted = !!this.state?.started;
+    if (!this._serverGameplayEnabled && this.state && this._isActiveHostId(this.myId)) {
+      recordAwardTransitions(this._lastAwardState, this.state);
+      this._lastAwardState = structuredClone(this.state);
+    }
     if (this.state && !Object.hasOwn(this.state.players, this.myId) && !this._pendingJoin) {
       GameClient.clearSavedSession();
       this.onEvent({ type: 'kicked', reason: 'Your player session was recovered on another device.' });

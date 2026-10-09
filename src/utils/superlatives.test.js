@@ -4,6 +4,8 @@ import {
   getPlayerAwards,
   getPlayerSuperlative,
   getPlayerSuperlatives,
+  getLatestPlayerAwards,
+  recordAwardTransitions,
   getSuperlativeMetrics,
   getBadgeProgress,
   createBadgeAchievementTracker,
@@ -13,12 +15,6 @@ const gameState = { acceptedTropes: [], freeSpace: false, players: {} };
 const player = { id: 'p1', board: Array.from({ length: 25 }, (_, index) => `Trope ${index}`), marked: [], wagered: [] };
 
 const evidenceCases = [
-  [
-    'Most Thoughtful',
-    { views: 3, submissions: 1, viewedTropeCount: 2 },
-    { views: 10, submissions: 2, viewedTropeCount: 5 },
-  ],
-  ['Definition Detective', { viewedTropeCount: 3 }, { viewedTropeCount: 4 }],
   ['First Bingo', { firstBingo: false }, { firstBingo: true }],
   ['First Trope Accepted', { firstAccepted: false }, { firstAccepted: true }],
   ['First Wager Achieved', { firstWagerHit: false }, { firstWagerHit: true }],
@@ -33,6 +29,17 @@ const evidenceCases = [
   ['Clean Sweep', { wagers: 2, wagerHits: 2 }, { wagers: 3, wagerHits: 3 }],
   ['Wager In Progress', { wagers: 5, wagerHits: 1 }, { wagers: 5, wagerHits: 2 }],
   ['Most Decisive', { submissions: 3 }, { submissions: 4 }],
+  ['Most Helpful', { otherApprovalVotes: 4 }, { otherApprovalVotes: 5 }],
+  ['Comeback Captain', { acceptedAfterRejection: 1 }, { acceptedAfterRejection: 2 }],
+  ['Most Correct Calls', { correctCalls: 2 }, { correctCalls: 3 }],
+  ['Call Accuracy Ace', { callsMade: 5, correctCalls: 2 }, { callsMade: 5, correctCalls: 3 }],
+  ['Wager Winner', { wagerHits: 2 }, { wagerHits: 3 }],
+  ['Best Wager Rate', { wagers: 3, wagerHits: 1 }, { wagers: 3, wagerHits: 2 }],
+  ['Most Accepted Proposals', { acceptedProposals: 3 }, { acceptedProposals: 4 }],
+  ['Most Rejected Proposals', { rejections: 2 }, { rejections: 3 }],
+  ['Row Captain', { completedRows: 0 }, { completedRows: 1 }],
+  ['Diagonal Dazzler', { completedDiagonals: 0 }, { completedDiagonals: 1 }],
+  ['Corner Collector', { acceptedCorners: 2 }, { acceptedCorners: 3 }],
   ['Consensus Builder', { approvalVotes: 20, otherApprovalVotes: 2 }, { otherApprovalVotes: 3 }],
   [
     'Quiet Achiever',
@@ -51,7 +58,6 @@ const evidenceCases = [
     { activityTracked: true, accepted: 4, submissions: 0 },
     { activityTracked: true, accepted: 5, submissions: 0 },
   ],
-  ['Board Cartographer', { viewedTropeCount: 2 }, { viewedTropeCount: 3 }],
   [
     'Variety Champion',
     { accepted: 6, acceptedRows: 4, acceptedColumns: 4 },
@@ -64,12 +70,6 @@ const evidenceCases = [
     { gameOver: true, totalAccepted: 4, lastAcceptedByMe: true },
     { gameOver: true, totalAccepted: 5, lastAcceptedByMe: true },
   ],
-  [
-    'Brave Caller',
-    { activityTracked: false, submissions: 1, views: 0 },
-    { activityTracked: true, submissions: 1, views: 0 },
-  ],
-  ['Curious Mind', { viewedTropeCount: 7 }, { viewedTropeCount: 8 }],
   ['Blackout', { accepted: 24, playableSpaces: 25 }, { accepted: 25, playableSpaces: 25 }],
   ['Trope Scout', { acceptedProposals: 0 }, { acceptedProposals: 1 }],
   ['Scene Spotter', { acceptedProposals: 1 }, { acceptedProposals: 2 }],
@@ -77,9 +77,6 @@ const evidenceCases = [
   ['Team Player', { otherApprovalVotes: 0 }, { otherApprovalVotes: 1 }],
   ['Watch Party MVP', { otherApprovalVotes: 7 }, { otherApprovalVotes: 8 }],
   ['Consensus Captain', { otherApprovalVotes: 14 }, { otherApprovalVotes: 15 }],
-  ['Trope Explorer', { viewedTropeCount: 1 }, { viewedTropeCount: 2 }],
-  ['Trope Librarian', { viewedTropeCount: 14 }, { viewedTropeCount: 15 }],
-  ['Trope Scholar', { viewedTropeCount: 24 }, { viewedTropeCount: 25 }],
   ['On a Roll', { accepted: 2 }, { accepted: 3 }],
   ['Scene Collector', { accepted: 7 }, { accepted: 8 }],
   ['Bingo Buddy', { bingos: 0 }, { bingos: 1 }],
@@ -104,13 +101,29 @@ describe('superlatives', () => {
     ).toBe(true);
   });
 
-  it('includes stronger same-tier reading and wagering goals', () => {
+  it('does not offer explanation-view milestones and retains wager progress', () => {
     const reading = {
       ...gameState,
       players: { p1: player },
-      superlativeStats: { p1: { viewedTropes: player.board.slice(0, 2) } },
+      superlativeStats: { p1: { views: 100, submissions: 2, viewedTropes: player.board } },
     };
-    expect(getBadgeProgress(player, reading)[0]).toMatchObject({ name: 'Board Cartographer', value: 2, target: 3 });
+    expect(getPlayerAwards([player], reading).p1.badges).toEqual([]);
+    expect(getPlayerAwards([player], reading).p1.superlatives).toEqual([]);
+    expect(getBadgeProgress(player, reading).some((goal) => goal.label === 'Different explanations explored')).toBe(
+      false,
+    );
+    const tracker = createBadgeAchievementTracker();
+    const live = {
+      ...gameState,
+      started: true,
+      serverRevision: 1,
+      players: { p1: player },
+      superlativeStats: { p1: {} },
+    };
+    expect(tracker.update(live)).toEqual([]);
+    live.serverRevision = 2;
+    live.superlativeStats.p1 = { views: 100, submissions: 2, viewedTropes: player.board };
+    expect(tracker.update(live)).toEqual([]);
     const wagerer = { ...player, wagered: [0, 1, 2, 3, 4], marked: [0] };
     const state = { ...gameState, players: { p1: wagerer }, acceptedTropes: ['Trope 0'] };
     expect(getBadgeProgress(wagerer, state)[0]).toMatchObject({ name: 'Wager Whisperer', value: 1, target: 2 });
@@ -126,7 +139,7 @@ describe('superlatives', () => {
     expect(getBadgeProgress(player, gameState).map((goal) => goal.name)).toEqual([
       'Trope Scout',
       'Team Player',
-      'Trope Explorer',
+      'On a Roll',
     ]);
     const evolved = { ...player, marked: Array.from({ length: 25 }, (_, index) => index) };
     const progress = getBadgeProgress(evolved, {
@@ -160,7 +173,13 @@ describe('superlatives', () => {
 
   it('waits for committed revisions instead of announcing optimistic or stale changes', () => {
     const tracker = createBadgeAchievementTracker();
-    const state = { ...gameState, serverRevision: 1, players: { p1: player }, superlativeStats: { p1: {} } };
+    const state = {
+      ...gameState,
+      serverRevision: 1,
+      started: true,
+      players: { p1: player },
+      superlativeStats: { p1: {} },
+    };
     tracker.update(state);
     state.superlativeStats.p1.otherApprovalVotes = 1;
     expect(tracker.update(state)).toEqual([]);
@@ -183,32 +202,26 @@ describe('superlatives', () => {
     expect(tracker.update(state)[0].badgeName).toBe('Team Player');
   });
 
-  it('announces a competitive superlative when its sole holder changes', () => {
+  it('does not announce a setup badge, then announces gameplay awards', () => {
     const tracker = createBadgeAchievementTracker();
-    const players = [
-      { ...player, id: 'p1' },
-      { ...player, id: 'p2' },
-    ];
+    const setupPlayer = { ...player, wagered: [] };
     const state = {
       ...gameState,
       serverRevision: 1,
-      started: true,
-      players: Object.fromEntries(players.map((entry) => [entry.id, entry])),
-      superlativeStats: {
-        p1: { submissions: 2, viewedTropes: player.board.slice(0, 5) },
-        p2: { submissions: 2, viewedTropes: player.board.slice(0, 6) },
-      },
+      started: false,
+      players: { p1: setupPlayer },
+      superlativeStats: { p1: {} },
     };
     expect(tracker.update(state)).toEqual([]);
-    state.superlativeStats.p1.viewedTropes = player.board.slice(0, 8);
+    setupPlayer.wagered = [0, 1, 2, 3, 4];
     state.serverRevision = 2;
-    expect(tracker.update(state)).toContainEqual(
-      expect.objectContaining({
-        playerId: 'p1',
-        badgeName: 'Most Thoughtful',
-        awardKind: 'superlative',
-      }),
-    );
+    expect(tracker.update(state)).toEqual([]);
+    state.started = true;
+    state.serverRevision = 3;
+    expect(tracker.update(state)).toEqual([]);
+    state.superlativeStats.p1.otherApprovalVotes = 1;
+    state.serverRevision = 4;
+    expect(tracker.update(state)).toContainEqual(expect.objectContaining({ badgeName: 'Team Player' }));
   });
 
   it('has an evidence-boundary check for every award', () => {
@@ -224,8 +237,21 @@ describe('superlatives', () => {
     expect(definition.qualifies({ ...baseline, ...earned })).toBe(true);
   });
 
-  it('provides at least 50 distinctions', () => {
-    expect(getAllSuperlatives().length).toBeGreaterThanOrEqual(50);
+  it('keeps the reduced award set free of browsing-only titles', () => {
+    expect(getAllSuperlatives()).toHaveLength(54);
+    expect(getAllSuperlatives().filter((award) => award.kind === 'superlative')).toHaveLength(20);
+    expect(getAllSuperlatives().map((award) => award.name)).not.toEqual(
+      expect.arrayContaining([
+        'Most Thoughtful',
+        'Definition Detective',
+        'Board Cartographer',
+        'Curious Mind',
+        'Trope Explorer',
+        'Trope Librarian',
+        'Trope Scholar',
+        'Brave Caller',
+      ]),
+    );
   });
 
   it('shows no distinction without evidence rather than giving a participation badge', () => {
@@ -283,33 +309,6 @@ describe('superlatives', () => {
     }
   });
 
-  it('uses only shared activity metrics regardless of viewer-local statistics or player order', () => {
-    const players = [
-      { ...player, id: 'p1', seat: 0 },
-      { ...player, id: 'p2', seat: 1 },
-    ];
-    const state = {
-      ...gameState,
-      superlativeStats: {
-        p1: { views: 10, submissions: 2, viewedTropes: player.board.slice(0, 7) },
-        p2: { views: 6, submissions: 2, viewedTropes: player.board.slice(0, 5) },
-      },
-    };
-    const first = getPlayerAwards(players, state);
-    const second = getPlayerAwards([...players].reverse(), state);
-    expect(
-      Object.fromEntries(
-        Object.entries(first).map(([id, awards]) => [id, awards.superlatives.map((award) => award.name)]),
-      ),
-    ).toEqual(
-      Object.fromEntries(
-        Object.entries(second).map(([id, awards]) => [id, awards.superlatives.map((award) => award.name)]),
-      ),
-    );
-    expect(first.p1.superlatives.map((award) => award.name)).toContain('Most Thoughtful');
-    expect(first.p2.superlatives.map((award) => award.name)).not.toContain('Most Thoughtful');
-  });
-
   it('never fills missing awards with an unqualified distinction', () => {
     const players = Array.from({ length: 40 }, (_, index) => ({ ...player, id: `p${index}`, seat: index }));
     const awards = getPlayerAwards(players, gameState);
@@ -330,22 +329,16 @@ describe('superlatives', () => {
     expect(awards.p1.badges.map((award) => award.name)).not.toContain('Pattern Hunter');
   });
 
-  it('does not pick an arbitrary comparative reading winner when exploration ties', () => {
+  it('does not pick an arbitrary almost-bingo superlative winner when tied', () => {
     const players = [
-      { ...player, id: 'p1' },
-      { ...player, id: 'p2' },
+      { ...player, id: 'p1', marked: [0, 1, 2, 3, 5, 6, 7, 8] },
+      { ...player, id: 'p2', marked: [0, 1, 2, 3, 5, 6, 7, 8] },
     ];
-    const state = {
-      ...gameState,
-      superlativeStats: {
-        p1: { views: 10, submissions: 2, viewedTropes: player.board.slice(0, 5) },
-        p2: { views: 10, submissions: 2, viewedTropes: player.board.slice(0, 5) },
-      },
-    };
+    const state = { ...gameState, acceptedTropes: players[0].board.slice(0, 9) };
     expect(
-      Object.values(getPlayerSuperlatives(players, state)).some((award) =>
-        ['Most Thoughtful', 'Definition Detective', 'Curious Mind'].includes(award.name),
-      ),
+      Object.values(getPlayerSuperlatives(players, state))
+        .flat()
+        .some((award) => award.name === 'Most Almost-Bingos'),
     ).toBe(false);
   });
 
@@ -430,46 +423,26 @@ describe('superlatives', () => {
     expect(getPlayerSuperlative({ ...player, marked: [12] }, { ...gameState, freeSpace: true })).toBeNull();
   });
 
-  it('does not choose a most-thoughtful winner when genuine ratios tie despite different activity totals', () => {
-    const state = {
-      ...gameState,
-      superlativeStats: {
-        p1: { views: 8, submissions: 2, viewedTropes: player.board.slice(0, 6) },
-        p2: { views: 12, submissions: 3, viewedTropes: player.board.slice(0, 9) },
-      },
-    };
-    expect(
-      Object.values(
-        getPlayerSuperlatives(
-          [
-            { ...player, id: 'p1' },
-            { ...player, id: 'p2' },
-          ],
-          state,
-        ),
-      ).some((award) => award.name === 'Most Thoughtful'),
-    ).toBe(false);
-  });
-
-  it('moves a dynamic superlative when the sole leader changes', () => {
+  it('moves a dynamic superlative when the sole almost-bingo leader changes', () => {
     const players = [
-      { ...player, id: 'p1' },
-      { ...player, id: 'p2' },
+      { ...player, id: 'p1', marked: [0, 1, 2, 3, 5, 6, 7, 8] },
+      { ...player, id: 'p2', marked: [0, 1, 2, 3, 5, 6, 7, 8, 10, 11, 12, 13] },
     ];
     const state = {
       ...gameState,
-      superlativeStats: {
-        p1: { submissions: 2, viewedTropes: player.board.slice(0, 5) },
-        p2: { submissions: 2, viewedTropes: player.board.slice(0, 6) },
-      },
+      acceptedTropes: players[1].board.slice(0, 19),
+      players: Object.fromEntries(players.map((entry) => [entry.id, entry])),
     };
-    expect(getPlayerAwards(players, state).p2.superlatives.map((award) => award.name)).toContain('Most Thoughtful');
-    expect(getPlayerAwards(players, state).p1.superlatives.map((award) => award.name)).not.toContain('Most Thoughtful');
+    expect(getPlayerAwards(players, state).p2.superlatives.map((award) => award.name)).toContain('Most Almost-Bingos');
+    expect(getPlayerAwards(players, state).p1.superlatives.map((award) => award.name)).not.toContain(
+      'Most Almost-Bingos',
+    );
 
-    state.superlativeStats.p1.viewedTropes = player.board.slice(0, 8);
+    players[0].marked = [0, 1, 2, 3, 5, 6, 7, 8, 10, 11, 12, 13, 15, 16, 17, 18];
+    state.players.p1 = players[0];
     const next = getPlayerAwards(players, state);
-    expect(next.p1.superlatives.map((award) => award.name)).toContain('Most Thoughtful');
-    expect(next.p2.superlatives.map((award) => award.name)).not.toContain('Most Thoughtful');
+    expect(next.p1.superlatives.map((award) => award.name)).toContain('Most Almost-Bingos');
+    expect(next.p2.superlatives.map((award) => award.name)).not.toContain('Most Almost-Bingos');
   });
 
   it('allows players to share badges while holding a distinct exclusive superlative', () => {
@@ -497,6 +470,32 @@ describe('superlatives', () => {
     }
   });
 
+  it('selects the most recently earned current badge and superlative', () => {
+    const wagerer = { ...player, wagered: [0, 1, 2, 3, 4] };
+    const state = {
+      ...gameState,
+      players: { p1: wagerer },
+      superlativeStats: { p1: { acceptedProposals: 1 } },
+      superlativeMilestones: { p1: { firstAccepted: true } },
+      acceptedTropes: ['Trope 0'],
+      awardHistory: { p1: { 'full-house': 100, 'trope-scout': 200, 'first-trope-accepted': 150 } },
+    };
+    expect(getLatestPlayerAwards([wagerer], state).p1).toMatchObject({
+      badge: { name: 'Trope Scout' },
+      superlative: { name: 'First Trope Accepted' },
+    });
+  });
+
+  it('records newly qualified awards once and keeps their shared timestamps stable', () => {
+    const wagerer = { ...player, wagered: [0, 1, 2, 3, 4] };
+    const before = { ...gameState, players: { p1: wagerer }, acceptedTropes: [] };
+    const after = { ...before, awardHistory: {} };
+    recordAwardTransitions(before, after, 100);
+    expect(after.awardHistory.p1['full-house']).toBe(100);
+    recordAwardTransitions(after, after, 200);
+    expect(after.awardHistory.p1['full-house']).toBe(100);
+  });
+
   it('awards Blackout Bound to every player who reaches the threshold', () => {
     const players = [
       { ...player, id: 'p1', marked: [...Array(20).keys()] },
@@ -509,7 +508,7 @@ describe('superlatives', () => {
     }
   });
 
-  it('does not boost a reading award by repeatedly reopening the same definitions', () => {
+  it('does not award badges or superlatives for browsing even with many proposal views', () => {
     const state = {
       ...gameState,
       superlativeStats: {
@@ -517,17 +516,21 @@ describe('superlatives', () => {
         p2: { views: 5, submissions: 2, viewedTropes: player.board.slice(0, 5) },
       },
     };
-    expect(
-      Object.values(
-        getPlayerSuperlatives(
-          [
-            { ...player, id: 'p1' },
-            { ...player, id: 'p2' },
-          ],
+    const players = [
+      { ...player, id: 'p1' },
+      { ...player, id: 'p2' },
+    ];
+    const awards = getPlayerAwards(players, state);
+    for (const id of ['p1', 'p2']) {
+      expect(awards[id].badges).toEqual([]);
+      expect(awards[id].superlatives).toEqual([]);
+      expect(
+        getBadgeProgress(
+          players.find((entry) => entry.id === id),
           state,
-        ),
-      ).some((award) => award.name === 'Most Thoughtful'),
-    ).toBe(false);
+        ).map((goal) => goal.label),
+      ).not.toContain('Different explanations explored');
+    }
   });
 
   it.each([
@@ -575,22 +578,6 @@ describe('superlatives', () => {
     for (const entry of players.slice(1, 6))
       expect(awards[entry.id].badges.map((award) => award.name)).toContain('Team Player');
     for (const entry of players.slice(6)) expect(awards[entry.id].badges).toEqual([]);
-  });
-
-  it('upgrades exploration based on different definitions rather than repeated clicks', () => {
-    for (const [count, name] of [
-      [2, 'Trope Explorer'],
-      [3, 'Board Cartographer'],
-      [8, 'Curious Mind'],
-      [15, 'Trope Librarian'],
-      [25, 'Trope Scholar'],
-    ]) {
-      const state = {
-        ...gameState,
-        superlativeStats: { p1: { views: 100, viewedTropes: player.board.slice(0, count) } },
-      };
-      expect(getPlayerAwards([player], state).p1.badges.map((award) => award.name)).toContain(name);
-    }
   });
 
   it('upgrades ordinary bingo achievements without requiring an exclusive lead', () => {

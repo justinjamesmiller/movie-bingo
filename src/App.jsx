@@ -66,7 +66,12 @@ const MarathonStandingsModal = lazyTool(() => import('./components/MarathonStand
 const PlayerStatsModal = lazyTool(() => import('./components/PlayerStatsModal.jsx'));
 const StatsDashboardModal = lazyTool(() => import('./components/StatsDashboardModal.jsx'));
 import TropeAdvancedActionsModal from './components/TropeAdvancedActionsModal.jsx';
-import { createBadgeAchievementTracker, getBadgeProgress, getPlayerAwards } from './utils/superlatives.js';
+import {
+  createBadgeAchievementTracker,
+  getBadgeProgress,
+  getLatestPlayerAwards,
+  getPlayerAwards,
+} from './utils/superlatives.js';
 import { getGameTheme } from './utils/gameTheme.js';
 
 const MAX_WAGERS = 5;
@@ -140,6 +145,7 @@ function App() {
   const [gameState, setGameState] = useState(null);
   const [myId, setMyId] = useState(null);
   const [toast, setToast] = useState('');
+  const [pendingSubmissions, setPendingSubmissions] = useState(0);
   const [resetModalOpen, setResetModalOpen] = useState(false);
   const [tropesModalOpen, setTropesModalOpen] = useState(false);
   const [allTropesModalOpen, setAllTropesModalOpen] = useState(false);
@@ -200,6 +206,8 @@ function App() {
   const [tropeAdvancedActions, setTropeAdvancedActions] = useState(null);
   const [missedCall, setMissedCall] = useState(null);
   const loadingRequestRef = useRef(0);
+  const pregameWagersRef = useRef(null);
+  const pregameWagerRequestRef = useRef(0);
   const prevClaimIdRef = useRef(null);
   const prevJoinRequestIdRef = useRef(null);
   const gameStateRef = useRef(null);
@@ -208,6 +216,16 @@ function App() {
   const bingoBannerIdRef = useRef(0);
   const finaleBannerTimeoutRef = useRef(null);
   const [theme, setTheme] = useState(initialTheme);
+
+  function dispatchWithPendingStatus(send) {
+    setPendingSubmissions((count) => count + 1);
+    const finish = () => setPendingSubmissions((count) => Math.max(0, count - 1));
+    try {
+      Promise.resolve(send()).then(finish, finish);
+    } catch {
+      finish();
+    }
+  }
 
   useEffect(() => {
     document.body.classList.toggle('dark', theme === 'dark');
@@ -405,7 +423,7 @@ function App() {
   }
 
   function handleSubmitCustomTrope(text, sceneContext) {
-    clientRef.current.proposeCustomTrope(text, sceneContext);
+    dispatchWithPendingStatus(() => clientRef.current.proposeCustomTrope(text, sceneContext));
     setCustomTropeModalOpen(false);
   }
 
@@ -503,25 +521,44 @@ function App() {
     let previousBingoCode = null;
     const client = new GameClient({
       onState: (state, id) => {
+        let visibleState = state;
+        const pendingWagers = pregameWagersRef.current;
+        if (pendingWagers?.code === state.code && pendingWagers.playerId === id && !state.started) {
+          const authoritative = state.players[id]?.wagered || [];
+          if (
+            authoritative.length === pendingWagers.indices.length &&
+            authoritative.every((index, position) => index === pendingWagers.indices[position])
+          ) {
+            pregameWagersRef.current = null;
+          } else {
+            visibleState = {
+              ...state,
+              players: {
+                ...state.players,
+                [id]: { ...state.players[id], wagered: [...pendingWagers.indices] },
+              },
+            };
+          }
+        }
         const previousBadgeWatch = badgeTracker.watchVersion;
         const achievements = badgeTracker.update(state);
         if (badgeTracker.watchVersion !== previousBadgeWatch) setBadgeAnnouncements([]);
         if (achievements.length) setBadgeAnnouncements((queue) => [...queue, achievements].slice(-12));
         const nextCounts = Object.fromEntries(
-          Object.entries(state.players).map(([playerId, player]) => [
+          Object.entries(visibleState.players).map(([playerId, player]) => [
             playerId,
             getCompletedLines(player.marked).length,
           ]),
         );
         const completions =
           previousBingoCounts && previousBingoCode === state.code
-            ? state.seatOrder
-                .map((playerId) => ({ playerId, player: state.players[playerId], count: nextCounts[playerId] }))
+            ? visibleState.seatOrder
+                .map((playerId) => ({ playerId, player: visibleState.players[playerId], count: nextCounts[playerId] }))
                 .filter(({ playerId, player, count }) => player && count > (previousBingoCounts[playerId] ?? count))
             : [];
         const completion = completions.find((event) => event.playerId === id) || completions[0];
         previousBingoCounts = nextCounts;
-        previousBingoCode = state.code;
+        previousBingoCode = visibleState.code;
         if (completion) {
           const name = completion.playerId === id ? '' : ` for ${formatPlayerName(completion.player)}`;
           bingoBannerIdRef.current += 1;
@@ -534,12 +571,14 @@ function App() {
           clearTimeout(bingoBannerTimeoutRef.current);
           bingoBannerTimeoutRef.current = setTimeout(() => setBingoBanner(null), 4000);
         }
-        setGameState({ ...state });
+        setGameState({ ...visibleState });
         setMyId(id);
         setMissedCall((previous) =>
-          previous && state.started && !state.gameOver && state.calls?.[id] === previous.text ? previous : null,
+          previous && visibleState.started && !visibleState.gameOver && visibleState.calls?.[id] === previous.text
+            ? previous
+            : null,
         );
-        gameStateRef.current = state;
+        gameStateRef.current = visibleState;
         myIdRef.current = id;
       },
       onEvent: (evt) => {
@@ -923,8 +962,10 @@ function App() {
     setTropeInfo(null);
     if (!gameState || gameState.started) return;
     const me = gameState.players[myId];
-    const pos = me.wagered.indexOf(index);
-    const next = me.wagered.slice();
+    const pending = pregameWagersRef.current;
+    const current = pending?.code === gameState.code && pending.playerId === myId ? pending.indices : me.wagered;
+    const pos = current.indexOf(index);
+    const next = current.slice();
     if (pos !== -1) {
       next.splice(pos, 1);
     } else {
@@ -934,13 +975,34 @@ function App() {
       }
       next.push(index);
     }
-    clientRef.current.setWager(next);
+    pregameWagersRef.current = { code: gameState.code, playerId: myId, indices: next };
+    const optimistic = {
+      ...gameState,
+      players: { ...gameState.players, [myId]: { ...me, wagered: next } },
+    };
+    gameStateRef.current = optimistic;
+    setGameState(optimistic);
+    const requestId = ++pregameWagerRequestRef.current;
+    const reconcile = (result) => {
+      if (requestId !== pregameWagerRequestRef.current) return;
+      pregameWagersRef.current = null;
+      const authoritative = result?.state || clientRef.current?.state;
+      if (authoritative) {
+        gameStateRef.current = authoritative;
+        setGameState({ ...authoritative });
+      }
+    };
+    try {
+      Promise.resolve(clientRef.current.setWager(next)).then(reconcile, () => reconcile(null));
+    } catch {
+      reconcile(null);
+    }
   }
 
   function handleConfirmTropeClaim(index, sceneContext) {
     setTropeInfo(null);
     if (index == null) return;
-    clientRef.current.claim(index, sceneContext);
+    dispatchWithPendingStatus(() => clientRef.current.claim(index, sceneContext));
   }
 
   function handleAcceptedTropeInfo(text) {
@@ -1049,7 +1111,7 @@ function App() {
   }
 
   function handleChallenge(text, sceneContext) {
-    clientRef.current.challengeTrope(text, sceneContext);
+    dispatchWithPendingStatus(() => clientRef.current.challengeTrope(text, sceneContext));
     setTropeInfo(null);
   }
 
@@ -1059,7 +1121,9 @@ function App() {
   }
 
   function handleConfirmReplace(genre, subgenre, sceneContext) {
-    clientRef.current.proposeReplace(replaceProposal.text, genre, subgenre, sceneContext);
+    dispatchWithPendingStatus(() =>
+      clientRef.current.proposeReplace(replaceProposal.text, genre, subgenre, sceneContext),
+    );
     setReplaceProposal(null);
     setTropeInfo(null);
   }
@@ -1070,7 +1134,7 @@ function App() {
 
   function handleProposeAccept(text, sceneContext) {
     if (!gameState) return;
-    clientRef.current.proposeAccept(text, sceneContext);
+    dispatchWithPendingStatus(() => clientRef.current.proposeAccept(text, sceneContext));
     setTropeInfo(null);
   }
 
@@ -1096,7 +1160,7 @@ function App() {
       showToast('A claim is already being voted on.');
       return;
     }
-    clientRef.current.proposeWagerChange(add, remove);
+    dispatchWithPendingStatus(() => clientRef.current.proposeWagerChange(add, remove));
     setManageWagersOpen(false);
   }
 
@@ -1110,7 +1174,7 @@ function App() {
 
   function handleConfirmBoardSwap() {
     setBoardSwapConfirmOpen(false);
-    clientRef.current.proposeBoardSwap();
+    dispatchWithPendingStatus(() => clientRef.current.proposeBoardSwap());
   }
 
   function handleKickPlayer(id, name) {
@@ -1282,6 +1346,7 @@ function App() {
     .join(', ');
   const inviteUrl = `${window.location.origin}${window.location.pathname}?code=${gameState.code}`;
   const playerAwards = getPlayerAwards(players, gameState);
+  const latestPlayerAwards = getLatestPlayerAwards(players, gameState);
   const badgePlayer = players.find((player) => player.id === superlativeInfo?.playerId) || me;
   const badgePlayerAwards = playerAwards[badgePlayer.id] || { badges: [], superlatives: [] };
   const focusedAward = superlativeInfo?.awardId
@@ -1291,7 +1356,9 @@ function App() {
     : null;
   const selectedAward =
     focusedAward ||
-    (superlativeInfo || badgeProgressOpen ? badgePlayerAwards.superlatives[0] || badgePlayerAwards.badges[0] : null);
+    (superlativeInfo || badgeProgressOpen
+      ? latestPlayerAwards[badgePlayer.id]?.badge || latestPlayerAwards[badgePlayer.id]?.superlative
+      : null);
 
   return (
     <>
@@ -1427,7 +1494,7 @@ function App() {
                 callStats={gameState.callStats}
                 onCallScoreClick={setCallInfoPlayer}
                 wageringEnabled={wageringEnabled}
-                awards={playerAwards}
+                latestAwards={latestPlayerAwards}
                 onAwardClick={(player, award) => setSuperlativeInfo({ playerId: player.id, awardId: award.id })}
               />
             )}
@@ -1719,6 +1786,7 @@ function App() {
           isHost={isHost}
           onMovieClick={() => setMovieIdentityModalOpen(true)}
           awards={playerAwards}
+          latestAwards={latestPlayerAwards}
           onAwardClick={(player, award) => setSuperlativeInfo({ playerId: player.id, awardId: award.id })}
           onClose={() => setGameOverModalOpen(false)}
         />
@@ -1773,9 +1841,11 @@ function App() {
       {(superlativeInfo || badgeProgressOpen) && (
         <SuperlativeModal
           award={selectedAward}
+          awards={[...badgePlayerAwards.superlatives, ...badgePlayerAwards.badges]}
           playerName={badgePlayer.name}
           playerAvatar={badgePlayer.avatar}
           progress={getBadgeProgress(badgePlayer, gameState)}
+          onSelectAward={(award) => setSuperlativeInfo({ playerId: badgePlayer.id, awardId: award.id })}
           onClose={() => {
             setSuperlativeInfo(null);
             setBadgeProgressOpen(false);
@@ -1933,6 +2003,13 @@ function App() {
         )}
 
       {toast && <div className="toast">{toast}</div>}
+      {pendingSubmissions > 0 && (
+        <div className="submission-status" role="status" aria-live="polite">
+          <span className="loading-spinner" aria-hidden="true" />
+          Sending to the game…
+          {pendingSubmissions > 1 && ` (${pendingSubmissions} actions)`}
+        </div>
+      )}
     </>
   );
 }

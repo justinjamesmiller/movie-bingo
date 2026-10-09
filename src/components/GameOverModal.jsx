@@ -11,6 +11,7 @@ export default function GameOverModal({
   bingoCounts = {},
   callStats = {},
   awards = {},
+  latestAwards = {},
   movie,
   isHost = false,
   onMovieClick,
@@ -161,7 +162,7 @@ export default function GameOverModal({
                 </div>
                 {awards[p.id] && (
                   <div className="player-awards" aria-label={`${p.name} awards`}>
-                    {[...awards[p.id].superlatives, ...awards[p.id].badges].map((award) => (
+                    {[latestAwards[p.id]?.superlative, latestAwards[p.id]?.badge].filter(Boolean).map((award) => (
                       <SuperlativeBadge key={award.id} award={award} onClick={() => onAwardClick?.(p, award)} />
                     ))}
                   </div>

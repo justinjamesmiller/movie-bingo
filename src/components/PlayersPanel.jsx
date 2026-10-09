@@ -16,7 +16,7 @@ export default function PlayersPanel({
   callStats = {},
   onCallScoreClick,
   wageringEnabled,
-  awards = {},
+  latestAwards = {},
   onAwardClick,
 }) {
   return (
@@ -27,8 +27,8 @@ export default function PlayersPanel({
           const wagerLocked = p.wagered.length === 5;
           const wageredMarked = p.wagered.filter((i) => p.marked.includes(i)).length;
           const calls = callStats[p.id] || {};
-          const playerAwards = awards[p.id] || { badges: [], superlatives: [] };
-          const distinctions = [...playerAwards.superlatives, ...playerAwards.badges];
+          const latest = latestAwards[p.id] || {};
+          const distinctions = [latest.superlative, latest.badge].filter(Boolean);
           return (
             <li key={p.id}>
               <div className="player-row">

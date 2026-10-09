@@ -9,8 +9,10 @@ and an Edge Function that authenticates and authorizes every state/action relay.
 
 ## How it works
 
-- The first player **hosts** a game, picks one or more genres, and gets a 4-character code. Sub-genres and other
-  settings are available through optional setup controls.
+- The first player **hosts** a game, picks one or more genres, and gets a 4-character code. They can also select a
+  movie/TV show or enter a title manually. Optional setup controls include sub-genres, a free center space, custom
+  genre/sub-genre ratios, a pool of 25–60 unique tropes (40 by default), and custom tropes; Reset Game offers the same
+  choices for the next watch.
 - Others **join** with that code. Everyone gets a random 5x5 board of movie/TV tropes, all spaces
   drawn from the same host-configured trope pool.
 - Before starting, each player can optionally enable **wagers** and pick up to 5 spaces they think are extra likely.
@@ -89,7 +91,10 @@ and an Edge Function that authenticates and authorizes every state/action relay.
   and IMDb link. Details from IMDb selection are shared with the game and saved in reconnect snapshots. Hosts can
   edit the selection; manual entry starts empty and requires a nonblank title before confirmation. During host
   setup, Manual title → Use manual title sets the title before game creation, even when lookup is unavailable.
-- **Activity feed:** approved marks, swaps, wager changes, resets, and unaccepted trope proposals are logged for anyone who looked away. Unaccepted trope proposals include anonymous decline reason totals, or state that no reasons were provided. Player names include their avatars, preserved as they appeared when the event was logged.
+- **Activity feed:** game starts, ends and resets; player joins, removals and recoveries; approved trope and wager
+  changes; and unaccepted trope proposals are logged for anyone who looked away. Unaccepted proposals include anonymous
+  decline-reason totals, or state that no reasons were provided. Player names include their avatars, preserved as they
+  appeared when the event was logged.
 - **Reactions:** quick emoji reactions broadcast briefly to everyone without starting a vote.
 - **Recap:** the host can end the game to show everyone final marked counts, bingo counts, and wager hits. Leader markers
   are shown only for untied, nonzero totals. Highlights include successful callers, recorded multi-line bingo moments,
@@ -99,19 +104,22 @@ and an Edge Function that authenticates and authorizes every state/action relay.
   view their current metrics; hosts get the same read-only view from player management. Tapping your own name opens
   player options with Badge Progress, View Stats, and Edit Name & Avatar, available to hosts and non-hosts alike.
 - **Player distinctions:** explanation opens, trope proposals, outcomes, approval votes, and first-event milestones
-  are tracked in replicated game state. All players see the same evidence-based awards: 40 shareable badges and 11
-  exclusive superlatives. Multiple players can earn a badge such as Blackout Bound or Pattern Hunter at once, and
+  are tracked in replicated game state. All players see the same evidence-based awards: 34 shareable badges and 20
+  exclusive superlatives. Explanation views do not grant awards or badge progress, so browsing tropes does not
+  trigger achievements. Multiple players can earn a badge such as Blackout Bound or Pattern Hunter at once, and
   badges from different tracks can coexist on one player. Within a badge progression, only the highest earned tier
   is shown, such as Team Player → Consensus Builder → Watch Party MVP → Consensus Captain or Bingo Buddy → Double
   Feature → Trophy Hunter. Wager Architect and Pattern Hunter can still appear alongside those awards.
   Superlatives such as First Trope Accepted have at most one holder for the watch; simultaneous firsts are not
-  singled out. Competitive superlatives such as Most Thoughtful or Most Almost-Bingos require a sole leader and can
+  singled out. Competitive superlatives such as Most Almost-Bingos require a sole leader and can
   change holders as evidence changes. Ties have no holder. There is no blanket first-acceptance unlock or
   participation fallback; every award requires its own evidence. Full House can appear after five wagers during setup;
-  reading awards count distinct tropes, and end-of-watch badges wait until the watch ends. Successful calls can earn
+  setup-only awards are shown without sending announcement notifications, and end-of-watch badges wait until the
+  watch ends. Successful calls can earn
   Right on Cue, Prediction Pro, and Crystal Ball; failed or merely attempted predictions do not count. Your own name
   → Badge Progress is available before earning a badge and shows up to three upcoming badge milestones with live
-  evidence counts. Clicking an award shows its details and badge progress. Newly earned badges and changed
+  evidence counts. Each player row and recap shows their latest currently-held badge and latest superlative; opening
+  either shows the player's full current award list and badge progress. Newly earned badges and changed
   superlatives are announced to every connected viewer in grouped, queued notifications that wait behind menus,
   modals, toasts, tutorials, and celebrations. Initial/reconnected snapshots are silent; repeated snapshots and
   previously earned badges do not replay announcements. Resetting a watch clears old notifications and starts fresh
@@ -140,8 +148,8 @@ and an Edge Function that authenticates and authorizes every state/action relay.
   hosts, and can resign once another host remains, except that recovery-password configuration is exclusive to the
   original host.
 - **PWA support:** the site includes a web app manifest and service worker so it can be installed via "Add to Home Screen" / browser install prompts. The app still needs network access for live multiplayer relay traffic.
-- **Notifications:** sound alerts can be muted from the header. iPhone/iPad browsers do not provide reliable webpage
-  vibration support, so the app also uses visible vote prompts and a tab-title alert when an answer is needed.
+- **Notifications:** sound and vibration can be muted independently from the header. Vibration depends on browser/device
+  support; visible vote prompts and a tab-title alert still notify players when an answer is needed.
 
 ## Testing
 

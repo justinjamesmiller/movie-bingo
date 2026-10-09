@@ -166,6 +166,20 @@ describe('App', () => {
     expect(latestClient.setWager).toHaveBeenCalledWith([0]);
   });
 
+  it('shows pregame wagers immediately and accumulates rapid selections before server updates', async () => {
+    await hostTutorialView();
+    fireEvent.click(screen.getByRole('button', { name: '🎯 Optional Wagers' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add Wagers' }));
+
+    for (const index of [0, 1, 2]) {
+      fireEvent.click(screen.getByRole('button', { name: `Board space: Trope ${index + 1}` }));
+      fireEvent.click(screen.getByRole('button', { name: '🎯 Wager this trope' }));
+      expect(screen.getByLabelText(`Board space: Trope ${index + 1}, wagered`)).toHaveClass('wagered');
+    }
+
+    expect(latestClient.setWager.mock.calls).toEqual([[[0]], [[0, 1]], [[0, 1, 2]]]);
+  });
+
   it('does not submit a cancelled trope and forwards a confirmed live claim', async () => {
     clientState.started = true;
     await hostTutorialView();
@@ -176,6 +190,25 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: /Submit to the group/ }));
     expect(latestClient.claim).toHaveBeenCalledWith(0, undefined);
   });
+
+  it('shows a nonblocking status while a trope claim waits for relay confirmation', async () => {
+    clientState.started = true;
+    await hostTutorialView();
+    let confirmRequest;
+    latestClient.claim.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          confirmRequest = resolve;
+        }),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Board space: Trope 1' }));
+    fireEvent.click(screen.getByRole('button', { name: /Submit to the group/ }));
+    expect(screen.getByRole('status')).toHaveTextContent('Sending to the game');
+    await act(async () => confirmRequest({ ok: true }));
+    await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
+  });
+
   it('requires end-game confirmation, opens the recap, and resumes without resetting the board', async () => {
     clientState.started = true;
     const board = [...clientState.players.p1.board];
@@ -248,6 +281,7 @@ describe('App', () => {
     );
   });
   it('shows badge progress before earning a badge and updates it from shared evidence', async () => {
+    clientState.started = true;
     render(<App />);
     fireEvent.change(screen.getByPlaceholderText('e.g. Ashley'), { target: { value: 'Ashley' } });
     fireEvent.click(screen.getByRole('button', { name: 'Host Game', exact: true }));
@@ -1128,24 +1162,25 @@ describe('App', () => {
     );
   });
 
-  it('renders shared superlatives without changing them based on viewer-local clicks', async () => {
+  it('renders a first-acceptance superlative unchanged by browsing', async () => {
     clientState.started = true;
     clientState.acceptedTropes = ['Trope 1'];
     clientState.players.p1.marked = [0];
     clientState.players.p2.marked = [0];
-    clientState.superlativeStats = {
-      p1: { views: 6, submissions: 2, viewedTropes: clientState.players.p1.board.slice(0, 5) },
-      p2: { views: 10, submissions: 2, viewedTropes: clientState.players.p2.board.slice(0, 7) },
-    };
+    clientState.superlativeMilestones = { p2: { firstAccepted: true } };
     render(<App />);
     fireEvent.change(screen.getByPlaceholderText('e.g. Ashley'), { target: { value: 'Ashley' } });
     fireEvent.click(screen.getByRole('button', { name: 'Host Game' }));
     await screen.findByText('Code: ABCD');
-    expect(screen.getByRole('button', { name: 'Superlative: Most Thoughtful' }).closest('li')).toHaveTextContent('Bob');
+    expect(screen.getByRole('button', { name: 'Superlative: First Trope Accepted' }).closest('li')).toHaveTextContent(
+      'Bob',
+    );
     fireEvent.click(screen.getByText('Trope 2', { exact: true }));
     expect(latestClient.recordTropeView).toHaveBeenCalledWith('Trope 2');
     fireEvent.click(screen.getByRole('button', { name: 'Cancel', exact: true }));
-    expect(screen.getByRole('button', { name: 'Superlative: Most Thoughtful' }).closest('li')).toHaveTextContent('Bob');
+    expect(screen.getByRole('button', { name: 'Superlative: First Trope Accepted' }).closest('li')).toHaveTextContent(
+      'Bob',
+    );
   });
 
   it.each([true, false])(

@@ -61,6 +61,28 @@ describe('GameOverModal', () => {
     expect(onCallScoreClick).toHaveBeenCalledWith(expect.objectContaining({ id: '1' }));
   });
 
+  it('shows only the latest badge and superlative in the recap row', () => {
+    const onAwardClick = vi.fn();
+    const badge = { id: 'wager-architect', name: 'Wager Architect', kind: 'badge' };
+    const olderBadge = { id: 'team-player', name: 'Team Player', kind: 'badge' };
+    const superlative = { id: 'first-trope-accepted', name: 'First Trope Accepted', kind: 'superlative' };
+    render(
+      <GameOverModal
+        players={[player()]}
+        awards={{ 1: { badges: [badge, olderBadge], superlatives: [superlative] } }}
+        latestAwards={{ 1: { badge, superlative } }}
+        onAwardClick={onAwardClick}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Badge: Wager Architect' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Superlative: First Trope Accepted' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Badge: Team Player' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Badge: Wager Architect' }));
+    expect(onAwardClick).toHaveBeenCalledWith(expect.objectContaining({ id: '1' }), badge);
+  });
+
   it('crowns the player with the most tropes marked', () => {
     render(
       <GameOverModal

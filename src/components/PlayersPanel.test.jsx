@@ -83,18 +83,18 @@ describe('PlayersPanel', () => {
   it('shows multiple badges alongside a current superlative and opens the selected award', () => {
     const onAwardClick = vi.fn();
     const patternHunter = { id: 'pattern-hunter', kind: 'badge', name: 'Pattern Hunter' };
-    const wagerArchitect = { id: 'wager-architect', kind: 'badge', name: 'Wager Architect' };
     const almostBingos = { id: 'most-almost-bingos', kind: 'superlative', name: 'Most Almost-Bingos' };
     renderPanel({
       onAwardClick,
-      awards: { p1: { superlatives: [almostBingos], badges: [wagerArchitect, patternHunter] } },
+      awards: { p1: { superlatives: [almostBingos], badges: [patternHunter] } },
+      latestAwards: { p1: { superlative: almostBingos, badge: patternHunter } },
     });
 
     expect(screen.getByRole('button', { name: 'Superlative: Most Almost-Bingos' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Badge: Wager Architect' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Badge: Pattern Hunter' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Badge: Wager Architect' }));
-    expect(onAwardClick).toHaveBeenCalledWith(players[0], wagerArchitect);
+    expect(screen.queryByRole('button', { name: 'Badge: Wager Architect' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Badge: Pattern Hunter' }));
+    expect(onAwardClick).toHaveBeenCalledWith(players[0], patternHunter);
   });
 
   it('hides host-only remove controls and pre-game copy when appropriate', () => {

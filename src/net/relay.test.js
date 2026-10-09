@@ -582,12 +582,19 @@ describe('GameClient', () => {
       players.forEach((player) => player.client.toggleCall(player.state.players[player.myId].board[0]));
       await settle();
       const text = host.state.players[host.myId].board[0];
-      host.client.claim(0, { note: 'Opening scene', timestamp: '00:42' });
+      host.client.claim(0, { note: 'Opening scene', timestamp: 'Around the halfway point' });
       await settle();
+      expect(host.state.pendingClaim.sceneContexts[0]).toMatchObject({
+        note: 'Opening scene',
+        timestamp: 'Around the halfway point',
+      });
       await approve();
       expect(host.state.acceptedCalls[text].some((caller) => caller.id === host.myId)).toBe(true);
       expect(host.state.callHistory[host.myId][0].status).toBe('scored');
-      expect(host.state.claimHistory.at(-1).sceneContexts[0].note).toBe('Opening scene');
+      expect(host.state.claimHistory.at(-1).sceneContexts[0]).toMatchObject({
+        note: 'Opening scene',
+        timestamp: 'Around the halfway point',
+      });
       players[1].client.challengeTrope(text);
       await settle();
       const tiedClaim = host.state.pendingClaim;

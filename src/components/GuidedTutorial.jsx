@@ -121,8 +121,8 @@ function TutorialFlow({
       target: 'menu',
       title: isHost ? 'Optional host controls' : 'Make the game your own',
       body: isHost
-        ? 'Open Menu, choose Advanced Options, then Host Settings. Only the original host can set or replace the recovery password. For a lost player session, open the receiving player\'s options → Recover player from. Choose Immediate, 10 seconds, 30 seconds, or 5 minutes. Timed recovery shows a countdown to you and the old player, who can stop it with "I\'m still playing". You can cancel too. Reset Game starts a new watch.'
-        : 'Advanced Options includes the whole trope pool, wager management, activity history, custom tropes, board swapping, and Board Focus. Proposals still go to the group for approval.',
+        ? 'Open Menu → Advanced Options → Host Settings for session controls. Only the original host can set or replace the recovery password. For a lost player session, open the receiving player\'s options → Recover player from. Choose Immediate, 10 seconds, 30 seconds, or 5 minutes. Timed recovery shows a countdown to you and the old player, who can stop it with "I\'m still playing". You can cancel too. Reset Game starts a new watch.'
+        : 'Advanced Options groups tools into Explore & Stats and My Tools. Explore & Stats includes the trope pool, accepted tropes, claim queue, game stats, and marathon history. My Tools includes Accessibility, wager management, custom tropes, board swapping, and Board Focus. Proposals still go to the group for approval.',
       action: 'advanced',
       label: 'Open advanced tools',
     });

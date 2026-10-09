@@ -22,6 +22,7 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           if (id.includes('@supabase/supabase-js')) return 'supabase';
+          if (id.endsWith('/src/utils/superlatives.js')) return 'awards';
           return undefined;
         },
       },

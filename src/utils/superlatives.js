@@ -1,16 +1,6 @@
 import { getAlmostCompletedLines, getCompletedLines } from './bingoLines.js';
 
 const SUPERLATIVE_DEFINITIONS = [
-  [
-    'Most Thoughtful',
-    'Has the highest distinct-explanation-to-proposal ratio among players with at least two proposals and five different tropes explored, exploring at least twice as many different tropes as proposals.',
-    (m) => m.submissions >= 2 && m.viewedTropeCount >= 5 && m.viewedTropeCount >= m.submissions * 2,
-  ],
-  [
-    'Definition Detective',
-    'Explored the most different trope explanations, with at least four different tropes opened.',
-    (m) => m.viewedTropeCount >= 4,
-  ],
   ['First Bingo', 'Completed a bingo line before anyone else.', (m) => m.firstBingo],
   ['First Trope Accepted', 'Had a trope accepted by the group before anyone else.', (m) => m.firstAccepted],
   ['First Wager Achieved', 'Had a wagered trope accepted before anyone else.', (m) => m.firstWagerHit],
@@ -64,6 +54,71 @@ const SUPERLATIVE_DEFINITIONS = [
     (m) => m.submissions >= 4,
   ],
   [
+    'Most Helpful',
+    "Approved the most other players' claims, with at least five helpful votes.",
+    (m) => m.otherApprovalVotes >= 5,
+  ],
+  [
+    'Comeback Captain',
+    'Had at least two proposals accepted after earlier rejections; this is the highest comeback count in the room.',
+    (m) => m.acceptedAfterRejection >= 2,
+    (m) => m.acceptedAfterRejection,
+  ],
+  [
+    'Most Correct Calls',
+    'Correctly predicted the most accepted tropes, with at least three correct calls.',
+    (m) => m.correctCalls >= 3,
+    (m) => m.correctCalls,
+  ],
+  [
+    'Call Accuracy Ace',
+    'Made at least five calls and got three right; this is the highest correct-call rate among eligible players.',
+    (m) => m.callsMade >= 5 && m.correctCalls >= 3,
+    (m) => (m.callsMade > 0 ? m.correctCalls / m.callsMade : 0),
+  ],
+  [
+    'Wager Winner',
+    'Landed at least three wagers and has the most successful wagers in the room.',
+    (m) => m.wagerHits >= 3,
+    (m) => m.wagerHits,
+  ],
+  [
+    'Best Wager Rate',
+    'Placed at least three wagers, hit at least two, and has the highest wager hit rate among eligible players.',
+    (m) => m.wagers >= 3 && m.wagerHits >= 2,
+    (m) => (m.wagers > 0 ? m.wagerHits / m.wagers : 0),
+  ],
+  [
+    'Most Accepted Proposals',
+    'Had at least four proposals accepted and led the room in accepted proposals.',
+    (m) => m.acceptedProposals >= 4,
+    (m) => m.acceptedProposals,
+  ],
+  [
+    'Most Rejected Proposals',
+    'Took at least three no-votes and received more rejected proposals than anyone else.',
+    (m) => m.rejections >= 3,
+    (m) => m.rejections,
+  ],
+  [
+    'Row Captain',
+    'Completed the most full rows, with at least one completed row.',
+    (m) => m.completedRows >= 1,
+    (m) => m.completedRows,
+  ],
+  [
+    'Diagonal Dazzler',
+    'Completed the most diagonal bingo lines, with at least one diagonal.',
+    (m) => m.completedDiagonals >= 1,
+    (m) => m.completedDiagonals,
+  ],
+  [
+    'Corner Collector',
+    'Got at least three board corners accepted and has more accepted corners than anyone else.',
+    (m) => m.acceptedCorners >= 3,
+    (m) => m.acceptedCorners,
+  ],
+  [
     'Consensus Builder',
     "Helped approve at least three other players' accepted trope claims.",
     (m) => m.otherApprovalVotes >= 3,
@@ -93,7 +148,6 @@ const SUPERLATIVE_DEFINITIONS = [
     'Has at least five accepted tropes without submitting a trope proposal.',
     (m) => m.activityTracked && m.accepted >= 5 && m.submissions === 0,
   ],
-  ['Board Cartographer', 'Opened explanations for at least three different tropes.', (m) => m.viewedTropeCount >= 3],
   [
     'Variety Champion',
     'Has at least seven accepted tropes spread across at least four rows and four columns.',
@@ -115,12 +169,6 @@ const SUPERLATIVE_DEFINITIONS = [
     (m) => m.gameOver && m.totalAccepted >= 5 && m.lastAcceptedByMe,
   ],
   [
-    'Brave Caller',
-    'Submitted a trope proposal before opening any trope explanations. Bold move!',
-    (m) => m.activityTracked && m.submissions > 0 && m.views === 0,
-  ],
-  ['Curious Mind', 'Explored at least eight different trope explanations.', (m) => m.viewedTropeCount >= 8],
-  [
     'Blackout',
     'Has every playable trope on their board accepted.',
     (m) => m.playableSpaces > 0 && m.accepted === m.playableSpaces,
@@ -139,13 +187,6 @@ const SUPERLATIVE_DEFINITIONS = [
     "Helped approve at least fifteen other players' accepted trope claims.",
     (m) => m.otherApprovalVotes >= 15,
   ],
-  ['Trope Explorer', 'Opened explanations for at least two different tropes.', (m) => m.viewedTropeCount >= 2],
-  ['Trope Librarian', 'Explored explanations for at least fifteen different tropes.', (m) => m.viewedTropeCount >= 15],
-  [
-    'Trope Scholar',
-    'Explored explanations for at least twenty-five different tropes.',
-    (m) => m.viewedTropeCount >= 25,
-  ],
   ['On a Roll', 'Has at least three accepted tropes on their board.', (m) => m.accepted >= 3],
   ['Scene Collector', 'Has at least eight accepted tropes on their board.', (m) => m.accepted >= 8],
   ['Bingo Buddy', 'Completed a bingo line in this watch.', (m) => m.bingos >= 1],
@@ -157,8 +198,6 @@ const SUPERLATIVE_DEFINITIONS = [
 ];
 
 const leaderScores = {
-  'Most Thoughtful': (metrics) => (metrics.submissions > 0 ? metrics.viewedTropeCount / metrics.submissions : 0),
-  'Definition Detective': (metrics) => metrics.viewedTropeCount,
   'First Bingo': (metrics) => Number(metrics.firstBingo),
   'First Trope Accepted': (metrics) => Number(metrics.firstAccepted),
   'First Wager Achieved': (metrics) => Number(metrics.firstWagerHit),
@@ -166,13 +205,22 @@ const leaderScores = {
   'Most Scattered Board': (metrics) => metrics.nearestLineMissing,
   'Acceptance Magnet': (metrics) => metrics.accepted,
   'Most Decisive': (metrics) => metrics.submissions,
+  'Most Helpful': (metrics) => metrics.otherApprovalVotes,
+  'Comeback Captain': (metrics) => metrics.acceptedAfterRejection,
+  'Most Correct Calls': (metrics) => metrics.correctCalls,
+  'Call Accuracy Ace': (metrics) => (metrics.callsMade > 0 ? metrics.correctCalls / metrics.callsMade : 0),
+  'Wager Winner': (metrics) => metrics.wagerHits,
+  'Best Wager Rate': (metrics) => (metrics.wagers > 0 ? metrics.wagerHits / metrics.wagers : 0),
+  'Most Accepted Proposals': (metrics) => metrics.acceptedProposals,
+  'Most Rejected Proposals': (metrics) => metrics.rejections,
+  'Row Captain': (metrics) => metrics.completedRows,
+  'Diagonal Dazzler': (metrics) => metrics.completedDiagonals,
+  'Corner Collector': (metrics) => metrics.acceptedCorners,
   'Marking Momentum': (metrics) => metrics.accepted,
   'First Mover': (metrics) => Number(metrics.firstProposal),
 };
 
 const superlativeNames = new Set([
-  'Most Thoughtful',
-  'Definition Detective',
   'First Bingo',
   'First Trope Accepted',
   'First Wager Achieved',
@@ -180,6 +228,17 @@ const superlativeNames = new Set([
   'Most Scattered Board',
   'Acceptance Magnet',
   'Most Decisive',
+  'Most Helpful',
+  'Comeback Captain',
+  'Most Correct Calls',
+  'Call Accuracy Ace',
+  'Wager Winner',
+  'Best Wager Rate',
+  'Most Accepted Proposals',
+  'Most Rejected Proposals',
+  'Row Captain',
+  'Diagonal Dazzler',
+  'Corner Collector',
   'Marking Momentum',
   'First Mover',
 ]);
@@ -205,24 +264,31 @@ const awardStages = {
   Unflappable: 3,
   'First Trope Accepted': 2,
   'First Wager Achieved': 2,
-  'Most Thoughtful': 2,
   'Most Decisive': 2,
+  'Most Helpful': 3,
+  'Comeback Captain': 3,
+  'Most Correct Calls': 3,
+  'Call Accuracy Ace': 3,
+  'Wager Winner': 3,
+  'Best Wager Rate': 3,
+  'Most Accepted Proposals': 3,
+  'Most Rejected Proposals': 3,
+  'Row Captain': 3,
+  'Diagonal Dazzler': 3,
+  'Corner Collector': 3,
   'Consensus Builder': 2,
   'Quiet Achiever': 2,
   'Patient Player': 2,
-  'Curious Mind': 2,
   'Bingo Chaser': 2,
   'Wager Whisperer': 2,
   'Wager In Progress': 2,
   'Full House': 2,
   'Scene Spotter': 2,
   'Watch Party MVP': 3,
-  'Trope Librarian': 3,
   'Scene Collector': 3,
   'Right on Cue': 3,
   'Scene Sleuth': 4,
   'Consensus Captain': 4,
-  'Trope Scholar': 4,
   'Bingo Buddy': 4,
   'Prediction Pro': 4,
   'Double Feature': 5,
@@ -275,6 +341,11 @@ export function getSuperlativeMetrics(
   ).length;
   const playableSpaces = player.board.length - (gameState.freeSpace ? 1 : 0);
   const bingos = getCompletedLines(acceptedIndexes).length;
+  const rows = Array.from({ length: 5 }, (_, row) => Array.from({ length: 5 }, (_, col) => row * 5 + col));
+  const diagonals = [
+    [0, 6, 12, 18, 24],
+    [4, 8, 12, 16, 20],
+  ];
   const wagerHits = player.wagered.filter(
     (index) => acceptedIndexes.includes(index) && (!gameState.freeSpace || index !== 12),
   ).length;
@@ -286,6 +357,9 @@ export function getSuperlativeMetrics(
     acceptedRatio: playableSpaces > 0 ? accepted / playableSpaces : 0,
     marked: player.marked.filter((index) => !gameState.freeSpace || index !== 12).length,
     bingos,
+    completedRows: rows.filter((line) => line.every((index) => acceptedIndexes.includes(index))).length,
+    completedDiagonals: diagonals.filter((line) => line.every((index) => acceptedIndexes.includes(index))).length,
+    acceptedCorners: [0, 4, 20, 24].filter((index) => acceptedIndexes.includes(index)).length,
     almostBingos: getAlmostCompletedLines(acceptedIndexes).length,
     wagers: player.wagered.length,
     wagerHits,
@@ -297,6 +371,7 @@ export function getSuperlativeMetrics(
     otherApprovalVotes: personalStats.otherApprovalVotes || 0,
     acceptedProposals: personalStats.acceptedProposals || 0,
     correctCalls: gameState.callStats?.[player.id]?.correct || 0,
+    callsMade: gameState.callStats?.[player.id]?.made || 0,
     acceptedAfterRejection: personalStats.acceptedAfterRejection || 0,
     marksAfterRejection: personalStats.marksAfterRejection || 0,
     viewedTropeCount: new Set(personalStats.viewedTropes || []).size,
@@ -391,6 +466,62 @@ export function getPlayerAwards(players, gameState) {
   );
 }
 
+export function recordAwardTransitions(previousState, state, timestamp = Date.now()) {
+  const players = Object.values(state.players || {});
+  const current = getPlayerAwards(players, state);
+  const previous = previousState ? getPlayerAwards(Object.values(previousState.players || {}), previousState) : {};
+  const logicalTimestamp = Number.isSafeInteger(state.serverRevision)
+    ? state.serverRevision
+    : Number.isSafeInteger(state.rev)
+      ? state.rev
+      : timestamp;
+  for (const player of players) {
+    const playerAwards = current[player.id] || { badges: [], superlatives: [] };
+    const currentAwards = [...playerAwards.badges, ...playerAwards.superlatives];
+    if (!currentAwards.length) continue;
+    state.awardHistory ||= {};
+    const history = (state.awardHistory[player.id] ||= {});
+    const oldAwards = previous[player.id] || { badges: [], superlatives: [] };
+    const oldIds = new Set([...oldAwards.badges, ...oldAwards.superlatives].map((award) => award.id));
+    for (const award of currentAwards) {
+      if (
+        !Number.isFinite(history[award.id]) ||
+        (previousState && !oldIds.has(award.id) && logicalTimestamp > history[award.id])
+      ) {
+        history[award.id] = logicalTimestamp;
+      }
+    }
+  }
+  return state;
+}
+
+function latestAward(awards, history) {
+  return [...awards].sort(
+    (first, second) =>
+      (history[second.id] || 0) - (history[first.id] || 0) ||
+      second.stage - first.stage ||
+      second.score(second.metrics) - first.score(first.metrics) ||
+      second.priority - first.priority,
+  )[0];
+}
+
+export function getLatestPlayerAwards(players, gameState) {
+  const awards = getPlayerAwards(players, gameState);
+  return Object.fromEntries(
+    players.map((player) => {
+      const playerAwards = awards[player.id] || { badges: [], superlatives: [] };
+      const history = gameState.awardHistory?.[player.id] || {};
+      return [
+        player.id,
+        {
+          badge: latestAward(playerAwards.badges, history),
+          superlative: latestAward(playerAwards.superlatives, history),
+        },
+      ];
+    }),
+  );
+}
+
 const progressTracks = [
   {
     metric: 'acceptedProposals',
@@ -410,17 +541,6 @@ const progressTracks = [
       ['Consensus Builder', 3],
       ['Watch Party MVP', 8],
       ['Consensus Captain', 15],
-    ],
-  },
-  {
-    metric: 'viewedTropeCount',
-    label: 'Different explanations explored',
-    goals: [
-      ['Trope Explorer', 2],
-      ['Board Cartographer', 3],
-      ['Curious Mind', 8],
-      ['Trope Librarian', 15],
-      ['Trope Scholar', 25],
     ],
   },
   {
@@ -505,6 +625,7 @@ export function createBadgeAchievementTracker() {
   let previousWatch = 0;
   let seen = new Map();
   let previousSuperlativeOwners = new Map();
+  let previousPlayerIds = new Set();
   let watchVersion = 0;
   let previousRevision;
   return {
@@ -515,6 +636,7 @@ export function createBadgeAchievementTracker() {
       initialized = false;
       seen = new Map();
       previousSuperlativeOwners = new Map();
+      previousPlayerIds = new Set();
     },
     update(state) {
       if (
@@ -530,6 +652,7 @@ export function createBadgeAchievementTracker() {
       if (reset) {
         seen = new Map();
         previousSuperlativeOwners = new Map();
+        previousPlayerIds = new Set();
         watchVersion += 1;
       }
       const players = Object.values(state.players);
@@ -540,7 +663,7 @@ export function createBadgeAchievementTracker() {
         const previous = seen.get(player.id);
         const remembered = previous || new Set();
         for (const award of awards[player.id].badges) {
-          if (initialized && !reset && previous && !previous.has(award.id)) {
+          if (state.started && initialized && !reset && previous && !previous.has(award.id)) {
             achievements.push({
               playerId: player.id,
               name: player.name,
@@ -559,7 +682,13 @@ export function createBadgeAchievementTracker() {
         }
       }
       for (const [awardId, player] of currentSuperlativeOwners) {
-        if (initialized && !reset && previousSuperlativeOwners.get(awardId) !== player.id) {
+        if (
+          state.started &&
+          initialized &&
+          !reset &&
+          previousPlayerIds.has(player.id) &&
+          previousSuperlativeOwners.get(awardId) !== player.id
+        ) {
           const award = awards[player.id].superlatives.find((entry) => entry.id === awardId);
           achievements.push({
             playerId: player.id,
@@ -575,6 +704,7 @@ export function createBadgeAchievementTracker() {
       previousSuperlativeOwners = new Map(
         [...currentSuperlativeOwners].map(([awardId, player]) => [awardId, player.id]),
       );
+      previousPlayerIds = new Set(players.map((player) => player.id));
       initialized = true;
       previousWatch = watch;
       previousStarted = !!state.started;

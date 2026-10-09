@@ -5,6 +5,7 @@ import { gateRelayRequest } from './requestGate.js';
 import { reportSecurityEvent } from './securityEvents.js';
 import { broadcastMessages } from './broadcast.js';
 import { createPhaseTimings } from './performance.js';
+import { recordAwardTransitions } from '../../../src/utils/superlatives.js';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL');
 const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -480,6 +481,7 @@ async function publish(user, body) {
     }
     const nextCode = message.t === 'migrate' ? message.newCode : null;
     const stateCode = nextCode || code;
+    recordAwardTransitions(room.state, message.state);
     const expiresAt = Number.isFinite(message.state.sessionExpiresAt)
       ? new Date(message.state.sessionExpiresAt).toISOString()
       : room.expires_at;

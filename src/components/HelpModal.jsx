@@ -25,13 +25,14 @@ export default function HelpModal({ onClose }) {
 
           <h4>🎬 Hosting &amp; Joining</h4>
           <p className="hint">
-            The host starts with genres only, then can choose sub-genres or open Advanced Host Setup for more options.
-            The host setup page offers an optional recovery password when creating the game, or you can set/replace it
-            later in Menu → Advanced Options → Host Settings. Looking up a real movie or TV show can auto-fill genres —
-            search results show 🎬/📺 so you can tell them apart. Everyone else just enters their name and the
-            4-character game code to join — or uses the menu's invite link or QR code. If lookup is unavailable or
-            cannot find the title, enter Manual title and choose Use manual title before hosting. Your selected genres
-            remain unchanged.
+            The host chooses one or more genres and can look up a movie or TV show, or enter a title manually. Choose
+            Sub-genres to reveal specific categories. Advanced Host Setup includes a free center space, optional custom
+            genre/sub-genre ratios, a 25–60 trope pool (40 by default), and custom tropes with optional presets; Reset
+            Game offers these settings for the next watch. The host setup page also offers an optional recovery password
+            when creating the game, or you can set/replace it later in Menu → Advanced Options → Host Settings. Movie
+            search results show 🎬/📺 so you can tell them apart. Everyone else enters their name and the 4-character
+            game code to join — or uses the menu's invite link or QR code. If lookup is unavailable or cannot find the
+            title, enter Manual title and choose Use manual title before hosting. Your selected genres remain unchanged.
           </p>
           <p className="hint">
             The original host can set a unique recovery password of at least 2 characters in Advanced Options → Host
@@ -153,9 +154,10 @@ export default function HelpModal({ onClose }) {
 
           <h4>📜 Activity Feed</h4>
           <p className="hint">
-            A running log of approved marks, swaps, wager changes, and trope proposals that were not accepted, with
-            timestamps. Unaccepted proposals include anonymous decline reason totals, or say when no reasons were
-            provided — handy for catching up if you looked away from the app for a bit.
+            A running log of game starts, ends and resets; player joins, removals and recoveries; approved trope and
+            wager changes; and trope proposals that were not accepted. Entries include timestamps. Unaccepted proposals
+            include anonymous decline-reason totals, or say when no reasons were provided — handy for catching up if you
+            looked away from the app for a bit.
           </p>
 
           <h4>📊 Player &amp; Game Stats</h4>
@@ -163,22 +165,26 @@ export default function HelpModal({ onClose }) {
             In Advanced Options, Game Stats summarizes the current watch for everyone. Tap another player's name to see
             their current tropes, bingos, and wager hits without adding extra numbers to the player list. Tap your own
             name for player options and choose View Stats to see your own record. Player distinctions use shared
-            activity and board data, so everyone sees the same awards: 40 shareable badges and 11 exclusive
+            activity and board data, so everyone sees the same awards: 34 shareable badges and 20 exclusive
             superlatives. Each superlative has at most one holder at a time, but a player may hold several different
             superlatives. Multiple players can earn a badge such as Blackout Bound or Pattern Hunter, and different
             badge tracks can coexist on one player. Within a progression track, the highest earned tier replaces its
             earlier tiers: Team Player grows into Consensus Builder, Watch Party MVP, and Consensus Captain; Bingo Buddy
             grows into Double Feature and Trophy Hunter. Wager Architect can appear alongside Pattern Hunter and a
             superlative. First Trope Accepted is an exclusive first-event superlative; simultaneous firsts are not
-            singled out. Competitive superlatives such as Most Thoughtful or Most Almost-Bingos require a sole leader,
-            may change holders as the game progresses, and are hidden on ties. Every award needs its own evidence; no
-            first-acceptance or participation fallback exists. One accepted proposal can earn Trope Scout, helping
-            approve another player's claim can earn Team Player, and exploring two different explanations can earn Trope
-            Explorer. Full House can be earned before play after filling five wager slots. Trophy Hunter needs three
-            bingos; successful predictions can earn Right on Cue, Prediction Pro, and Crystal Ball, while failed
-            predictions do not count. Tap your own name → Badge Progress to see up to three upcoming badge milestones
-            with current counts, even before earning one. Opening any award shows its details. New badges and changed
-            superlatives are announced to the group without interrupting votes or replaying awards on reconnect.
+            singled out. Competitive superlatives such as Most Almost-Bingos require a sole leader, may change holders
+            as the game progresses, and are hidden on ties. Every award needs its own evidence; no first-acceptance or
+            participation fallback exists. Browsing trope explanations does not award badges or progress. One accepted
+            proposal can earn Trope Scout, and helping approve another player's claim can earn Team Player. Full House
+            can be earned before play after filling five wager slots; setup-only awards are shown without announcement
+            notifications. Trophy Hunter needs three bingos; successful predictions can earn Right on Cue, Prediction
+            Pro, and Crystal Ball, while failed predictions do not count. Other live-play superlatives include Most
+            Helpful, Comeback Captain, Most Correct Calls, Call Accuracy Ace, Wager Winner, Best Wager Rate, Most
+            Accepted Proposals, Most Rejected Proposals, Row Captain, Diagonal Dazzler, and Corner Collector. Tap your
+            own name → Badge Progress to see up to three upcoming badge milestones with current counts, even before
+            earning one. Player rows and recaps show the latest currently-held badge and latest superlative; open either
+            to browse all of that player's current awards. New badges and changed superlatives are announced to the
+            group without interrupting votes or replaying awards on reconnect.
           </p>
 
           <h4>🎬 Marathon History</h4>
@@ -305,10 +311,10 @@ export default function HelpModal({ onClose }) {
           <summary>App, Sound &amp; Connection</summary>
           <h4>🔊 Sound &amp; 🔌 Connection</h4>
           <p className="hint">
-            The speaker icon in the header mutes/unmutes notification sounds. A visible prompt and browser-tab alert
-            also appear when the group needs your answer; iPhone and iPad browsers do not reliably support webpage
-            vibration. If your connection drops, a red banner appears at the top of the screen so you know to check your
-            network.
+            The speaker and vibration icons in the header independently mute/unmute sound and vibration. Vibration
+            depends on browser and device support. A visible prompt and browser-tab alert still appear when the group
+            needs your answer. If your connection drops, a red banner appears at the top of the screen so you know to
+            check your network.
           </p>
 
           <h4>📲 Install as an app</h4>

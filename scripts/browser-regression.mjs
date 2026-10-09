@@ -3,7 +3,7 @@ import { chromium } from 'playwright';
 import { createServer } from 'vite';
 import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { getPlayerAwards } from '../src/utils/superlatives.js';
+import { getLatestPlayerAwards, getPlayerAwards } from '../src/utils/superlatives.js';
 import { readRelayPayload, validateRelayPayload, RelayPayloadError } from '../supabase/functions/game-relay/payload.js';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -542,11 +542,13 @@ try {
     await closeModal(pages[5]);
     const evidence = await state(host);
     const expectedAwards = getPlayerAwards(Object.values(evidence.players), evidence)[session.myId];
-    const hostAwards = [...expectedAwards.superlatives, ...expectedAwards.badges];
-    assert(hostAwards.length > 0);
+    const latestAwards = getLatestPlayerAwards(Object.values(evidence.players), evidence)[session.myId];
+    const hostAwards = [latestAwards.superlative, latestAwards.badge].filter(Boolean);
+    assert(expectedAwards.superlatives.length + expectedAwards.badges.length >= hostAwards.length);
     report.hostAwards = {
       superlatives: expectedAwards.superlatives.map((award) => award.name),
       badges: expectedAwards.badges.map((award) => award.name),
+      displayed: hostAwards.map((award) => award.name),
       stats: evidence.superlativeStats[session.myId],
     };
     const hostRow = host

@@ -46,7 +46,7 @@ describe('BadgeAnnouncement', () => {
       <BadgeAnnouncement
         achievements={[
           { playerId: 'p1', name: 'Ashley', badgeName: 'Pattern Hunter', awardKind: 'badge' },
-          { playerId: 'p2', name: 'Bob', badgeName: 'Most Thoughtful', awardKind: 'superlative' },
+          { playerId: 'p2', name: 'Bob', badgeName: 'Most Almost-Bingos', awardKind: 'superlative' },
         ]}
         suspended={false}
         onDismiss={vi.fn()}
@@ -57,7 +57,7 @@ describe('BadgeAnnouncement', () => {
       'Ashley earned the badge Pattern Hunter',
     );
     expect(screen.getByRole('status', { name: 'New awards' })).toHaveTextContent(
-      'Bob now holds the superlative Most Thoughtful',
+      'Bob now holds the superlative Most Almost-Bingos',
     );
   });
 });

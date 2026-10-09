@@ -159,6 +159,10 @@ no cloud credentials and does not access production Supabase. Reports/screenshot
 (override with `BROWSER_TEST_OUTPUT`). CI and Pages builds run this command and upload its results even on failure.
 These tests complement, rather than replace, the separately authorized live Supabase smoke/revocation checks.
 
+For a representative slow-device profile, run `CI=true BROWSER_CPU_THROTTLE=4 npm run test:browser`.
+This throttles the first desktop and mobile sessions while the other eight participants run normally; it is not
+a ten-device throttling benchmark or a measurement of production network latency.
+
 ## Supabase setup (required)
 
 1. Create a free project at <https://supabase.com/dashboard> (no credit card required).
@@ -405,6 +409,12 @@ The displayed version and the downloadable release build both follow the committ
 
 ## Notes & limitations
 
+- Secondary tools are loaded on demand with a cancellable loading state; board rendering and claim/vote controls
+  remain eager. Server-mode explanation views batch for up to 300 ms and piggyback on the next action, with deduped
+  batch IDs preserving shared badge evidence. State/outcome broadcasts share a private acknowledged subscription
+  within each request. No-op actions retain retry receipts without advancing the room revision or broadcasting.
+  Apply `202610090001_noop_action_receipts.sql` after the earlier action-receipt migration before deploying this
+  optimized relay. Local bundle/CPU-throttled tests do not establish production latency improvements.
 - Browsers already keep a live local copy of game state for rendering. Reactions and result notifications do not
   block the ordered gameplay/state-save queue. The server reuses a room snapshot only within its current request,
   overlaps independent room/membership reads, and reloads after revision conflicts. Membership and expiry checks

@@ -19,6 +19,9 @@ export function reportSecurityEvent(event, operation, status, extra = {}) {
       status,
       ...(Number.isSafeInteger(extra.retryAfterSeconds) && { retryAfterSeconds: extra.retryAfterSeconds }),
       ...(Number.isSafeInteger(extra.elapsedMs) && extra.elapsedMs >= 0 && { elapsedMs: extra.elapsedMs }),
+      ...(['authentication', 'body_read', 'budget', 'validation', 'database', 'commit', 'broadcast'].includes(
+        extra.phase,
+      ) && { phase: extra.phase }),
     }),
   );
 }

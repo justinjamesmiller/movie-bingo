@@ -188,7 +188,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: '🏁 End Game' }));
     fireEvent.click(screen.getByRole('button', { name: '🏁 End Game' }));
     expect(latestClient.declareGameOver).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole('button', { name: 'Close', exact: true })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Close', exact: true })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Close', exact: true }));
     fireEvent.click(screen.getByRole('button', { name: 'Menu', exact: true }));
     fireEvent.click(screen.getByRole('button', { name: '▶️ Resume Game' }));
@@ -200,18 +200,19 @@ describe('App', () => {
   it('cancels reset without mutation and forwards explicitly confirmed setup changes', async () => {
     clientState.started = true;
     await hostTutorialView();
-    const openReset = () => {
+    const openReset = async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Menu', exact: true }));
       const advanced = screen.queryByRole('button', { name: 'Advanced Options', exact: true });
       if (advanced) fireEvent.click(advanced);
       const hostSection = screen.getByRole('button', { name: 'Host Settings' });
       if (hostSection.getAttribute('aria-expanded') !== 'true') fireEvent.click(hostSection);
       fireEvent.click(screen.getByRole('button', { name: '🔄 Reset Game' }));
+      await screen.findByRole('heading', { name: 'Reset the game?' });
     };
-    openReset();
+    await openReset();
     fireEvent.click(screen.getByRole('button', { name: 'Cancel', exact: true }));
     expect(latestClient.resetGame).not.toHaveBeenCalled();
-    openReset();
+    await openReset();
     fireEvent.change(screen.getByLabelText('Total unique tropes in play'), { target: { value: '40' } });
     fireEvent.click(screen.getByRole('button', { name: 'Reset Game', exact: true }));
     expect(latestClient.resetGame).toHaveBeenCalledTimes(1);
@@ -907,7 +908,7 @@ describe('App', () => {
       expect(screen.getByRole('heading', { name: 'Options for 🎬 Ashley' })).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: '👑 Add Host' })).toBeNull();
       fireEvent.click(screen.getByRole('button', { name: '📊 View Stats' }));
-      expect(screen.getByRole('heading', { name: "🎬 Ashley's Stats" })).toBeInTheDocument();
+      expect(await screen.findByRole('heading', { name: "🎬 Ashley's Stats" })).toBeInTheDocument();
       expect(screen.queryByRole('heading', { name: 'Options for 🎬 Ashley' })).toBeNull();
       fireEvent.click(screen.getByRole('button', { name: 'Close', exact: true }));
       fireEvent.click(screen.getByRole('button', { name: 'Your player options' }));
@@ -978,7 +979,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Advanced Options' }));
     fireEvent.click(screen.getByRole('button', { name: 'Explore & Stats' }));
     fireEvent.click(screen.getByRole('button', { name: 'All Tropes (25)' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Trope 1' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Trope 1' }));
     fireEvent.click(screen.getByRole('button', { name: '👍 Propose it happened' }));
 
     expect(screen.getByRole('heading', { name: 'All Tropes (25)' })).toBeInTheDocument();
@@ -1129,7 +1130,7 @@ describe('App', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Host Game' }));
       await screen.findByText('Code: ABCD');
       fireEvent.click(screen.getByRole('button', { name: /Now watching.*Cached Movie/ }));
-      expect(screen.getByText('Directed by A Director')).toBeInTheDocument();
+      expect(await screen.findByText('Directed by A Director')).toBeInTheDocument();
       expect(screen.getByText('Starring An Actor')).toBeInTheDocument();
       if (host) {
         expect(screen.getByLabelText('Manual title')).toHaveValue('');

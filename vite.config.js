@@ -22,7 +22,6 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           if (id.includes('@supabase/supabase-js')) return 'supabase';
-          if (id.includes('qrcode.react')) return 'qrcode';
           return undefined;
         },
       },

@@ -65,6 +65,29 @@ function makeTrackedClient() {
 }
 
 describe('GameClient', () => {
+  it('includes browsing evidence in the claim request without a preceding view request', async () => {
+    const host = makeTrackedClient();
+    try {
+      await host.client.hostGame('Host', ['horror'], [], false, {}, 25);
+      host.client.startGame();
+      await flush();
+      const publish = vi.spyOn(host.client, '_relayRequest');
+      const text = host.state.players[host.myId].board[0];
+      host.client.recordTropeView(text);
+      host.client.claim(0);
+      await flush();
+      const requests = publish.mock.calls.filter(([operation]) => operation === 'publish');
+      expect(requests).toHaveLength(1);
+      expect(requests[0][1].message.viewBatch.texts).toEqual([text]);
+      expect(host.state.superlativeStats[host.myId].views).toBe(1);
+      expect(host.state.acceptedTropes).toContain(text);
+      const batch = requests[0][1].message.viewBatch;
+      const duplicate = applyServerGameAction(host.state, host.myId, { t: 'flushViews' }, batch);
+      expect(duplicate.state.superlativeStats[host.myId].views).toBe(1);
+    } finally {
+      host.client.destroy();
+    }
+  });
   it('retries uncertain server actions with the same ID rather than applying a fresh action', async () => {
     const host = makeTrackedClient();
     try {
@@ -1116,6 +1139,7 @@ describe('GameClient', () => {
     host.client.recordTropeView(first);
     guest.client.recordTropeView(first);
     guest.client.recordTropeView('Not in the pool');
+    await Promise.all([host.client.flushTropeViews(), guest.client.flushTropeViews()]);
     await flush();
     expect(host.state.superlativeStats[host.myId]).toMatchObject({ views: 3, viewedTropes: [first, second] });
     expect(host.state.superlativeStats[guest.myId]).toMatchObject({ views: 1, viewedTropes: [first] });

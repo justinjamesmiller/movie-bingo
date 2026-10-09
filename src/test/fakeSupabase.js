@@ -406,7 +406,7 @@ export function createClient() {
                 player.connected =
                   entry?.status === 'active' && Date.now() - (entry.lastSeenAt ?? Date.now()) < 120_000;
               }
-              const result = applyServerGameAction(snapshot, playerId, message.action);
+              const result = applyServerGameAction(snapshot, playerId, message.action, message.viewBatch);
               room.revision += 1;
               result.state.serverRevision = room.revision;
               result.state.rev = (room.state.rev || 0) + 1;

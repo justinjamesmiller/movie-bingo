@@ -78,6 +78,18 @@ function fixture() {
 }
 
 describe('gameplay request snapshot reuse', () => {
+  it('records idempotent no-ops without broadcasting or advancing the revision', async () => {
+    const { input, service, room, broadcast } = fixture();
+    input.action = { t: 'settleClaim' };
+    input.requestId = '66666666-6666-4666-8666-666666666666';
+    service.rpc.mockResolvedValue({
+      data: { saved: true, unchanged: true, state: room.state, revision: 0 },
+      error: null,
+    });
+    expect((await executeGameplay(input)).body.unchanged).toBe(true);
+    expect(service.rpc.mock.calls[0][1].p_state.rev).toBe(0);
+    expect(broadcast).not.toHaveBeenCalled();
+  });
   it('uses durable action receipts and does not resend old outcome notifications on replay', async () => {
     const { input, service, room, broadcast } = fixture();
     input.requestId = '44444444-4444-4444-8444-444444444444';

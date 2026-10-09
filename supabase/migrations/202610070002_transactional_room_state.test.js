@@ -11,6 +11,7 @@ const migration = await readFile(resolve(directory, '202610070002_transactional_
 const gameplayMigration = await readFile(resolve(directory, '202610080001_hostless_gameplay.sql'), 'utf8');
 const abuseMigration = await readFile(resolve(directory, '202610080002_relay_abuse_limits.sql'), 'utf8');
 const reliableMigration = await readFile(resolve(directory, '202610080003_reliable_game_actions.sql'), 'utf8');
+const noopMigration = await readFile(resolve(directory, '202610090001_noop_action_receipts.sql'), 'utf8');
 const hostUser = '11111111-1111-4111-8111-111111111111';
 const guestUser = '22222222-2222-4222-8222-222222222222';
 const recoveringUser = '33333333-3333-4333-8333-333333333333';
@@ -98,6 +99,7 @@ beforeAll(async () => {
   await database.exec(gameplayMigration);
   await database.exec(abuseMigration);
   await database.exec(reliableMigration);
+  await database.exec(noopMigration);
   await database.query('insert into auth.users values ($1), ($2), ($3)', [hostUser, guestUser, recoveringUser]);
 });
 
@@ -112,6 +114,25 @@ beforeEach(async () => {
 });
 
 describe('transactional room state migration', () => {
+  it('records a no-op action receipt without changing room revision and rejects stale no-ops', async () => {
+    await insertRoom();
+    const state = (await storedRoom('ABCD')).state;
+    const write = (revision, requestId) =>
+      database.query('select public.commit_bingo_action($1,$2,$3::jsonb,$4,$5,$6,$7) as result', [
+        'ABCD',
+        revision,
+        JSON.stringify(state),
+        guestUser,
+        'p2',
+        requestId,
+        'd'.repeat(64),
+      ]);
+    const requestId = '66666666-6666-4666-8666-666666666666';
+    expect((await write(0, requestId)).rows[0].result).toMatchObject({ saved: true, unchanged: true, revision: 0 });
+    expect((await write(0, requestId)).rows[0].result.replayed).toBe(true);
+    expect((await storedRoom('ABCD')).revision).toBe(0);
+    expect((await write(1, '77777777-7777-4777-8777-777777777777')).rows[0].result.conflict).toBe(true);
+  });
   it('does not undo a saved solo claim when the same action is retried after a lost response', async () => {
     const state = {
       ...roomState(),
@@ -155,7 +176,7 @@ describe('transactional room state migration', () => {
       database.query('select public.commit_bingo_action($1,$2,$3::jsonb,$4,$5,$6,$7) as result', [
         'ABCD',
         0,
-        JSON.stringify(roomState()),
+        JSON.stringify(roomState('ABCD', 'Committed action')),
         guestUser,
         'p2',
         requestId,

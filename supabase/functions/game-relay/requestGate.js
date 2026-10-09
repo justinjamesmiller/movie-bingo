@@ -1,17 +1,27 @@
 import { checkRelayBudget } from './abuseLimits.js';
 import { readRelayPayload, RelayPayloadError, validateRelayPayload } from './payload.js';
 import { reportSecurityEvent } from './securityEvents.js';
+import { createPhaseTimings } from './performance.js';
 
-export async function gateRelayRequest({ request, service, userId, respond, handle, report = reportSecurityEvent }) {
+export async function gateRelayRequest({
+  request,
+  service,
+  userId,
+  respond,
+  handle,
+  report = reportSecurityEvent,
+  timings = createPhaseTimings(report),
+}) {
   const startedAt = Date.now();
   let body;
   let payloadError;
   try {
-    body = await readRelayPayload(request);
+    body = await timings.measure('body_read', () => readRelayPayload(request));
   } catch (error) {
     payloadError = error;
   }
-  const budget = await checkRelayBudget(service, userId, body);
+  timings.setOperation(body?.operation);
+  const budget = await timings.measure('budget', () => checkRelayBudget(service, userId, body));
   if (budget) {
     report(
       budget.status === 429 ? 'relay_rate_limited' : 'relay_budget_unavailable',
@@ -29,7 +39,7 @@ export async function gateRelayRequest({ request, service, userId, respond, hand
     );
   }
   try {
-    body = validateRelayPayload(body);
+    body = await timings.measure('validation', () => validateRelayPayload(body));
   } catch {
     report('relay_payload_rejected', body?.operation, 400);
     return respond({ error: 'Invalid relay payload.' }, 400);

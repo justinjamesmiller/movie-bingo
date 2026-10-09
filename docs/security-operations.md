@@ -3,7 +3,8 @@
 ## Deployment Order
 
 Publish the revision-aware frontend before applying pending transactional migrations and deploying the relay.
-Apply `202610080003_reliable_game_actions.sql` after the earlier migrations. Never deploy a relay that depends
+Apply `202610080003_reliable_game_actions.sql` after the earlier migrations, then
+`202610090001_noop_action_receipts.sql` before deploying the optimized relay. Never deploy a relay that depends
 on missing RPCs: budget checks intentionally fail closed. Run the live smoke script only after deployment.
 Current local tests are not evidence that the linked production project has these changes.
 Publishing, migrations, cloud Auth/CAPTCHA settings, alert destinations, and live verification are separate operator
@@ -20,6 +21,8 @@ In Supabase Logs Explorer, filter game-relay function logs by these structured `
 - `relay_operation_rejected`: distinguish expected access denial from a release compatibility failure.
 - `relay_delivery_pending`: the action saved successfully but broadcast delivery failed. Do not replay it as a new action.
 - `relay_slow_request`: requests taking at least 1.5 seconds; compare cold starts with sustained latency.
+- `relay_phase_timing`: 5%-sampled phase durations for authentication, body reads, budget/schema checks, database
+  reads, commits, and broadcast delivery. Compare p50/p95 per phase without logging user IDs or payloads.
 
 Events exclude tokens, passwords, room state, names, and authenticated user IDs. Keep alert destinations private.
 Configure alert thresholds/destinations in your monitoring provider; the repository does not pretend an external
@@ -59,3 +62,7 @@ for a 24-hour retention window; rooms deleting or expiring also remove their rec
 content is rejected. Actions without IDs remain compatible but do not gain replay protection. A committed action
 returns its authoritative state even if a notification fails. Other clients reconcile on subsequent snapshots and
 heartbeats; the notification path is not a durable delivery queue.
+
+Unchanged actions still save receipts but do not rewrite the room, increment its revision, or broadcast a snapshot.
+View batches are included in action hashes and applied before the accompanying action. Actions without view batches
+retain their original hash format so outstanding retries remain compatible across deployment.

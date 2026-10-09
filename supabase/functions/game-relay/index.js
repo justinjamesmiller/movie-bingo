@@ -3,6 +3,8 @@ import { SERVER_GAMEPLAY_ACTIONS } from '../../../src/net/relay.js';
 import { executeGameplay } from './gameplay.js';
 import { gateRelayRequest } from './requestGate.js';
 import { reportSecurityEvent } from './securityEvents.js';
+import { broadcastMessages } from './broadcast.js';
+import { createPhaseTimings } from './performance.js';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL');
 const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -223,31 +225,7 @@ async function authenticate(request) {
 }
 
 async function broadcast(code, message, sender) {
-  const channel = service.channel(`bingo-${code}`, {
-    config: { private: true, broadcast: { self: false } },
-  });
-  try {
-    await new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error('Realtime relay timed out.')), 5000);
-      channel.subscribe((status, error) => {
-        if (status === 'SUBSCRIBED') {
-          clearTimeout(timeout);
-          resolve();
-        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-          clearTimeout(timeout);
-          reject(error || new Error(`Realtime relay ${status.toLowerCase()}.`));
-        }
-      });
-    });
-    const result = await channel.send({
-      type: 'broadcast',
-      event: 'msg',
-      payload: { ...message, sender },
-    });
-    if (result !== 'ok') throw new Error('Realtime relay rejected the message.');
-  } finally {
-    await service.removeChannel(channel);
-  }
+  return broadcastMessages(service, code, [message], sender);
 }
 
 async function createRoom(user, body) {
@@ -406,8 +384,19 @@ async function commitRoomState(code, state, expectedRevision, expiresAt, newCode
   });
 }
 
-async function processGameplay(code, playerId, action, userId, initialRoom, requestId) {
-  const result = await executeGameplay({ service, broadcast, code, playerId, action, userId, initialRoom, requestId });
+async function processGameplay(code, playerId, action, userId, initialRoom, requestId, viewBatch) {
+  const result = await executeGameplay({
+    service,
+    broadcast,
+    broadcastMany: (roomCode, messages, sender) => broadcastMessages(service, roomCode, messages, sender),
+    code,
+    playerId,
+    action,
+    userId,
+    initialRoom,
+    requestId,
+    viewBatch,
+  });
   return json(result.body, result.status);
 }
 
@@ -443,7 +432,15 @@ async function publish(user, body) {
       return json({ error: 'This seat is awaiting host approval.' }, 403);
     }
     if (SERVER_GAMEPLAY_ACTIONS.has(message.action.t)) {
-      return await processGameplay(code, member.player_id, message.action, user.id, room, body.requestId);
+      return await processGameplay(
+        code,
+        member.player_id,
+        message.action,
+        user.id,
+        room,
+        body.requestId,
+        message.viewBatch,
+      );
     }
     if (!member.is_host && Date.now() - new Date(room.host_seen_at).getTime() > 60_000) {
       return json({ error: 'No authorized host is currently connected.' }, 409);
@@ -547,12 +544,14 @@ Deno.serve(async (request) => {
   if (request.method !== 'POST') return json({ error: 'Method not allowed.' }, 405);
 
   try {
-    const user = await authenticate(request);
+    const timings = createPhaseTimings();
+    const user = await timings.measure('authentication', () => authenticate(request));
     if (!user) return json({ error: 'A valid anonymous-auth session is required.' }, 401);
     return await gateRelayRequest({
       request,
       service,
       userId: user.id,
+      timings,
       respond: json,
       handle: async (body) => {
         if (body.operation === 'create') return await createRoom(user, body);

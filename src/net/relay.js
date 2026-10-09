@@ -60,6 +60,7 @@ const ALLOWED_REACTIONS = new Set(['👏', '😂', '😱', '🔥', '❤️']);
 
 export const SERVER_GAMEPLAY_ACTIONS = new Set([
   'recordTropeView',
+  'flushViews',
   'setWager',
   'proposeWagerChange',
   'proposeBoardSwap',
@@ -84,7 +85,7 @@ export const SERVER_GAMEPLAY_ACTIONS = new Set([
   'cancelBoardRecovery',
 ]);
 
-export function applyServerGameAction(snapshot, playerId, action) {
+export function applyServerGameAction(snapshot, playerId, action, viewBatch) {
   if (!SERVER_GAMEPLAY_ACTIONS.has(action?.t) || !Object.hasOwn(snapshot.players, playerId)) {
     throw new Error('Invalid server gameplay action.');
   }
@@ -117,6 +118,15 @@ export function applyServerGameAction(snapshot, playerId, action) {
     engine._resolveClaim(engine.state.pendingClaim.claimId);
   }
   if (engine.state.pendingBoardRecovery?.expiresAt <= Date.now()) engine._completeBoardRecovery();
+  if (viewBatch) {
+    engine.state.viewBatches ||= {};
+    const seen = (engine.state.viewBatches[playerId] ||= []);
+    if (!seen.includes(viewBatch.id)) {
+      for (const text of viewBatch.texts) engine._applyAction(playerId, { t: 'recordTropeView', text });
+      seen.push(viewBatch.id);
+      engine.state.viewBatches[playerId] = seen.slice(-32);
+    }
+  }
   if (action.t !== 'settleClaim') engine._applyAction(playerId, action);
   return { state: engine.state, messages };
 }
@@ -444,6 +454,7 @@ export class GameClient {
     this._pendingJoin = null;
     clearTimeout(this.claimTimeout);
     clearTimeout(this._reconnectTimer);
+    clearTimeout(this._viewFlushTimer);
     clearTimeout(this._boardRecoveryTimer);
     clearTimeout(this._sessionExpiryTimer);
     clearInterval(this._hostHeartbeatTimer);
@@ -873,7 +884,16 @@ export class GameClient {
   }
 
   recordTropeView(text) {
-    this._dispatch({ t: 'recordTropeView', text });
+    if (!this._serverGameplayEnabled) return this._dispatch({ t: 'recordTropeView', text });
+    if (!this.state?.tropePool.includes(text)) return;
+    this._pendingViews ||= [];
+    if (this._pendingViews.length < 320) this._pendingViews.push(text);
+    clearTimeout(this._viewFlushTimer);
+    this._viewFlushTimer = setTimeout(() => this.flushTropeViews(), 300);
+  }
+
+  flushTropeViews() {
+    return this._dispatch({ t: 'flushViews' });
   }
 
   cancelClaim(claimId) {
@@ -1202,11 +1222,12 @@ export class GameClient {
   // can tell a fresher snapshot from a staler one.
   _send(msg) {
     if (msg.t === 'state' && this.state) this.state.rev = (this.state.rev || 0) + 1;
-    const message = msg;
+    let message = msg;
     const fingerprint = message.t === 'action' ? JSON.stringify(message.action) : null;
     this._uncertainActions ||= new Map();
     const uncertain = this._uncertainActions.get(fingerprint);
     const actionRevision = this.state?.serverRevision;
+    if (uncertain && uncertain.revision === actionRevision && uncertain.message) message = uncertain.message;
     const requestId =
       message.t === 'action'
         ? uncertain?.revision === actionRevision
@@ -1265,7 +1286,7 @@ export class GameClient {
     if (!independent) this._publishQueue = request.catch(() => {});
     return request.catch((error) => {
       if (fingerprint && this._serverGameplayEnabled && error.retryable) {
-        this._uncertainActions.set(fingerprint, { requestId, revision: actionRevision });
+        this._uncertainActions.set(fingerprint, { requestId, revision: actionRevision, message });
         if (this._uncertainActions.size > 32) this._uncertainActions.delete(this._uncertainActions.keys().next().value);
       }
       this.onEvent({ type: 'relayError', message: error.message || 'The secure game relay rejected an update.' });
@@ -1301,7 +1322,16 @@ export class GameClient {
 
   _dispatchConnected(action) {
     if (this._serverGameplayEnabled && SERVER_GAMEPLAY_ACTIONS.has(action?.t)) {
-      return this._send({ t: 'action', from: this.myId, action });
+      clearTimeout(this._viewFlushTimer);
+      if (!this._viewBatch && this._pendingViews?.length)
+        this._viewBatch = { id: crypto.randomUUID(), texts: this._pendingViews.splice(0, 20) };
+      const viewBatch = this._viewBatch;
+      if (action.t === 'flushViews' && !viewBatch) return;
+      return this._send({ t: 'action', from: this.myId, action, ...(viewBatch && { viewBatch }) }).then((result) => {
+        if (result && this._viewBatch === viewBatch) this._viewBatch = null;
+        if (result && this._pendingViews?.length) this._viewFlushTimer = setTimeout(() => this.flushTropeViews(), 300);
+        return result;
+      });
     }
     const currentHostId = this._currentHostId();
     if (!currentHostId) {
@@ -1355,6 +1385,14 @@ export class GameClient {
   }
 
   _emitState() {
+    const watch = this.state?.marathon?.watches?.length || 0;
+    if (this._viewWatch !== undefined && (watch !== this._viewWatch || (this._viewStarted && !this.state?.started))) {
+      clearTimeout(this._viewFlushTimer);
+      this._pendingViews = [];
+      this._viewBatch = null;
+    }
+    this._viewWatch = watch;
+    this._viewStarted = !!this.state?.started;
     if (this.state && !Object.hasOwn(this.state.players, this.myId) && !this._pendingJoin) {
       GameClient.clearSavedSession();
       this.onEvent({ type: 'kicked', reason: 'Your player session was recovered on another device.' });
@@ -2229,6 +2267,7 @@ export class GameClient {
       state.callStats = {};
       state.callHistory = {};
       state.superlativeStats = {};
+      state.viewBatches = {};
       state.superlativeMilestones = {};
       state.bingoEvents = [];
       state.activityLog = [];

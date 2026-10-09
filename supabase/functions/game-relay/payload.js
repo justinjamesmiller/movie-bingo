@@ -185,6 +185,7 @@ const actions = schema.discriminatedUnion('t', [
   action('approveJoin'),
   action('denyJoin', { rotateCode: schema.boolean() }),
   action('settleClaim'),
+  action('flushViews'),
 ]);
 const player = schema
   .object({
@@ -355,7 +356,13 @@ const state = schema
 const envelope = { sender: playerId.optional(), from: playerId.optional() };
 const message = (type, fields = {}) => schema.object({ t: schema.literal(type), ...envelope, ...fields }).strict();
 const messages = schema.discriminatedUnion('t', [
-  message('action', { action: actions }),
+  message('action', {
+    action: actions,
+    viewBatch: schema
+      .object({ id: schema.uuid(), texts: schema.array(text).min(1).max(20) })
+      .strict()
+      .optional(),
+  }),
   message('state', { state }),
   message('welcome', { to: playerId, state }),
   message('migrate', { newCode: code, state }),

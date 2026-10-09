@@ -242,6 +242,11 @@ async function menu(page, name, section) {
     if ((await group.getAttribute('aria-expanded')) !== 'true') await group.click();
   }
   await panel.getByRole('button', { name, exact: true }).click();
+  if (!/Board Focus|tutorial|Resume Game|Copy Invite/i.test(String(name))) await waitForTool(page);
+}
+async function waitForTool(page) {
+  await page.locator('.modal').last().waitFor({ state: 'visible' });
+  await page.locator('.modal [role="status"]').filter({ hasText: 'Loading...' }).waitFor({ state: 'hidden' });
 }
 async function closeModal(page) {
   const close = page
@@ -250,6 +255,18 @@ async function closeModal(page) {
     .getByRole('button', { name: /^(Close|Close recap|Cancel|Never mind|Back to game|Done|Not now)$/i })
     .last();
   await close.click();
+}
+async function waitForGame(page) {
+  await page.waitForFunction(
+    () =>
+      document.querySelector('.hamburger-btn') ||
+      [...document.querySelectorAll('.modal h3')].some((heading) => heading.textContent === 'Something Went Wrong'),
+    null,
+    { timeout: 30_000 },
+  );
+  const error = page.getByRole('heading', { name: 'Something Went Wrong', exact: true });
+  if (await error.isVisible()) throw new Error('Game startup failed: ' + (await error.locator('..').innerText()));
+  await page.getByRole('button', { name: 'Menu', exact: true }).waitFor();
 }
 async function state(page) {
   return page.evaluate(async () => {
@@ -288,7 +305,12 @@ try {
       route.fulfill({ json: { results: { bindings: [] } } }),
     );
     const page = await context.newPage();
-    page.setDefaultTimeout(10_000);
+    page.setDefaultTimeout(process.env.CI ? 30_000 : 10_000);
+    page.setDefaultNavigationTimeout(process.env.CI ? 60_000 : 30_000);
+    if (Number(process.env.BROWSER_CPU_THROTTLE) > 1 && index < 2) {
+      const session = await context.newCDPSession(page);
+      await session.send('Emulation.setCPUThrottlingRate', { rate: Number(process.env.BROWSER_CPU_THROTTLE) });
+    }
     page.on('pageerror', (error) => report.errors.push(error.message));
     pages.push(page);
   }
@@ -383,7 +405,7 @@ try {
   await host.getByRole('button', { name: 'Use manual title' }).click();
   await host.getByLabel('Host recovery password (optional)').fill('xy');
   await host.getByRole('button', { name: 'Host Game', exact: true }).click();
-  await host.getByRole('button', { name: 'Menu', exact: true }).waitFor();
+  await waitForGame(host);
   const session = await host.evaluate(() => JSON.parse(sessionStorage.getItem('movie-bingo-session')));
   await check('ten concurrent browser players join one game', async () => {
     await Promise.all(
@@ -391,7 +413,7 @@ try {
         await page.getByPlaceholder('e.g. Sidney').fill('Browser ' + (index + 2));
         await page.getByPlaceholder('ABCD').fill(session.code);
         await page.getByRole('button', { name: 'Join Game', exact: true }).click();
-        await page.getByRole('button', { name: 'Menu', exact: true }).waitFor();
+        await waitForGame(page);
       }),
     );
     for (const page of pages) await page.getByText('Browser 10', { exact: false }).first().waitFor();
@@ -461,7 +483,7 @@ try {
         let previous = '';
         new MutationObserver(() => {
           const text = document.querySelector('.badge-announcement')?.textContent || '';
-          if (text && text !== previous) window.__badgeNotices.push(text);
+          if (text && text !== previous && !window.__badgeNotices.includes(text)) window.__badgeNotices.push(text);
           previous = text;
         }).observe(document.body, { childList: true, subtree: true, characterData: true });
       });
@@ -582,9 +604,11 @@ try {
     assert((await pages[3].locator('.modal input[type="text"]').count()) > 0);
     await closeModal(pages[3]);
     await pages[3].getByRole('button', { name: /Ten-player screening/ }).click();
+    await waitForTool(pages[3]);
     assert.equal(await pages[3].getByRole('button', { name: 'Use manual title' }).count(), 0);
     await closeModal(pages[3]);
     await pages[3].getByRole('button', { name: 'Help', exact: true }).click();
+    await waitForTool(pages[3]);
     for (const summary of await pages[3].locator('.modal summary').all()) await summary.click();
     assert((await pages[3].locator('.modal').innerText()).includes('Disconnects'));
     await closeModal(pages[3]);
@@ -685,7 +709,7 @@ try {
       .getByRole('button', { name: /End Game/ })
       .click();
     for (const page of pages) {
-      await page.locator('.modal').waitFor();
+      await waitForTool(page);
       assert((await page.locator('.modal').innerText()).includes('Browser 10'));
       await closeModal(page);
     }

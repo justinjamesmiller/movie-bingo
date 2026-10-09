@@ -341,7 +341,9 @@ in the downloadable app.
 Under **Settings → Actions → General → Workflow permissions**, enable **Allow GitHub Actions to create and approve
 pull requests** if repository/organization policy permits it. The workflow grants Release Please scoped
 `contents: write`, `issues: write`, and `pull-requests: write` permissions. It creates PRs, but does not approve or
-merge them for you. No personal token or local GitHub CLI is required.
+merge them for you. If policy prevents enabling that setting, configure a fine-grained token with repository
+`contents`, `issues`, and `pull requests` write access as the `RELEASE_PLEASE_TOKEN` Actions secret; Release Please
+uses it instead of `GITHUB_TOKEN`. Otherwise, no personal token or local GitHub CLI is required.
 
 ### How automatic versioning works
 

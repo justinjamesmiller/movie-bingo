@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { resetFakeSupabase } from '../test/fakeSupabase.js';
+import { resetFakeSupabase, setFakePlayerLastSeen, setFakeServerGameplayEnabled } from '../test/fakeSupabase.js';
 import { getPlayerSuperlatives, getSuperlativeMetrics } from '../utils/superlatives.js';
 
 vi.mock('@supabase/supabase-js', async () => {
@@ -10,7 +10,7 @@ vi.mock('@supabase/supabase-js', async () => {
 vi.stubEnv('VITE_SUPABASE_URL', 'http://localhost/fake');
 vi.stubEnv('VITE_SUPABASE_ANON_KEY', 'fake-anon-key');
 
-const { GameClient } = await import('./relay.js');
+const { GameClient, applyServerGameAction } = await import('./relay.js');
 
 // Broadcast delivery in the fake bus goes through a couple of chained
 // microtasks (sender -> host -> back out to everyone), so give pending
@@ -65,6 +65,34 @@ function makeTrackedClient() {
 }
 
 describe('GameClient', () => {
+  it('retries uncertain server actions with the same ID rather than applying a fresh action', async () => {
+    const host = makeTrackedClient();
+    try {
+      await host.client.hostGame('Host', ['horror'], [], false, {}, 25);
+      const original = host.client._relayRequest.bind(host.client);
+      let attempts = 0;
+      const seen = [];
+      vi.spyOn(host.client, '_relayRequest').mockImplementation((operation, values) => {
+        if (values?.message?.t === 'action') {
+          seen.push(values.requestId);
+          if (++attempts <= 3) {
+            const error = new Error('Lost response');
+            error.retryable = true;
+            throw error;
+          }
+        }
+        return original(operation, values);
+      });
+      await host.client._dispatch({ t: 'setWager', indices: [0] });
+      await host.client._dispatch({ t: 'setWager', indices: [0] });
+      await flush();
+      expect(seen).toHaveLength(4);
+      expect(new Set(seen).size).toBe(1);
+      expect(host.state.players[host.myId].wagered).toEqual([0]);
+    } finally {
+      host.client.destroy();
+    }
+  });
   beforeEach(() => {
     resetFakeSupabase();
     sessionStorage.clear();
@@ -75,6 +103,347 @@ describe('GameClient', () => {
     vi.restoreAllMocks();
     vi.useRealTimers();
   });
+
+  it.each([false, true])(
+    'fully recovers an apparently connected seat immediately with server gameplay %s',
+    async (serverGameplay) => {
+      setFakeServerGameplayEnabled(serverGameplay);
+      const host = makeTrackedClient();
+      const source = makeTrackedClient();
+      const target = makeTrackedClient();
+      try {
+        const code = await host.client.hostGame('Host', ['horror'], [], false, {}, 25);
+        await source.client.joinGame(code, 'Original player');
+        await target.client.joinGame(code, 'Temporary player');
+        source.client.changeAvatar('🍿');
+        source.client.setWager([0, 1]);
+        await flush();
+        host.client.startGame();
+        await flush();
+        const original = structuredClone(host.state.players[source.myId]);
+        await host.client.requestBoardRecovery(target.myId, source.myId, 0);
+        await flush();
+        expect(host.state.players[target.myId]).toMatchObject({
+          name: original.name,
+          avatar: original.avatar,
+          board: original.board,
+          marked: original.marked,
+          wagered: original.wagered,
+        });
+        expect(host.state.players[source.myId]).toBeUndefined();
+        expect(target.state.players[target.myId].name).toBe('Original player');
+        expect(source.events).toContainEqual(
+          expect.objectContaining({ type: 'kicked', reason: 'Your player session was recovered on another device.' }),
+        );
+        expect(host.state.pendingBoardRecovery).toBeNull();
+      } finally {
+        host.client.destroy();
+        source.client.destroy();
+        target.client.destroy();
+      }
+    },
+  );
+
+  it.each([10, 30, 300])(
+    'gives the challenged seat a %s-second deadline and source-only cancellation',
+    async (timeoutSeconds) => {
+      const host = makeTrackedClient();
+      const source = makeTrackedClient();
+      const target = makeTrackedClient();
+      try {
+        const code = await host.client.hostGame('Host', ['horror'], [], false, {}, 25);
+        await source.client.joinGame(code, 'Original');
+        await target.client.joinGame(code, 'New device');
+        host.client.startGame();
+        await flush();
+        const createdAt = Date.now();
+        await host.client.requestBoardRecovery(target.myId, source.myId, timeoutSeconds);
+        await flush();
+        const request = host.state.pendingBoardRecovery;
+        expect(request.expiresAt).toBeGreaterThanOrEqual(createdAt + timeoutSeconds * 1000);
+        target.client.respondToBoardRecovery(request.id);
+        await flush();
+        expect(host.state.pendingBoardRecovery).not.toBeNull();
+        source.client.respondToBoardRecovery(request.id);
+        await flush();
+        expect(host.state.pendingBoardRecovery).toBeNull();
+        expect(Object.keys(host.state.players)).toHaveLength(3);
+        expect(host.state.players[target.myId].name).toBe('New device');
+      } finally {
+        host.client.destroy();
+        source.client.destroy();
+        target.client.destroy();
+      }
+    },
+  );
+
+  it.each([10, 30, 300])(
+    'completes the full recovery at the %s-second shared deadline, not before it',
+    async (timeoutSeconds) => {
+      const host = makeTrackedClient();
+      const source = makeTrackedClient();
+      const target = makeTrackedClient();
+      try {
+        const code = await host.client.hostGame('Host', ['horror'], [], false, {}, 25);
+        await source.client.joinGame(code, 'Original');
+        await target.client.joinGame(code, 'Replacement');
+        host.client.startGame();
+        await flush();
+        const snapshot = structuredClone(host.state);
+        const explored = snapshot.players[source.myId].board[0];
+        snapshot.callStats = { [source.myId]: { made: 4, correct: 2 }, [target.myId]: { made: 20, correct: 10 } };
+        snapshot.superlativeStats = {
+          [source.myId]: { acceptedProposals: 5, viewedTropes: [explored] },
+          [target.myId]: { acceptedProposals: 20, viewedTropes: [snapshot.players[target.myId].board[1]] },
+        };
+        snapshot.marathon = {
+          watches: [
+            {
+              players: [
+                { id: source.myId, name: 'Original', tropes: 7 },
+                { id: target.myId, name: 'Replacement', tropes: 1 },
+              ],
+            },
+          ],
+        };
+        host.client.destroy();
+        source.client.destroy();
+        target.client.destroy();
+        const pending = applyServerGameAction(snapshot, host.myId, {
+          t: 'requestBoardRecovery',
+          sourceId: source.myId,
+          targetId: target.myId,
+          timeoutSeconds,
+        }).state;
+        const deadline = pending.pendingBoardRecovery.expiresAt;
+        const clock = vi.spyOn(Date, 'now').mockReturnValue(deadline - 1);
+        expect(
+          applyServerGameAction(pending, host.myId, { t: 'settleClaim' }).state.players[source.myId],
+        ).toBeDefined();
+        clock.mockReturnValue(deadline);
+        const restored = applyServerGameAction(pending, host.myId, { t: 'settleClaim' }).state;
+        expect(restored.players[source.myId]).toBeUndefined();
+        expect(restored.players[target.myId].name).toBe('Original');
+        expect(restored.callStats[target.myId]).toEqual({ made: 4, correct: 2 });
+        expect(restored.superlativeStats[target.myId]).toEqual({ acceptedProposals: 5, viewedTropes: [explored] });
+        expect(restored.marathon.watches[0].players).toEqual([{ id: target.myId, name: 'Original', tropes: 7 }]);
+        expect(restored.pendingBoardRecovery).toBeNull();
+      } finally {
+        host.client.destroy();
+        source.client.destroy();
+        target.client.destroy();
+      }
+    },
+  );
+
+  it('requires host authorization and permits the initiating host to cancel recovery', async () => {
+    const host = makeTrackedClient();
+    const source = makeTrackedClient();
+    const target = makeTrackedClient();
+    try {
+      const code = await host.client.hostGame('Host', ['horror'], [], false, {}, 25);
+      await source.client.joinGame(code, 'Original');
+      await target.client.joinGame(code, 'Replacement');
+      host.client.startGame();
+      await flush();
+      await expect(
+        source.client._relayRequest('publish', {
+          code,
+          playerId: source.myId,
+          message: {
+            t: 'action',
+            action: { t: 'requestBoardRecovery', sourceId: host.myId, targetId: target.myId, timeoutSeconds: 0 },
+          },
+        }),
+      ).rejects.toThrow('Host authorization');
+      await host.client.requestBoardRecovery(target.myId, host.myId, 0);
+      await flush();
+      expect(host.state.pendingBoardRecovery).toBeUndefined();
+      await host.client.requestBoardRecovery(target.myId, source.myId, 20);
+      await flush();
+      expect(host.state.pendingBoardRecovery).toBeUndefined();
+      await host.client.requestBoardRecovery(target.myId, source.myId, 300);
+      await flush();
+      const request = host.state.pendingBoardRecovery;
+      await host.client.cancelBoardRecovery(request.id);
+      await flush();
+      expect(host.state.pendingBoardRecovery).toBeNull();
+      expect(Object.keys(host.state.players)).toHaveLength(3);
+    } finally {
+      host.client.destroy();
+      source.client.destroy();
+      target.client.destroy();
+    }
+  });
+
+  it.each([false, true])(
+    'does not delay a claim behind a slow reaction with server gameplay %s',
+    async (serverGameplay) => {
+      setFakeServerGameplayEnabled(serverGameplay);
+      const host = makeTrackedClient();
+      let release;
+      const delayed = new Promise((resolve) => {
+        release = resolve;
+      });
+      try {
+        await host.client.hostGame('Host', ['horror'], [], false, {}, 25);
+        host.client.startGame();
+        await flush();
+        const original = host.client._relayRequest.bind(host.client);
+        vi.spyOn(host.client, '_relayRequest').mockImplementation(async (operation, values) => {
+          if (values?.message?.t === 'reaction') await delayed;
+          return original(operation, values);
+        });
+        host.client.sendReaction('😂');
+        await flush(2);
+        const text = host.state.players[host.myId].board[0];
+        host.client.claim(0);
+        await flush();
+        expect(host.state.acceptedTropes).toContain(text);
+      } finally {
+        release();
+        await flush();
+        host.client.destroy();
+      }
+    },
+  );
+
+  it('publishes accepted state without waiting for a slow result notification on the older relay', async () => {
+    setFakeServerGameplayEnabled(false);
+    const host = makeTrackedClient();
+    const guest = makeTrackedClient();
+    let release;
+    const delayed = new Promise((resolve) => {
+      release = resolve;
+    });
+    try {
+      const code = await host.client.hostGame('Host', ['horror'], [], false, {}, 25);
+      await guest.client.joinGame(code, 'Guest');
+      host.client.startGame();
+      await flush();
+      host.client.claim(0);
+      await flush();
+      const text = host.state.pendingClaim.text;
+      const original = host.client._relayRequest.bind(host.client);
+      vi.spyOn(host.client, '_relayRequest').mockImplementation(async (operation, values) => {
+        if (values?.message?.t === 'resolved') await delayed;
+        return original(operation, values);
+      });
+      guest.client.vote(host.state.pendingClaim.claimId, true);
+      await flush();
+      expect(guest.state.acceptedTropes).toContain(text);
+      expect(guest.state.pendingClaim).toBeNull();
+    } finally {
+      release();
+      await flush();
+      host.client.destroy();
+      guest.client.destroy();
+    }
+  });
+
+  it.each([false, true])('accepts solo claims immediately with server gameplay %s', async (serverGameplay) => {
+    setFakeServerGameplayEnabled(serverGameplay);
+    const host = makeTrackedClient();
+    try {
+      await host.client.hostGame('Solo host', ['horror'], [], false, {}, 25);
+      host.client.startGame();
+      await flush();
+      const text = host.state.players[host.myId].board[0];
+      host.client.claim(0);
+      await flush();
+      expect(host.state.acceptedTropes).toContain(text);
+      expect(host.state.pendingClaim).toBeNull();
+    } finally {
+      host.client.destroy();
+    }
+  });
+
+  it.each([
+    [false, 'host'],
+    [false, 'guest'],
+    [true, 'host'],
+    [true, 'guest'],
+  ])('counts the %s server-gameplay %s proposers automatic approval', async (serverGameplay, proposerRole) => {
+    setFakeServerGameplayEnabled(serverGameplay);
+    const host = makeTrackedClient();
+    const guest = makeTrackedClient();
+    try {
+      const code = await host.client.hostGame('Host', ['horror'], [], false, {}, 25);
+      await guest.client.joinGame(code, 'Guest');
+      host.client.startGame();
+      await flush();
+      const proposer = proposerRole === 'host' ? host : guest;
+      const voter = proposerRole === 'host' ? guest : host;
+      const text = proposer.state.players[proposer.myId].board[0];
+      proposer.client.claim(0);
+      await flush();
+      expect(host.state.pendingClaim).toMatchObject({
+        byId: proposer.myId,
+        totalPlayers: 2,
+        votes: { [proposer.myId]: true },
+      });
+      voter.client.vote(host.state.pendingClaim.claimId, true);
+      await flush();
+      for (const participant of [host, guest]) {
+        expect(participant.state.pendingClaim).toBeNull();
+        expect(participant.state.acceptedTropes).toContain(text);
+      }
+    } finally {
+      host.client.destroy();
+      guest.client.destroy();
+    }
+  });
+
+  it.each([
+    { genres: ['horror'], freeSpace: false, totalTropes: 25 },
+    { genres: ['comedy', 'romance'], freeSpace: true, totalTropes: 40 },
+    { genres: ['sci-fi', 'thriller', 'drama'], freeSpace: false, totalTropes: 60 },
+  ])(
+    'plays with ten concurrent players: $genres, free space $freeSpace',
+    async ({ genres, freeSpace, totalTropes }) => {
+      const players = Array.from({ length: 10 }, () => makeTrackedClient());
+      const host = players[0];
+      try {
+        const code = await host.client.hostGame('Player 1', genres, [], freeSpace, {}, totalTropes);
+        await Promise.all(players.slice(1).map((player, index) => player.client.joinGame(code, `Player ${index + 2}`)));
+        await flush(20);
+        for (const player of players) {
+          expect(Object.keys(player.state.players)).toHaveLength(10);
+          expect(new Set(player.state.seatOrder).size).toBe(10);
+        }
+        players.forEach((player) => player.client.setWager([0, 1, 2, 3, 4, 4, 12, 30, -1]));
+        await Promise.all(players.map((player) => player.client._actionQueue));
+        await flush(20);
+        host.client.startGame();
+        await host.client._actionQueue;
+        await flush(20);
+        const text = host.state.players[host.myId].board[0];
+        host.client.claim(0, { note: 'Ten-player test scene', timestamp: '01:23' });
+        await flush();
+        const claimId = host.state.pendingClaim.claimId;
+        players.slice(1, 5).forEach((player) => player.client.vote(claimId, true));
+        await Promise.all(players.slice(1, 5).map((player) => player.client._actionQueue));
+        await flush();
+        expect(host.state.pendingClaim).not.toBeNull();
+        players[5].client.vote(claimId, true);
+        await players[5].client._actionQueue;
+        await flush(20);
+        for (const player of players) {
+          expect(player.state.acceptedTropes).toContain(text);
+          expect(player.state.pendingClaim).toBeNull();
+          expect(player.state).toEqual(host.state);
+          const seat = player.state.players[player.myId];
+          expect(seat.wagered).toHaveLength(5);
+          expect(new Set(seat.wagered).size).toBe(5);
+          if (freeSpace) expect(seat.wagered).not.toContain(12);
+          const index = seat.board.indexOf(text);
+          if (index !== -1) expect(seat.marked).toContain(index);
+        }
+      } finally {
+        players.forEach((player) => player.client.destroy());
+      }
+    },
+  );
 
   it('hosts a new game with the host seated as player 0', async () => {
     const host = makeTrackedClient();
@@ -87,6 +456,427 @@ describe('GameClient', () => {
     expect(host.state.players[host.myId].name).toBe('Alice');
     expect(host.state.players[host.myId].seat).toBe(0);
     expect(host.state.players[host.myId].board).toHaveLength(25);
+  });
+
+  it('exercises player tools, queues, host controls, recovery and repeated watches with ten players', async () => {
+    const players = Array.from({ length: 10 }, () => makeTrackedClient());
+    const host = players[0];
+    const settle = async () => {
+      await Promise.all(players.map((player) => player.client._actionQueue));
+      await Promise.all(players.map((player) => player.client._publishQueue));
+      await flush(16);
+    };
+    const approve = async () => {
+      const claim = players.find((player) => !player.client._destroyed)?.state.pendingClaim;
+      expect(claim).not.toBeNull();
+      players
+        .filter((player) => !player.client._destroyed && player.myId !== claim.byId)
+        .forEach((player) => player.client.vote(claim.claimId, true));
+      await settle();
+    };
+    const converge = () => {
+      const active = players.filter((player) => !player.client._destroyed);
+      active.forEach((player) => expect(player.state).toEqual(active[0].state));
+    };
+    try {
+      const code = await host.client.hostGame(
+        'Player 1',
+        ['horror', 'comedy'],
+        [],
+        false,
+        {},
+        50,
+        ['A ten-player custom scene'],
+        {},
+        {},
+        { title: 'Manual test movie', poster: null },
+        'xy',
+      );
+      await Promise.all(players.slice(1).map((player, index) => player.client.joinGame(code, `Player ${index + 2}`)));
+      await settle();
+      players.forEach((player) => {
+        player.client.setWager([0, 1, 2, 3, 4]);
+        player.client.changeName(`Viewer ${players.indexOf(player) + 1}`);
+        player.client.changeAvatar('🍿');
+        player.client.recordTropeView(player.state.players[player.myId].board[0]);
+        player.client.sendReaction('😂');
+      });
+      await settle();
+      converge();
+      players.forEach((player) => expect(player.events.filter((event) => event.type === 'reaction')).toHaveLength(10));
+      host.client.startGame();
+      await settle();
+      players.forEach((player) => player.client.toggleCall(player.state.players[player.myId].board[0]));
+      await settle();
+      const text = host.state.players[host.myId].board[0];
+      host.client.claim(0, { note: 'Opening scene', timestamp: '00:42' });
+      await settle();
+      await approve();
+      expect(host.state.acceptedCalls[text].some((caller) => caller.id === host.myId)).toBe(true);
+      expect(host.state.callHistory[host.myId][0].status).toBe('scored');
+      expect(host.state.claimHistory.at(-1).sceneContexts[0].note).toBe('Opening scene');
+      players[1].client.challengeTrope(text);
+      await settle();
+      const tiedClaim = host.state.pendingClaim;
+      const others = players.filter((player) => player.myId !== tiedClaim.byId);
+      others.forEach((player, index) => player.client.vote(tiedClaim.claimId, index < 4, 'Not on screen'));
+      await settle();
+      expect(host.state.acceptedTropes).toContain(text);
+      expect(host.state.claimHistory.at(-1)).toMatchObject({ approved: false, reasons: { 'Not on screen': 5 } });
+      players[1].client.challengeTrope(text);
+      await settle();
+      await approve();
+      expect(host.state.acceptedTropes).not.toContain(text);
+      const observations = host.state.tropePool.filter((trope) => trope !== text).slice(0, 10);
+      players.forEach((player, index) => player.client.proposeAccept(observations[index], { timestamp: '01:23' }));
+      await settle();
+      expect(host.state.claimQueue).toHaveLength(9);
+      const queueItem = host.state.claimQueue.find((entry) => entry.byId === players[9].myId);
+      players[2].client.withdrawQueuedClaim(queueItem.id);
+      await settle();
+      expect(host.state.claimQueue).toHaveLength(9);
+      players[9].client.withdrawQueuedClaim(queueItem.id);
+      await settle();
+      expect(host.state.claimQueue).toHaveLength(8);
+      while (host.state.pendingClaim) await approve();
+      expect(host.state.claimQueue).toEqual([]);
+      const duplicateText = host.state.tropePool.find((trope) => !host.state.acceptedTropes.includes(trope));
+      players.forEach((player) => player.client.proposeAccept(duplicateText));
+      await settle();
+      expect(host.state.acceptedTropes).toContain(duplicateText);
+      expect(host.state.acceptedTropeProposers[duplicateText].length).toBeGreaterThanOrEqual(6);
+      players[3].client.proposeCustomTrope('A new ten-player observation', { note: 'A later scene' });
+      await settle();
+      await approve();
+      expect(host.state.tropePool).toContain('A new ten-player observation');
+      expect(host.state.acceptedTropes).toContain('A new ten-player observation');
+      const replacementText = host.state.tropePool.find((trope) => !host.state.acceptedTropes.includes(trope));
+      players[4].client.proposeReplace(replacementText, 'sci-fi', 'general');
+      await settle();
+      await approve();
+      const replacement = host.state.pendingReplacement;
+      expect(replacement).not.toBeNull();
+      players[5].client.chooseReplacement(replacement.candidates[0]);
+      await settle();
+      expect(host.state.pendingReplacement).not.toBeNull();
+      players[4].client.cycleReplacement();
+      await settle();
+      const selected = host.state.pendingReplacement;
+      players[4].client.chooseReplacement(selected.candidates[selected.index]);
+      await settle();
+      expect(host.state.pendingReplacement).toBeNull();
+      expect(host.state.tropePool).toContain(selected.candidates[selected.index]);
+      const wagerer = players[6];
+      const seat = host.state.players[wagerer.myId];
+      const addIndex = seat.board.findIndex(
+        (trope, index) => !seat.wagered.includes(index) && !seat.marked.includes(index),
+      );
+      const removeIndex = seat.wagered[0];
+      wagerer.client.proposeWagerChange([addIndex], [removeIndex]);
+      await settle();
+      await approve();
+      expect(host.state.players[wagerer.myId].wagered).toContain(addIndex);
+      expect(host.state.players[wagerer.myId].wagered).not.toContain(removeIndex);
+      players[7].client.proposeBoardSwap();
+      await settle();
+      await approve();
+      expect(host.state.players[players[7].myId].board).toHaveLength(25);
+      expect(host.state.players[players[7].myId].wagered).toEqual([]);
+      host.client.proposeProfileChange(players[8].myId, 'Proposed viewer', '🎬');
+      await settle();
+      players[8].client.respondToProfileChange(false);
+      await settle();
+      expect(host.state.players[players[8].myId].name).toBe('Viewer 9');
+      host.client.proposeProfileChange(players[8].myId, 'Proposed viewer', '🎬');
+      await settle();
+      players[8].client.respondToProfileChange(true);
+      await settle();
+      expect(host.state.players[players[8].myId]).toMatchObject({ name: 'Proposed viewer', avatar: '🎬' });
+      host.client.addHost(players[1].myId);
+      await settle();
+      expect(players[1].client.isHost()).toBe(true);
+      players[1].client.resignHost();
+      await settle();
+      expect(players[1].client.isHost()).toBe(false);
+      host.client.updateMovie({ title: 'A new manual title', poster: null });
+      host.client.updateSessionLifetime(true, 168);
+      await settle();
+      expect(host.state.movie.title).toBe('A new manual title');
+      expect(host.state.sessionLifetimeHours).toBe(168);
+      converge();
+      host.client.declareGameOver();
+      await settle();
+      players[2].client.proposeAccept(text);
+      await settle();
+      expect(host.state.pendingClaim).toBeNull();
+      players.forEach((player) => expect(player.events.some((event) => event.type === 'gameOver')).toBe(true));
+      host.client.resumeGame();
+      await settle();
+      expect(host.state.gameOver).toBe(false);
+      host.client.resetGame(['comedy', 'romance'], [], true, {}, 40, ['Second watch custom scene']);
+      await settle();
+      expect(host.state.marathon.watches).toHaveLength(1);
+      expect(host.state.acceptedTropes).toEqual([]);
+      expect(host.state.calls).toEqual({});
+      expect(Object.keys(host.state.players)).toHaveLength(10);
+      host.client.startGame();
+      await settle();
+      host.client.destroy();
+      setFakePlayerLastSeen(code, host.myId, Date.now() - 120_001);
+      players[2].client.claim(0);
+      await settle();
+      await approve();
+      const progress = players[2].state.acceptedTropes[0];
+      expect(progress).toBeTruthy();
+      const recovered = makeTrackedClient();
+      players.push(recovered);
+      await recovered.client.joinGame(code, 'Recovered host', 'xy');
+      await settle();
+      expect(recovered.myId).toBe(host.myId);
+      expect(recovered.state.acceptedTropes).toContain(progress);
+      expect(recovered.client.isHost()).toBe(true);
+      converge();
+      expect(players.filter((player) => !player.client._destroyed)).toHaveLength(10);
+      const awards = getPlayerSuperlatives(Object.values(recovered.state.players), recovered.state);
+      players
+        .filter((player) => !player.client._destroyed)
+        .forEach((player) => {
+          expect(getPlayerSuperlatives(Object.values(player.state.players), player.state)).toEqual(awards);
+        });
+    } finally {
+      players.forEach((player) => player.client.destroy());
+    }
+  }, 20_000);
+
+  it('runs gameplay on a stored snapshot without an active host or host privileges', async () => {
+    const host = makeTrackedClient();
+    const code = await host.client.hostGame('Alice', ['horror'], [], false, { horror: 50 }, 25);
+    const guest = makeTrackedClient();
+    await guest.client.joinGame(code, 'Bob');
+    await flush();
+    const snapshot = structuredClone(host.state);
+    snapshot.started = true;
+    snapshot.players[host.myId].connected = false;
+    host.client.destroy();
+    guest.client.destroy();
+    const text = snapshot.players[guest.myId].board[0];
+    const result = applyServerGameAction(snapshot, guest.myId, { t: 'claim', index: 0 });
+    expect(result.state.acceptedTropes).toContain(text);
+    expect(result.state.hostIds).toEqual([host.myId]);
+    expect(result.messages).toContainEqual(expect.objectContaining({ t: 'resolved', approved: true }));
+    expect(snapshot.acceptedTropes).not.toContain(text);
+    expect(() => applyServerGameAction(snapshot, guest.myId, { t: 'reset' })).toThrow();
+  });
+
+  it('handles ten-player queue saturation, immutable votes, board recovery and code rotation', async () => {
+    const players = Array.from({ length: 10 }, () => makeTrackedClient());
+    const host = players[0];
+    const settle = async () => {
+      await Promise.all(players.map((player) => player.client._actionQueue));
+      await Promise.all(players.map((player) => player.client._publishQueue));
+      await flush(20);
+    };
+    try {
+      const code = await host.client.hostGame('Host', ['horror'], [], false, {}, 25);
+      await Promise.all(players.slice(1).map((player, index) => player.client.joinGame(code, `Viewer ${index + 2}`)));
+      host.client.startGame();
+      await settle();
+      host.client.claim(0);
+      await settle();
+      const claimId = host.state.pendingClaim.claimId;
+      players[1].client.vote(claimId, true);
+      players[1].client.vote(claimId, false, 'Not on screen');
+      await settle();
+      expect(host.state.pendingClaim.votes[players[1].myId]).toBe(true);
+      expect(host.state.pendingClaim.disagreeRationaleCounts || {}).toEqual({});
+      players.forEach((player, index) => {
+        for (let count = 0; count < 6; count++) player.client.proposeCustomTrope(`Queue test ${index}-${count}`);
+      });
+      await settle();
+      expect(host.state.claimQueue).toHaveLength(30);
+      for (const player of players) {
+        expect(host.state.claimQueue.filter((entry) => entry.byId === player.myId).length).toBeLessThanOrEqual(5);
+      }
+      expect(
+        players.flatMap((player) => player.events).filter((event) => event.type === 'proposalRejected').length,
+      ).toBeGreaterThan(0);
+      host.client.resetGame(['horror'], [], false, {}, 25);
+      await settle();
+      expect(host.state.claimQueue).toEqual([]);
+      expect(host.state.pendingClaim).toBeNull();
+      host.client.startGame();
+      await settle();
+      const source = players[9];
+      const board = [...host.state.players[source.myId].board];
+      source.client.destroy();
+      setFakePlayerLastSeen(code, source.myId, Date.now() - 120_001);
+      for (const player of players.filter((entry) => !entry.client._destroyed)) {
+        clearTimeout(player.client._pendingDisconnects.get(source.myId));
+        player.client._pendingDisconnects.delete(source.myId);
+        player.client._markDisconnected(source.myId);
+      }
+      await settle();
+      await host.client._dispatch({ t: 'settleClaim' });
+      const replacement = makeTrackedClient();
+      players.push(replacement);
+      expect(await replacement.client.joinGame(code, 'New device')).toEqual({ needsApproval: true });
+      await settle();
+      host.client.approveJoinRequest();
+      await settle();
+      await waitForRelayEvent(replacement, 'joinApproved');
+      host.client.restoreDisconnectedBoard(replacement.myId, source.myId);
+      await settle();
+      expect(host.state.players[replacement.myId].board).toEqual(board);
+      expect(host.state.players[source.myId]).toBeUndefined();
+      expect(Object.keys(host.state.players)).toHaveLength(10);
+      host.client.kickPlayer(replacement.myId);
+      await settle();
+      const rotatedCode = host.state.code;
+      expect(rotatedCode).not.toBe(code);
+      expect(replacement.events.some((event) => event.type === 'kicked')).toBe(true);
+      for (const player of players.filter((entry) => !entry.client._destroyed)) {
+        expect(player.state.code).toBe(rotatedCode);
+        expect(player.state.players[replacement.myId]).toBeUndefined();
+      }
+      const newcomer = makeTrackedClient();
+      players.push(newcomer);
+      await expect(newcomer.client.joinGame(code, 'Old-code join')).rejects.toThrow();
+      expect(await newcomer.client.joinGame(rotatedCode, 'New viewer')).toEqual({ needsApproval: true });
+      await settle();
+      host.client.approveJoinRequest();
+      await settle();
+      await waitForRelayEvent(newcomer, 'joinApproved');
+      expect(Object.keys(host.state.players)).toHaveLength(10);
+      const offline = players[3];
+      offline.client.channel.simulateDrop();
+      offline.client.changeName('Queued offline name');
+      expect(offline.events.some((event) => event.type === 'actionQueued')).toBe(true);
+      offline.client.retryReconnect();
+      await settle();
+      expect(host.state.players[offline.myId].name).toBe('Queued offline name');
+      for (const player of players.filter((entry) => !entry.client._destroyed))
+        expect(player.state).toEqual(host.state);
+      const denial = makeTrackedClient();
+      players.push(denial);
+      expect(await denial.client.joinGame(rotatedCode, 'Denied viewer')).toEqual({ needsApproval: true });
+      await settle();
+      host.client.denyJoinRequest(true);
+      await settle();
+      await waitForRelayEvent(denial, 'joinDenied');
+      expect(host.state.code).not.toBe(rotatedCode);
+      expect(Object.keys(host.state.players)).toHaveLength(10);
+      for (const player of players.filter((entry) => !entry.client._destroyed)) {
+        expect({ ...player.state, rev: 0 }).toEqual({ ...host.state, rev: 0 });
+      }
+    } finally {
+      players.forEach((player) => player.client.destroy());
+    }
+  }, 20_000);
+
+  it('continues claims, calls, and votes with every host disconnected and restores the returning host', async () => {
+    const host = makeTrackedClient();
+    const code = await host.client.hostGame('Alice', ['horror'], [], false, { horror: 50 }, 25);
+    const guest = makeTrackedClient();
+    const other = makeTrackedClient();
+    await guest.client.joinGame(code, 'Bob');
+    await other.client.joinGame(code, 'Cara');
+    host.client.startGame();
+    await flush();
+    host.client.destroy();
+    setFakePlayerLastSeen(code, host.myId, Date.now() - 120_001);
+    const text = guest.state.players[guest.myId].board[0];
+    guest.client.toggleCall(text);
+    guest.client.claim(0);
+    await flush();
+    expect(guest.state.players[host.myId].connected).toBe(false);
+    expect(guest.state.pendingClaim.totalPlayers).toBe(2);
+    other.client.vote(guest.state.pendingClaim.claimId, true);
+    await flush();
+    expect(guest.state.acceptedTropes).toContain(text);
+    expect(other.state.acceptedTropes).toContain(text);
+    expect(guest.state.callStats[guest.myId].correct).toBe(1);
+    expect(guest.client.isHost()).toBe(false);
+    expect(guest.state.hostIds).toEqual([host.myId]);
+    const denied = await guest.client
+      ._relayRequest('publish', {
+        code,
+        playerId: guest.myId,
+        message: { t: 'action', action: { t: 'reset' } },
+      })
+      .catch((error) => error);
+    expect(denied).toBeInstanceOf(Error);
+    const returning = makeTrackedClient();
+    returning.setAuthUserId(host.authUserId);
+    sessionStorage.setItem('movie-bingo-session', JSON.stringify({ code, myId: host.myId, name: 'Alice' }));
+    await returning.client.rejoinGame();
+    expect(returning.state.acceptedTropes).toContain(text);
+    expect(returning.client.isHost()).toBe(true);
+    guest.client.destroy();
+    other.client.destroy();
+    returning.client.destroy();
+  });
+
+  it('enforces server claim deadlines even when a client asks to settle early', async () => {
+    const host = makeTrackedClient();
+    const code = await host.client.hostGame('Alice', ['horror'], [], false, { horror: 50 }, 25);
+    const guest = makeTrackedClient();
+    await guest.client.joinGame(code, 'Bob');
+    host.client.startGame();
+    await flush();
+    const result = applyServerGameAction(host.state, guest.myId, { t: 'claim', index: 0 });
+    const deadline = result.state.pendingClaim.expiresAt;
+    delete result.state.pendingClaim.expiresAt;
+    result.state.pendingClaim.serverManaged = false;
+    const early = applyServerGameAction(result.state, guest.myId, { t: 'settleClaim' });
+    expect(early.state.pendingClaim).not.toBeNull();
+    expect(early.state.pendingClaim.serverManaged).toBe(true);
+    expect(early.state.pendingClaim.expiresAt).toBe(deadline);
+    host.client.destroy();
+    guest.client.destroy();
+    vi.spyOn(Date, 'now').mockReturnValue(deadline);
+    const expired = applyServerGameAction(early.state, guest.myId, { t: 'settleClaim' });
+    expect(expired.state.pendingClaim).toBeNull();
+    expect(expired.state.claimHistory.at(-1).approved).toBe(false);
+    expect(expired.messages).toContainEqual(expect.objectContaining({ t: 'resolved', approved: false }));
+  });
+
+  it('does not throttle committed server snapshots with the shared client-message bucket', async () => {
+    const host = makeTrackedClient();
+    await host.client.hostGame('Alice', ['horror'], [], false, { horror: 50 }, 25);
+    const limiter = vi.spyOn(host.client, '_allowIncomingMessage').mockReturnValue(false);
+    const snapshot = structuredClone(host.state);
+    snapshot.serverRevision += 1;
+    snapshot.movie = { title: 'Committed title', poster: null };
+    host.client._onMessage({ t: 'state', sender: 'pserver', state: snapshot });
+    expect(host.state.movie.title).toBe('Committed title');
+    expect(limiter).not.toHaveBeenCalled();
+    host.client.destroy();
+  });
+
+  it('forwards an optional recovery password during room creation and restores the host seat', async () => {
+    const host = makeTrackedClient();
+    const code = await host.client.hostGame(
+      'Alice',
+      ['horror'],
+      [],
+      false,
+      { horror: 50 },
+      25,
+      [],
+      { horror: 100 },
+      { horror: { general: 100 } },
+      null,
+      'xy',
+    );
+    const hostId = host.myId;
+    host.client.state.players[hostId].connected = false;
+    await host.client._send({ t: 'state', state: host.client.state });
+
+    const returning = makeTrackedClient();
+    await expect(returning.client.joinGame(code, 'Alice on new device', 'xy')).resolves.toEqual({ needsChoice: false });
+
+    expect(returning.myId).toBe(hostId);
+    expect(returning.client.isHost()).toBe(true);
   });
 
   it('recovers the original host board and permissions with a recovery password', async () => {
@@ -342,10 +1132,13 @@ describe('GameClient', () => {
     await guest.client.joinGame(code, 'Bob');
     await flush();
     host.client.state.players[guest.myId].board = [...host.state.players[host.myId].board];
+    await host.client._send({ t: 'state', state: host.client.state });
     host.client.setWager([0]);
     host.client.startGame();
     await flush();
     host.client.state.players[guest.myId].wagered = [0];
+    await host.client._send({ t: 'state', state: host.client.state });
+    await flush();
     for (const index of [0, 1, 2, 3, 4]) {
       host.client.claim(index);
       await flush();
@@ -376,6 +1169,8 @@ describe('GameClient', () => {
     const marked = [1, 2, 3, 4, 5, 10, 15, 20];
     host.client.state.players[host.myId].marked = marked;
     host.client.state.acceptedTropes = marked.map((index) => host.state.players[host.myId].board[index]);
+    await host.client._send({ t: 'state', state: host.client.state });
+    await flush();
 
     host.client.claim(0);
     await flush();
@@ -403,16 +1198,18 @@ describe('GameClient', () => {
     const host = makeTrackedClient();
     await host.client.hostGame('Alice', ['horror'], [], false, { horror: 50 }, 25);
     host.client.startGame();
+    await flush();
     const player = host.client.state.players[host.myId];
     player.marked = [0, 1, 2, 3, 4, 5, 6, 7, 8];
     host.client.state.acceptedTropes = player.marked.map((index) => player.board[index]);
     host.client.state.bingoEvents = [{ id: 'old-first-row', playerId: host.myId, count: 1, ts: 0 }];
+    await host.client._send({ t: 'state', state: host.client.state });
     host.client.claim(0);
     await flush();
-    expect(getSuperlativeMetrics(player, host.state).bingos).toBe(0);
+    expect(getSuperlativeMetrics(host.state.players[host.myId], host.state).bingos).toBe(0);
     host.client.claim(9);
     await flush();
-    expect(getSuperlativeMetrics(player, host.state).bingos).toBe(1);
+    expect(getSuperlativeMetrics(host.state.players[host.myId], host.state).bingos).toBe(1);
     expect(host.state.bingoEvents).toHaveLength(2);
     expect(host.state.bingoEvents.at(-1)).toMatchObject({ playerId: host.myId, count: 1 });
     expect(host.state.bingoEvents.at(-1).id).not.toBe('old-first-row');
@@ -503,6 +1300,7 @@ describe('GameClient', () => {
     await flush();
     expect(host.state.claimQueue).toHaveLength(1);
     guest.client.destroy();
+    setFakePlayerLastSeen(code, guest.myId, Date.now() - 120_001);
     host.client.state.players[guest.myId].connected = false;
     host.client.cancelClaim(host.state.pendingClaim.claimId);
     await flush();
@@ -720,6 +1518,7 @@ describe('GameClient', () => {
     await flush();
     expect(host.state.callHistory[host.myId][1].status).toBe('scored');
     host.client.toggleCall(third);
+    await flush();
     host.client._applyReplacement({ oldText: third, affectedIds: [host.myId] }, 'Replacement trope');
     await host.client._send({ t: 'state', state: host.client.state });
     await flush();
@@ -994,6 +1793,7 @@ describe('GameClient', () => {
     await flush();
     host.client.claim(0);
     await flush();
+    vi.spyOn(Date, 'now').mockReturnValue(host.state.pendingClaim.expiresAt);
     host.client._resolveClaim(host.state.pendingClaim.claimId);
     await flush();
     expect(host.state.activityLog.at(-1).text).toContain(
@@ -1383,6 +2183,7 @@ describe('GameClient', () => {
 
     const oldText = host.state.players[host.myId].board[0];
     host.client.state.acceptedTropes = [oldText];
+    await host.client._send({ t: 'state', state: host.client.state });
 
     host.client.proposeReplace(oldText, 'horror', 'general');
     await flush();
@@ -1606,6 +2407,7 @@ describe('GameClient connection stability', () => {
     const previousExpiry = host.state.sessionExpiresAt;
 
     host.client.updateSessionLifetime(true, 168);
+    await flush();
 
     expect(host.state.sessionExtended).toBe(true);
     expect(host.state.sessionLifetimeHours).toBe(168);

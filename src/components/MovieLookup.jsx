@@ -4,8 +4,10 @@ import { getSuggestedSubgenres } from '../net/wikidataLookup.js';
 import { SUBGENRES_BY_GENRE } from '../data/tropes.js';
 import ErrorModal from './ErrorModal.jsx';
 
-export default function MovieLookup({ onFound, onMovieSelected }) {
+export default function MovieLookup({ onFound, onMovieSelected, allowManualTitle = false }) {
   const [query, setQuery] = useState('');
+  const [manualTitle, setManualTitle] = useState('');
+  const [selectedManualTitle, setSelectedManualTitle] = useState('');
   const [busy, setBusy] = useState(false);
   const [busyMessage, setBusyMessage] = useState('');
   const [results, setResults] = useState(null);
@@ -13,7 +15,8 @@ export default function MovieLookup({ onFound, onMovieSelected }) {
   const [suggestedSubgenres, setSuggestedSubgenres] = useState([]);
   const [error, setError] = useState('');
 
-  if (!isMovieLookupAvailable()) return null;
+  const lookupAvailable = isMovieLookupAvailable();
+  if (!lookupAvailable && !allowManualTitle) return null;
 
   async function handleSearch() {
     setError('');
@@ -39,6 +42,8 @@ export default function MovieLookup({ onFound, onMovieSelected }) {
       const details = await getMovieDetails(imdbID);
       const subgenres = (await getSuggestedSubgenres(imdbID)).filter((s) => details.genres.includes(s.genre));
       setSelected(details);
+      setSelectedManualTitle('');
+      setManualTitle('');
       setSuggestedSubgenres(subgenres);
       setResults(null);
       onFound(details.genres, subgenres);
@@ -57,27 +62,57 @@ export default function MovieLookup({ onFound, onMovieSelected }) {
     setError('');
   }
 
+  function handleManualConfirm() {
+    const title = manualTitle.trim();
+    if (!title || busy) return;
+    handleSearchAgain();
+    setSelectedManualTitle(title);
+    onMovieSelected?.({ title, poster: null });
+  }
+
   return (
     <div className="movie-lookup">
-      <label htmlFor="movie-search">Look up a movie or TV show (via IMDb)</label>
-      <div className="movie-lookup-row">
-        <input
-          id="movie-search"
-          type="text"
-          placeholder="e.g. Spiral or Breaking Bad"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              handleSearch();
-            }
-          }}
-        />
-        <button type="button" className="btn" disabled={busy || !query.trim()} onClick={handleSearch}>
-          {busy ? 'Searching…' : 'Search'}
-        </button>
-      </div>
+      {lookupAvailable && (
+        <>
+          <label htmlFor="movie-search">Look up a movie or TV show (via IMDb)</label>
+          <div className="movie-lookup-row">
+            <input
+              id="movie-search"
+              type="text"
+              placeholder="e.g. Spiral or Breaking Bad"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleSearch();
+                }
+              }}
+            />
+            <button type="button" className="btn" disabled={busy || !query.trim()} onClick={handleSearch}>
+              {busy ? 'Searching…' : 'Search'}
+            </button>
+          </div>
+        </>
+      )}
+      {allowManualTitle && (
+        <>
+          <label htmlFor="setup-manual-movie-title">Manual title</label>
+          <div className="movie-lookup-row manual-title-row">
+            <input
+              id="setup-manual-movie-title"
+              type="text"
+              value={manualTitle}
+              onChange={(event) => setManualTitle(event.target.value)}
+              disabled={busy}
+            />
+            <button type="button" className="btn" disabled={busy || !manualTitle.trim()} onClick={handleManualConfirm}>
+              Use manual title
+            </button>
+          </div>
+          {selectedManualTitle && <p className="hint">Selected title: {selectedManualTitle}</p>}
+        </>
+      )}
       {busy && (
         <div className="movie-lookup-loading" role="status" aria-live="polite">
           <span className="loading-spinner" aria-hidden="true" />

@@ -1,6 +1,7 @@
 [functions.game-relay]
 verify_jwt = true
 entrypoint = "./functions/game-relay/index.js"
+import_map = "./functions/game-relay/import_map.json"
 
 [functions.movie-lookup]
 verify_jwt = true

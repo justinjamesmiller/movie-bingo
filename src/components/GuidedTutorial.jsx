@@ -24,7 +24,7 @@ function tutorialSteps(isHost, started) {
             id: 'claim',
             target: 'board',
             title: 'Spot it, then claim it',
-            body: 'When a trope happens on screen, tap its space and submit it. The group votes; accepted tropes turn green, and completed lines celebrate automatically.',
+            body: 'When a trope happens on screen, tap its space and submit it. Submitting counts as your approval; playing alone, the trope is accepted immediately. Accepted tropes turn green, and completed lines celebrate automatically.',
             action: 'browse',
             label: 'Open a trope',
           },
@@ -32,7 +32,7 @@ function tutorialSteps(isHost, started) {
             id: 'votes',
             target: 'board',
             title: 'Your vote matters',
-            body: 'When someone proposes a trope or a swap, a prompt asks you to agree or disagree. Read the explanation and vote on what happened. You can add an anonymous reason when disagreeing.',
+            body: 'When someone proposes a trope or a swap, a prompt asks you to agree or disagree. The proposer already counts as an approval. You can add an anonymous reason when disagreeing. Advanced options reveals queue controls, then disappears until the next proposal.',
           },
         ]
       : [
@@ -83,8 +83,8 @@ function tutorialSteps(isHost, started) {
       target: 'menu',
       title: isHost ? 'Your host essentials' : 'Keep useful tools close',
       body: isHost
-        ? 'Menu keeps sharing and accepted tropes together. During play you can end the watch for a recap, resume for late scenes, or leave. Advanced host settings are optional.'
-        : 'Menu lets you review accepted tropes and challenge a mark if needed. Your name opens your stats and profile options. You can reopen this tutorial from Menu anytime.',
+        ? 'Menu keeps sharing and watch controls together. Accepted Tropes and Claim Queue live in Advanced Options → Explore & Stats; Accessibility is in My Tools. Your name opens badge progress, stats, and profile options. Original hosts can set a recovery password during host setup or change it later in Advanced Options → Host Settings.'
+        : 'Advanced Options → Explore & Stats lets you review accepted tropes and queued proposals. My Tools includes Accessibility. Your name opens badge progress, stats, and profile options. You can reopen this tutorial from Menu anytime.',
       action: 'menu',
       label: 'Open Menu',
     },
@@ -121,7 +121,7 @@ function TutorialFlow({
       target: 'menu',
       title: isHost ? 'Optional host controls' : 'Make the game your own',
       body: isHost
-        ? 'Advanced Options groups tools into Explore & Stats, My Tools, and Host Settings. Reset Game starts a new watch; Session Lifetime controls how long a disconnected session can return. Hosts can manage other players from the player list.'
+        ? 'Open Menu, choose Advanced Options, then Host Settings. Only the original host can set or replace the recovery password. For a lost player session, open the receiving player\'s options → Recover player from. Choose Immediate, 10 seconds, 30 seconds, or 5 minutes. Timed recovery shows a countdown to you and the old player, who can stop it with "I\'m still playing". You can cancel too. Reset Game starts a new watch.'
         : 'Advanced Options includes the whole trope pool, wager management, activity history, custom tropes, board swapping, and Board Focus. Proposals still go to the group for approval.',
       action: 'advanced',
       label: 'Open advanced tools',

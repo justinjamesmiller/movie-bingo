@@ -4,6 +4,8 @@ import {
   getPlayerSuperlative,
   getPlayerSuperlatives,
   getSuperlativeMetrics,
+  getBadgeProgress,
+  createBadgeAchievementTracker,
 } from './superlatives.js';
 
 const gameState = { acceptedTropes: [], freeSpace: false, players: {} };
@@ -68,9 +70,117 @@ const evidenceCases = [
   ],
   ['Curious Mind', { viewedTropeCount: 7 }, { viewedTropeCount: 8 }],
   ['Blackout', { accepted: 24, playableSpaces: 25 }, { accepted: 25, playableSpaces: 25 }],
+  ['Trope Scout', { acceptedProposals: 0 }, { acceptedProposals: 1 }],
+  ['Scene Spotter', { acceptedProposals: 1 }, { acceptedProposals: 2 }],
+  ['Scene Sleuth', { acceptedProposals: 4 }, { acceptedProposals: 5 }],
+  ['Team Player', { otherApprovalVotes: 0 }, { otherApprovalVotes: 1 }],
+  ['Watch Party MVP', { otherApprovalVotes: 7 }, { otherApprovalVotes: 8 }],
+  ['Consensus Captain', { otherApprovalVotes: 14 }, { otherApprovalVotes: 15 }],
+  ['Trope Explorer', { viewedTropeCount: 1 }, { viewedTropeCount: 2 }],
+  ['Trope Librarian', { viewedTropeCount: 14 }, { viewedTropeCount: 15 }],
+  ['Trope Scholar', { viewedTropeCount: 24 }, { viewedTropeCount: 25 }],
+  ['On a Roll', { accepted: 2 }, { accepted: 3 }],
+  ['Scene Collector', { accepted: 7 }, { accepted: 8 }],
+  ['Bingo Buddy', { bingos: 0 }, { bingos: 1 }],
+  ['Double Feature', { bingos: 1 }, { bingos: 2 }],
+  ['Lucky Pick', { wagerHits: 0 }, { wagerHits: 1 }],
+  ['Right on Cue', { correctCalls: 0 }, { correctCalls: 1 }],
+  ['Prediction Pro', { correctCalls: 2 }, { correctCalls: 3 }],
+  ['Crystal Ball', { correctCalls: 4 }, { correctCalls: 5 }],
 ];
 
 describe('superlatives', () => {
+  it('shows accurate progress toward a stronger milestone', () => {
+    const state = { ...gameState, players: { p1: player }, superlativeStats: { p1: { otherApprovalVotes: 2 } } };
+    expect(getBadgeProgress(player, state)[0]).toMatchObject({ name: 'Consensus Builder', value: 2, target: 3 });
+    const current = getPlayerSuperlatives([player], state).p1;
+    expect(
+      getBadgeProgress(player, state).every((goal) => {
+        const definition = getAllSuperlatives().find((award) => award.id === goal.id);
+        return (
+          definition.stage > current.stage ||
+          (definition.stage === current.stage && definition.priority > current.priority)
+        );
+      }),
+    ).toBe(true);
+  });
+
+  it('includes stronger same-tier reading and wagering goals', () => {
+    const reading = {
+      ...gameState,
+      players: { p1: player },
+      superlativeStats: { p1: { viewedTropes: player.board.slice(0, 2) } },
+    };
+    expect(getBadgeProgress(player, reading)[0]).toMatchObject({ name: 'Board Cartographer', value: 2, target: 3 });
+    const wagerer = { ...player, wagered: [0, 1, 2, 3, 4], marked: [0] };
+    const state = { ...gameState, players: { p1: wagerer }, acceptedTropes: ['Trope 0'] };
+    expect(getBadgeProgress(wagerer, state)[0]).toMatchObject({ name: 'Wager Whisperer', value: 1, target: 2 });
+    const sparse = { ...player, wagered: [0, 1], marked: [0, 1] };
+    expect(
+      getBadgeProgress(sparse, { ...state, players: { p1: sparse }, acceptedTropes: player.board.slice(0, 2) }).some(
+        (goal) => goal.name === 'Clean Sweep',
+      ),
+    ).toBe(false);
+  });
+
+  it('offers starter milestones and no higher milestone after blackout', () => {
+    expect(getBadgeProgress(player, gameState).map((goal) => goal.name)).toEqual([
+      'Trope Scout',
+      'Team Player',
+      'Trope Explorer',
+    ]);
+    const evolved = { ...player, marked: Array.from({ length: 25 }, (_, index) => index) };
+    expect(getBadgeProgress(evolved, { ...gameState, acceptedTropes: player.board, players: { p1: evolved } })).toEqual(
+      [],
+    );
+  });
+
+  it('baselines existing badges, announces new upgrades once, and survives code rotation', () => {
+    const tracker = createBadgeAchievementTracker();
+    const state = {
+      ...gameState,
+      code: 'ABCD',
+      started: true,
+      players: { p1: player },
+      superlativeStats: { p1: { otherApprovalVotes: 1 } },
+    };
+    expect(tracker.update(state)).toEqual([]);
+    state.superlativeStats.p1.otherApprovalVotes = 3;
+    expect(tracker.update(state)).toEqual([
+      expect.objectContaining({ playerId: 'p1', badgeName: 'Consensus Builder' }),
+    ]);
+    expect(tracker.update({ ...state, code: 'EFGH' })).toEqual([]);
+    state.superlativeStats.p1.otherApprovalVotes = 1;
+    expect(tracker.update(state)).toEqual([]);
+    state.superlativeStats.p1.otherApprovalVotes = 3;
+    expect(tracker.update(state)).toEqual([]);
+  });
+
+  it('waits for committed revisions instead of announcing optimistic or stale changes', () => {
+    const tracker = createBadgeAchievementTracker();
+    const state = { ...gameState, serverRevision: 1, players: { p1: player }, superlativeStats: { p1: {} } };
+    tracker.update(state);
+    state.superlativeStats.p1.otherApprovalVotes = 1;
+    expect(tracker.update(state)).toEqual([]);
+    expect(tracker.update({ ...state, serverRevision: 0 })).toEqual([]);
+    state.serverRevision = 2;
+    expect(tracker.update(state)[0].badgeName).toBe('Team Player');
+    expect(tracker.update(state)).toEqual([]);
+  });
+
+  it('silently seeds new seats and permits new achievements after a watch reset', () => {
+    const tracker = createBadgeAchievementTracker();
+    const state = { ...gameState, started: true, players: { p1: player }, superlativeStats: { p1: {} } };
+    tracker.update(state);
+    state.superlativeStats.p1.otherApprovalVotes = 1;
+    expect(tracker.update(state)[0].badgeName).toBe('Team Player');
+    state.players.p2 = { ...player, id: 'p2' };
+    state.superlativeStats.p2 = { otherApprovalVotes: 8 };
+    expect(tracker.update(state)).toEqual([]);
+    tracker.update({ ...state, started: false, superlativeStats: {} });
+    expect(tracker.update(state)[0].badgeName).toBe('Team Player');
+  });
+
   it('has an evidence-boundary check for every award', () => {
     expect(new Set(evidenceCases.map(([name]) => name))).toEqual(
       new Set(getAllSuperlatives().map((award) => award.name)),
@@ -84,8 +194,8 @@ describe('superlatives', () => {
     expect(definition.qualifies({ ...baseline, ...earned })).toBe(true);
   });
 
-  it('provides at least 30 distinctions', () => {
-    expect(getAllSuperlatives().length).toBeGreaterThanOrEqual(30);
+  it('provides at least 50 distinctions', () => {
+    expect(getAllSuperlatives().length).toBeGreaterThanOrEqual(50);
   });
 
   it('shows no distinction without evidence rather than giving a participation badge', () => {
@@ -171,7 +281,7 @@ describe('superlatives', () => {
       { ...player, id: 'p2', marked: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] },
     ];
     const awards = getPlayerSuperlatives(players, { ...gameState, acceptedTropes: player.board.slice(0, 10) });
-    expect(awards.p2.name).toBe('Pattern Hunter');
+    expect(awards.p2.name).toBe('Double Feature');
     expect(awards.p1?.name).not.toBe('Pattern Hunter');
   });
 
@@ -307,5 +417,99 @@ describe('superlatives', () => {
         ),
       ).some((award) => award.name === 'Most Thoughtful'),
     ).toBe(false);
+  });
+
+  it.each([
+    ['Trope Scout', 'Scene Spotter', 'Sharp Eye', 'Scene Sleuth', 'acceptedProposals', [1, 2, 3, 5]],
+    ['Team Player', 'Consensus Builder', 'Watch Party MVP', 'Consensus Captain', 'otherApprovalVotes', [1, 3, 8, 15]],
+  ])('upgrades %s through its earned progression', (first, second, third, fourth, metric, thresholds) => {
+    const names = [first, second, third, fourth];
+    for (let index = 0; index < thresholds.length; index++) {
+      const state = { ...gameState, superlativeStats: { p1: { [metric]: thresholds[index] } } };
+      expect(getPlayerSuperlatives([player], state).p1.name).toBe(names[index]);
+    }
+  });
+
+  it('upgrades successful predictions and lets a complete blackout supersede them', () => {
+    for (const [correct, name] of [
+      [1, 'Right on Cue'],
+      [3, 'Prediction Pro'],
+      [5, 'Crystal Ball'],
+    ]) {
+      const state = { ...gameState, callStats: { p1: { made: correct, correct } } };
+      expect(getPlayerSuperlatives([player], state).p1.name).toBe(name);
+    }
+    const state = { ...gameState, acceptedTropes: player.board, callStats: { p1: { correct: 5 } } };
+    expect(
+      getPlayerSuperlatives([{ ...player, marked: Array.from({ length: 25 }, (_, index) => index) }], state).p1.name,
+    ).toBe('Blackout');
+  });
+
+  it('offers more ten-player awards for real contributions without awarding idle players', () => {
+    const players = Array.from({ length: 10 }, (_, index) => ({ ...player, id: `p${index}`, seat: index }));
+    const state = {
+      ...gameState,
+      superlativeStats: Object.fromEntries(
+        players
+          .slice(0, 6)
+          .map((entry, index) => [entry.id, index === 0 ? { acceptedProposals: 1 } : { otherApprovalVotes: 1 }]),
+      ),
+    };
+    const awards = getPlayerSuperlatives(players, state);
+    expect(Object.keys(awards)).toHaveLength(6);
+    expect(awards.p0.name).toBe('Trope Scout');
+    for (const entry of players.slice(1, 6)) expect(awards[entry.id].name).toBe('Team Player');
+    for (const entry of players.slice(6)) expect(awards[entry.id]).toBeUndefined();
+  });
+
+  it('upgrades exploration based on different definitions rather than repeated clicks', () => {
+    for (const [count, name] of [
+      [2, 'Trope Explorer'],
+      [3, 'Board Cartographer'],
+      [8, 'Curious Mind'],
+      [15, 'Trope Librarian'],
+      [25, 'Trope Scholar'],
+    ]) {
+      const state = {
+        ...gameState,
+        superlativeStats: { p1: { views: 100, viewedTropes: player.board.slice(0, count) } },
+      };
+      expect(getPlayerSuperlatives([player], state).p1.name).toBe(name);
+      expect(getPlayerSuperlative(player, state).name).toBe(name);
+    }
+  });
+
+  it('upgrades ordinary bingo achievements without requiring an exclusive lead', () => {
+    const players = [
+      { ...player, id: 'p1' },
+      { ...player, id: 'p2' },
+    ];
+    for (const [count, name] of [
+      [5, 'Bingo Buddy'],
+      [10, 'Double Feature'],
+      [15, 'Trophy Hunter'],
+      [20, 'Blackout Bound'],
+      [25, 'Blackout'],
+    ]) {
+      const state = { ...gameState, acceptedTropes: player.board.slice(0, count) };
+      const evolved = players.map((entry) => ({
+        ...entry,
+        marked: Array.from({ length: count }, (_, index) => index),
+      }));
+      const awards = getPlayerSuperlatives(evolved, state);
+      expect(awards.p1.name).toBe(name);
+      expect(awards.p2.name).toBe(name);
+    }
+  });
+
+  it('keeps a stronger achievement when a lighter one is earned afterward', () => {
+    const state = { ...gameState, superlativeStats: { p1: { acceptedProposals: 5, otherApprovalVotes: 1 } } };
+    expect(getPlayerSuperlatives([player], state).p1.name).toBe('Scene Sleuth');
+  });
+
+  it('does not award prediction badges for unsuccessful or untracked calls', () => {
+    const state = { ...gameState, callStats: { p1: { made: 20, correct: 0 } } };
+    expect(getPlayerSuperlatives([player], state)).toEqual({});
+    expect(getPlayerSuperlatives([player], gameState)).toEqual({});
   });
 });

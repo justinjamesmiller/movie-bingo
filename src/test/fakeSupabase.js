@@ -9,6 +9,7 @@ const rooms = new Map();
 const members = new Map();
 let nextUserId = 0;
 let nextPlayerId = 0;
+let serverGameplayEnabled = true;
 
 function memberKey(code, playerId) {
   return `${code}:${playerId}`;
@@ -35,6 +36,15 @@ export function resetFakeSupabase() {
   members.clear();
   nextUserId = 0;
   nextPlayerId = 0;
+  serverGameplayEnabled = true;
+}
+
+export function setFakeServerGameplayEnabled(enabled) {
+  serverGameplayEnabled = enabled;
+}
+
+export function setFakePlayerLastSeen(code, playerId, timestamp) {
+  members.get(memberKey(code, playerId)).lastSeenAt = timestamp;
 }
 
 class FakeChannel {
@@ -135,23 +145,42 @@ export function createClient() {
       },
     },
     functions: {
-      async invoke(_name, { body }) {
+      async invoke(name, options) {
+        const result = await this._invoke(name, options);
+        if (serverGameplayEnabled && result.data) result.data.gameplayMode = 'server';
+        return result;
+      },
+      async _invoke(_name, { body }) {
         const userId = identity.user?.id;
         if (!userId) return { data: null, error: new Error('Auth session required.') };
         const { operation, code, playerId } = body;
         if (operation === 'create') {
           if (rooms.has(code)) return { data: { error: 'Code already exists.' }, error: null };
+          if (
+            body.hostRecoveryPassword != null &&
+            body.hostRecoveryPassword !== '' &&
+            (typeof body.hostRecoveryPassword !== 'string' || body.hostRecoveryPassword.length < 2)
+          ) {
+            return { data: { error: 'Use a host recovery password between 2 and 128 characters.' }, error: null };
+          }
           const state = structuredClone(body.state);
           state.serverRevision = 0;
           rooms.set(code, {
             state,
             revision: 0,
             hostSeenAt: Date.now(),
-            hostRecoveryPlayerId: null,
-            hostRecoveryPassword: null,
+            hostRecoveryPlayerId: body.hostRecoveryPassword ? playerId : null,
+            hostRecoveryPassword: body.hostRecoveryPassword || null,
             recoveryAttempts: 0,
           });
-          members.set(memberKey(code, playerId), { roomCode: code, playerId, userId, isHost: true, status: 'active' });
+          members.set(memberKey(code, playerId), {
+            roomCode: code,
+            playerId,
+            userId,
+            isHost: true,
+            status: 'active',
+            lastSeenAt: Date.now(),
+          });
           return { data: { playerId, revision: 0 }, error: null };
         }
         if (operation === 'set-host-recovery-password') {
@@ -160,8 +189,8 @@ export function createClient() {
           if (!member?.isHost || member.status !== 'active' || !room) {
             return { data: { error: 'An active host seat is required.' }, error: null };
           }
-          if (typeof body.password !== 'string' || body.password.length < 12 || body.password.length > 128) {
-            return { data: { error: 'Use a host recovery password between 12 and 128 characters.' }, error: null };
+          if (typeof body.password !== 'string' || body.password.length < 2 || body.password.length > 128) {
+            return { data: { error: 'Use a host recovery password between 2 and 128 characters.' }, error: null };
           }
           room.hostRecoveryPlayerId = playerId;
           room.hostRecoveryPassword = body.password;
@@ -240,6 +269,7 @@ export function createClient() {
             userId,
             isHost: false,
             status: pending ? 'pending' : 'active',
+            lastSeenAt: Date.now(),
           };
           members.set(memberKey(code, id), member);
           if (pending) {
@@ -295,9 +325,27 @@ export function createClient() {
         }
         if (operation === 'heartbeat') {
           const member = findMember(code, userId, playerId);
-          if (!member?.isHost) return { data: { error: 'Host membership required.' }, error: null };
+          if (!member || member.status !== 'active')
+            return { data: { error: 'Active membership required.' }, error: null };
+          member.lastSeenAt = Date.now();
           const room = rooms.get(code);
-          if (room) room.hostSeenAt = Date.now();
+          if (room && member.isHost) room.hostSeenAt = Date.now();
+          if (
+            room?.state.pendingClaim?.expiresAt <= Date.now() ||
+            room?.state.pendingBoardRecovery?.expiresAt <= Date.now()
+          ) {
+            const { applyServerGameAction } = await import('../net/relay.js');
+            const result = applyServerGameAction(room.state, playerId, { t: 'settleClaim' });
+            room.revision += 1;
+            result.state.serverRevision = room.revision;
+            room.state = result.state;
+            for (const entry of members.values()) {
+              if (entry.roomCode === code && room.state.lastBoardRecovery?.sourceId === entry.playerId)
+                entry.status = 'revoked';
+            }
+            deliver(`bingo-${code}`, { t: 'state', state: room.state, sender: 'pserver' }, null);
+            for (const message of result.messages) deliver(`bingo-${code}`, { ...message, sender: 'pserver' }, null);
+          }
           return { data: { ok: true }, error: null };
         }
         if (operation === 'leave') {
@@ -342,9 +390,37 @@ export function createClient() {
               'denyJoin',
               'proposeProfileChange',
               'restoreDisconnectedBoard',
+              'requestBoardRecovery',
+              'cancelBoardRecovery',
             ];
             if (hostActions.includes(message.action?.t) && !member.isHost) {
               return { data: { error: 'Host authorization required.' }, error: null };
+            }
+            const { applyServerGameAction, SERVER_GAMEPLAY_ACTIONS } = await import('../net/relay.js');
+            if (serverGameplayEnabled && SERVER_GAMEPLAY_ACTIONS.has(message.action?.t)) {
+              if (member.status !== 'active') return { data: { error: 'Active membership required.' }, error: null };
+              member.lastSeenAt = Date.now();
+              const snapshot = structuredClone(room.state);
+              for (const player of Object.values(snapshot.players)) {
+                const entry = members.get(memberKey(code, player.id));
+                player.connected =
+                  entry?.status === 'active' && Date.now() - (entry.lastSeenAt ?? Date.now()) < 120_000;
+              }
+              const result = applyServerGameAction(snapshot, playerId, message.action);
+              room.revision += 1;
+              result.state.serverRevision = room.revision;
+              result.state.rev = (room.state.rev || 0) + 1;
+              room.state = result.state;
+              for (const entry of members.values()) {
+                if (entry.roomCode === code && room.state.lastBoardRecovery?.sourceId === entry.playerId)
+                  entry.status = 'revoked';
+              }
+              deliver(`bingo-${code}`, { t: 'state', state: room.state, sender: 'pserver' }, null);
+              for (const event of result.messages) deliver(`bingo-${code}`, { ...event, sender: 'pserver' }, null);
+              return {
+                data: { ok: true, state: structuredClone(room.state), revision: room.revision, code },
+                error: null,
+              };
             }
             message.from = playerId;
           } else if (isSnapshot) {
@@ -358,7 +434,10 @@ export function createClient() {
               if (other.roomCode !== code) continue;
               other.isHost = !!committedState.hostIds?.includes(other.playerId);
               if (committedState.players?.[other.playerId]) other.status = 'active';
-              else if (other.status === 'pending' && committedState.pendingJoinRequest?.id !== other.playerId)
+              else if (
+                committedState.lastBoardRecovery?.sourceId === other.playerId ||
+                (other.status === 'pending' && committedState.pendingJoinRequest?.id !== other.playerId)
+              )
                 other.status = 'revoked';
             }
             message.state = committedState;

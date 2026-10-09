@@ -11,10 +11,15 @@ describe('HelpModal', () => {
     expect(screen.getByRole('heading', { name: '⚙️ Advanced Options', hidden: true })).toBeInTheDocument();
     expect(screen.getByText(/Add Host/i)).toBeInTheDocument();
     expect(screen.getByText(/During play, open/)).toBeInTheDocument();
-    expect(screen.getByText(/recovery password of at least 12 characters/i)).toBeInTheDocument();
+    expect(screen.getByText(/recovery password of at least 2 characters/i)).toBeInTheDocument();
     expect(screen.getByText(/wait up to about a minute and try again/i)).toBeInTheDocument();
     expect(screen.getByText(/Join Game.*always creates a new seat/i)).toBeInTheDocument();
     expect(screen.getByText(/home-page option appears only while the server confirms/i)).toBeInTheDocument();
+    expect(screen.getByText(/enter Manual title and choose Use manual title/i)).toBeInTheDocument();
+    expect(screen.getByText(/The reveal button disappears after selection/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Accessibility', hidden: true })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '👎 Vote Reasons', hidden: true })).toBeInTheDocument();
+    expect(screen.getByText(/10 seconds, 30 seconds, or 5 minutes/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(onClose).toHaveBeenCalledTimes(1);
   });

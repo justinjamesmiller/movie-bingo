@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { GENRES, SUBGENRES_BY_GENRE } from '../data/tropes.js';
 import { getDisagreeRationales } from '../data/disagreeRationales.js';
 import { useTropeDescription } from '../hooks/useTropeDescription.js';
@@ -15,8 +15,17 @@ export default function ClaimModal({
   onShowQueue,
 }) {
   const [choosingRationale, setChoosingRationale] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const advancedId = useId();
+  const advancedRef = useRef(null);
   const { description } = useTropeDescription(pendingClaim?.text);
-  useEffect(() => setChoosingRationale(false), [pendingClaim?.claimId]);
+  useEffect(() => {
+    setChoosingRationale(false);
+    setAdvancedOpen(false);
+  }, [pendingClaim?.claimId]);
+  useEffect(() => {
+    if (advancedOpen) advancedRef.current?.querySelector('button')?.focus();
+  }, [advancedOpen]);
   if (!pendingClaim) return null;
 
   const claimant = players.find((p) => p.id === pendingClaim.byId);
@@ -197,15 +206,29 @@ export default function ClaimModal({
             Cancel / undo my claim
           </button>
         )}
-        {onBrowseQueue && (
-          <button className="btn secondary-action" onClick={onBrowseQueue}>
-            Queue another trope
+        {!advancedOpen && (onBrowseQueue || onShowQueue) && (
+          <button
+            className="btn secondary-action"
+            aria-expanded={advancedOpen}
+            aria-controls={advancedId}
+            onClick={() => setAdvancedOpen(true)}
+          >
+            Advanced options
           </button>
         )}
-        {onShowQueue && (
-          <button className="btn secondary-action" onClick={onShowQueue}>
-            View waiting proposals
-          </button>
+        {advancedOpen && (
+          <div id={advancedId} ref={advancedRef}>
+            {onBrowseQueue && (
+              <button className="btn secondary-action" onClick={onBrowseQueue}>
+                Queue another trope
+              </button>
+            )}
+            {onShowQueue && (
+              <button className="btn secondary-action" onClick={onShowQueue}>
+                View waiting proposals
+              </button>
+            )}
+          </div>
         )}
         <p className="hint">
           {agreeCount} agree so far ({votesIn}/{pendingClaim.totalPlayers} voted,{' '}

@@ -26,12 +26,15 @@ export default function HelpModal({ onClose }) {
           <h4>🎬 Hosting &amp; Joining</h4>
           <p className="hint">
             The host starts with genres only, then can choose sub-genres or open Advanced Host Setup for more options.
-            Looking up a real movie or TV show can auto-fill genres — search results show 🎬/📺 so you can tell them
-            apart. Everyone else just enters their name and the 4-character game code to join — or uses the menu's
-            invite link or QR code.
+            The host setup page offers an optional recovery password when creating the game, or you can set/replace it
+            later in Menu → Advanced Options → Host Settings. Looking up a real movie or TV show can auto-fill genres —
+            search results show 🎬/📺 so you can tell them apart. Everyone else just enters their name and the
+            4-character game code to join — or uses the menu's invite link or QR code. If lookup is unavailable or
+            cannot find the title, enter Manual title and choose Use manual title before hosting. Your selected genres
+            remain unchanged.
           </p>
           <p className="hint">
-            The original host can set a unique recovery password of at least 12 characters in Advanced Options → Host
+            The original host can set a unique recovery password of at least 2 characters in Advanced Options → Host
             Settings. On a new device, enter it with the game code to restore that host seat after the old device has
             disconnected. If it still appears connected, wait up to about a minute and try again.
           </p>
@@ -59,7 +62,9 @@ export default function HelpModal({ onClose }) {
           <ul className="help-list">
             <li>
               Tapping a space shows what the trope means, with an example, then lets you{' '}
-              <strong>claim it just happened</strong>. Everyone votes 👍/👎; majority wins.
+              <strong>claim it just happened</strong>. Everyone votes 👍/👎; majority wins. Submitting a claim
+              automatically counts as your approval. With two players, the other player's approval completes the
+              majority; playing alone, submitting accepts the trope immediately.
             </li>
             <li>
               During play, open <strong>⋯ Advanced actions</strong>, then choose{' '}
@@ -89,7 +94,8 @@ export default function HelpModal({ onClose }) {
           </p>
           <ul className="help-list">
             <li>
-              <strong>Accepted Tropes</strong> button shows everything approved so far. Tap one to challenge/undo it.
+              <strong>Accepted Tropes</strong> under Advanced Options → Explore &amp; Stats shows everything approved so
+              far. Tap one to challenge/undo it.
             </li>
             <li>
               <strong>All Tropes</strong> button shows the entire pool for this game. Tap one to propose it happened
@@ -97,14 +103,17 @@ export default function HelpModal({ onClose }) {
             </li>
           </ul>
 
-          <h4>👎 Vote Reasons</h4>
+          <h4>Claim Queue &amp; Scene Context</h4>
           <p className="hint">
-            If another vote is open, Queue another trope lets you submit without interrupting it. Claim Queue in the
-            menu, or View waiting proposals in a vote, shows waiting proposals and lets you withdraw your own. Matching
+            If another vote is open, its Advanced options button reveals Queue another trope and View waiting proposals.
+            The reveal button disappears after selection; each new proposal starts with those controls hidden. Queue
+            another trope lets you submit without interrupting the vote. Claim Queue under Advanced Options → Explore
+            &amp; Stats, or View waiting proposals, shows waiting proposals and lets you withdraw your own. Matching
             proposals merge; connected proposers vote automatically when their turn starts. Replacement choices finish
             before the next vote. A game allows 30 waiting entries, with five new entries per player. You can optionally
             add a scene note and a movie timestamp such as 12:34 or 1:12:34 to a trope proposal.
           </p>
+          <h4>👎 Vote Reasons</h4>
           <p className="hint">
             After choosing Disagree, you can optionally say whether the trope was not on screen, not clear enough, or
             needs more context. Reasons are anonymous and shown to everyone as group totals in the declined-claim toast
@@ -123,15 +132,16 @@ export default function HelpModal({ onClose }) {
 
           <h4>🎯 Managing wagers mid-game</h4>
           <p className="hint">
-            The menu's "Manage Wagers" option lets you remove existing wagers and/or add new ones — stage as many
-            changes as you like, then submit them all together as a single group vote.
+            Advanced Options → My Tools → Manage Wagers lets you remove existing wagers and/or add new ones — stage as
+            many changes as you like, then submit them all together as a single group vote.
           </p>
 
           <h4>🔀 Swapping your whole board</h4>
           <p className="hint">
-            Stuck with a board you can't do anything with? The menu's "Swap My Whole Board" option asks the group for a
-            completely fresh set of 25 spaces. If the majority agrees, your board is re-dealt from the same trope pool —
-            anything the group has already accepted stays marked, and your wagers are cleared so you can re-place them.
+            Stuck with a board you can't do anything with? Advanced Options → My Tools → Swap My Whole Board asks the
+            group for a completely fresh set of 25 spaces. If the majority agrees, your board is re-dealt from the same
+            trope pool — anything the group has already accepted stays marked, and your wagers are cleared so you can
+            re-place them.
           </p>
 
           <h4>🎯 All Wagers</h4>
@@ -157,7 +167,14 @@ export default function HelpModal({ onClose }) {
             automatically after the first acceptance. Filling five wagers can earn Full House before play; exploring
             three different tropes can earn Board Cartographer. Trophy Hunter needs three bingos. Later achievements
             take precedence over lighter early badges, and a player may have no badge yet. Genuine shared achievements
-            can be earned by more than one player.
+            can be earned by more than one player. One accepted proposal can earn Trope Scout, helping approve another
+            player's claim can earn Team Player, and exploring two different explanations can earn Trope Explorer. More
+            progress automatically replaces lighter badges: Bingo Buddy grows into Double Feature and Trophy Hunter;
+            successful predictions can earn Right on Cue, Prediction Pro, and Crystal Ball. Failed predictions do not
+            earn prediction badges. Tap your own name → Badge Progress to see up to three higher badge milestones with
+            their current counts, even before you earn a badge. Opening a player's badge also shows their progress. New
+            badges and upgrades are announced to the group without interrupting votes or replaying old achievements on
+            reconnect.
           </p>
 
           <h4>🎬 Marathon History</h4>
@@ -186,12 +203,13 @@ export default function HelpModal({ onClose }) {
 
         <details className="help-section">
           <summary>Personal Tools &amp; Reactions</summary>
-          <h4>🧑‍🎤 Avatars</h4>
+          <h4>Accessibility</h4>
           <p className="hint">
-            Menu's Accessibility options include larger text, a readable list instead of the grid, visible space-state
-            labels, and reduced animations. Settings are saved only on your device. Focus a board space and press Enter
-            or Space to open it.
+            Advanced Options → My Tools → Accessibility includes larger text, a readable list instead of the grid,
+            visible space-state labels, and reduced animations. Settings are saved only on your device. Focus a board
+            space and press Enter or Space to open it.
           </p>
+          <h4>🧑‍🎤 Avatars</h4>
           <p className="hint">
             Tap your own name in the Players list to open player options, then choose Edit Name &amp; Avatar. Your
             avatar shows up in claim prompts and the final recap so everyone can tell you apart at a glance.
@@ -208,8 +226,8 @@ export default function HelpModal({ onClose }) {
             When hosting or resetting, you can type in your own custom trope(s) to mix into the pool. Use the optional
             trope presets in Advanced Host Setup or Reset Game to include subjective judgments, product placement,
             substance use, or language-sensitive tropes explicitly; they are never drawn automatically. Mid-game, use
-            the menu's "Submit Custom Trope" to propose a brand-new one on the spot — it goes through the same majority
-            vote as any other claim, and joins the pool if approved.
+            Advanced Options → My Tools → Submit Custom Trope to propose a brand-new one on the spot — it goes through
+            the same majority vote as any other claim, and joins the pool if approved.
           </p>
 
           <h4>🧰 Other buttons</h4>
@@ -218,7 +236,8 @@ export default function HelpModal({ onClose }) {
               🔍 <strong>Board Focus</strong> — collapse everything down to just your board.
             </li>
             <li>
-              ✏️ <strong>Your name in the Players list</strong> — view your stats or edit your name and avatar.
+              ✏️ <strong>Your name in the Players list</strong> — view badge progress, stats, or edit your name and
+              avatar.
             </li>
             <li>
               🎬 <strong>Marathon History</strong> — view totals from every completed watch in this session.
@@ -253,14 +272,19 @@ export default function HelpModal({ onClose }) {
             <li>
               <strong>Add Host</strong> — give another connected player host permissions while you remain in the game.
               They receive a notice explaining their new controls. Hosts have the same controls, can add more hosts, and
-              can resign as host once another host remains.
+              can resign as host once another host remains. Recovery password settings remain exclusive to the original
+              host.
             </li>
             <li>
               <strong>Manage a player</strong> — click another player&apos;s name or avatar to add them as a host or
               propose a new name and avatar. They must accept a profile proposal before it takes effect. During a watch,
-              a host can also select a disconnected non-host seat and restore its board, marks, wagers, and call history
-              onto a connected player who joined from a new device; the abandoned seat is removed. Finish any active
-              vote, replacement, or queued proposals first.
+              a host can open the new session's options and choose Recover player from, even when the old non-host seat
+              still appears connected. Choose Immediate, 10 seconds, 30 seconds, or 5 minutes. Timed recovery shows a
+              countdown to both the host and old player; "I'm still playing" cancels the transfer, and the host can also
+              cancel. If nobody responds, the new session inherits the old name, avatar, board, wagers, stats, and
+              history, replacing its temporary progress. The old seat is removed. Immediate recovery skips the prompt
+              after confirmation. Finish active votes, replacements, queued proposals, and joins first; board-changing
+              proposals pause during the check. Host seats use host recovery instead.
             </li>
             <li>
               <strong>Remove</strong> (in the Players list) — kicks a player and rotates the game code for security.
@@ -291,10 +315,13 @@ export default function HelpModal({ onClose }) {
 
           <h4>🔌 Disconnects</h4>
           <p className="hint">
-            If you get disconnected (including the host), reopening the app offers a "Reconnect" option to resume your
-            same board and progress from its saved player seat. The "Join Game" form always creates a new seat; if play
-            has started, the host must approve that join. The home-page option appears only while the server confirms
-            the saved game and seat are active; it disappears after expiry or game end. Reconnect is unavailable after
+            Claims, votes, calls, and player tools continue if every host disconnects. Host-only controls and approval
+            of new mid-game players still require a host. This requires the updated server relay; older deployments
+            pause until a host reconnects. Disconnected seats retain a short presence grace period. If you get
+            disconnected (including the host), reopening the app offers a "Reconnect" option to resume your same board
+            and progress from its saved player seat. The "Join Game" form always creates a new seat; if play has
+            started, the host must approve that join. The home-page option appears only while the server confirms the
+            saved game and seat are active; it disappears after expiry or game end. Reconnect is unavailable after
             deliberately leaving a game. If you change devices as a guest, join as a new player and ask the host to
             restore your old board; original hosts can recover with their recovery password.
           </p>

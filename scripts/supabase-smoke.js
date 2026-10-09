@@ -30,7 +30,7 @@ const clients = [];
 const channels = [];
 const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 let code = Array.from(randomBytes(4), (byte) => alphabet[byte % alphabet.length]).join('');
-const password = randomBytes(24).toString('base64url');
+const password = randomBytes(1).toString('hex');
 let roomCreated = false;
 let checks = 0;
 
@@ -55,7 +55,7 @@ async function relay(user, body) {
     body: JSON.stringify(body),
   });
   const data = await response.json();
-  return { status: response.status, data };
+  return { status: response.status, data, retryAfter: response.headers.get('Retry-After') };
 }
 
 async function publishState(user, roomCode, playerId, state, newCode = null) {
@@ -164,25 +164,39 @@ try {
     pendingJoinRequest: null,
     sessionExpiresAt: Date.now() + 30 * 60 * 1000,
   };
-  const created = await relay(host, { operation: 'create', code, playerId: hostId, state });
+  const created = await relay(host, {
+    operation: 'create',
+    code,
+    playerId: hostId,
+    state,
+    hostRecoveryPassword: password,
+  });
   assert.equal(created.status, 200, `Create room failed: ${created.data.error || created.status}`);
   roomCreated = true;
   passed('authenticated host creates a room');
+  const { data: createRecoveryRow, error: createRecoveryError } = await admin
+    .from('bingo_rooms')
+    .select('host_recovery_player_id, host_recovery_password_hash, state')
+    .eq('code', code)
+    .single();
+  assert(!createRecoveryError);
+  assert.equal(createRecoveryRow.host_recovery_player_id, hostId);
+  assert(createRecoveryRow.host_recovery_password_hash.startsWith('pbkdf2-sha256$'));
+  assert.notEqual(createRecoveryRow.host_recovery_password_hash, password);
+  assert(!Object.hasOwn(createRecoveryRow.state, 'hostRecoveryPassword'));
+  assert(!Object.hasOwn(createRecoveryRow.state, 'password'));
+  passed('two-character create-time recovery password is stored only as a verifier');
 
   const sameIdentityPlayerId = `p${randomBytes(6).toString('hex')}`;
   const sameIdentityJoin = await relay(host, {
     operation: 'join',
     code,
     requestedPlayerId: sameIdentityPlayerId,
-    name: 'Second tab with same Auth',
+    name: 'Second Auth tab',
   });
   assert.equal(sameIdentityJoin.status, 200);
   assert.notEqual(sameIdentityJoin.data.playerId, hostId);
-  state.players[sameIdentityJoin.data.playerId] = makePlayer(
-    sameIdentityJoin.data.playerId,
-    'Second tab with same Auth',
-    1,
-  );
+  state.players[sameIdentityJoin.data.playerId] = makePlayer(sameIdentityJoin.data.playerId, 'Second Auth tab', 1);
   state.seatOrder.push(sameIdentityJoin.data.playerId);
   passed('same Auth identity can create a distinct seat for a second tab');
 
@@ -242,16 +256,6 @@ try {
   assert.notEqual(publicChannel.status, 'SUBSCRIBED', 'Public Realtime channels were permitted.');
   passed('public Realtime channel denied');
 
-  const receiver = host.client.channel(`bingo-${code}`, { config: { private: true } });
-  channels.push({ client: host.client, channel: receiver });
-  const received = new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error('Relayed guest action was not received.')), 12000);
-    receiver.on('broadcast', { event: 'msg' }, ({ payload }) => {
-      if (payload.t !== 'action') return;
-      clearTimeout(timeout);
-      resolve(payload);
-    });
-  });
   response = await relay(guest, {
     operation: 'publish',
     code,
@@ -259,10 +263,10 @@ try {
     message: { t: 'action', from: hostId, sender: hostId, action: { t: 'setWager', indices: [0] } },
   });
   assert.equal(response.status, 200);
-  const action = await received;
-  assert.equal(action.from, guestId);
-  assert.equal(action.sender, guestId);
-  passed('server derives action identity instead of trusting payload');
+  assert.deepEqual(response.data.state.players[guestId].wagered, [0]);
+  assert.deepEqual(response.data.state.players[hostId].wagered, []);
+  Object.assign(state, response.data.state);
+  passed('server executes gameplay for the authenticated seat instead of trusting payload identity');
 
   state.hostIds.push(guestId);
   response = await publishState(host, code, hostId, state);
@@ -329,6 +333,67 @@ try {
   const deniedStatus = await relay(returning, { operation: 'join-status', code, playerId: pendingId });
   assert.equal(deniedStatus.data.status, 'revoked');
   passed('pending joiners cannot read private traffic and denial revokes membership');
+
+  state.hostIds = [hostId];
+  response = await publishState(host, code, hostId, state);
+  assert.equal(response.status, 200);
+  Object.assign(state, response.data.state);
+  const staleTime = new Date(Date.now() - 120_001).toISOString();
+  const { error: offlineError } = await admin
+    .from('bingo_room_members')
+    .update({ last_seen_at: staleTime })
+    .eq('room_code', code)
+    .eq('player_id', hostId);
+  assert(!offlineError);
+  const { error: otherPresenceError } = await admin
+    .from('bingo_room_members')
+    .update({ last_seen_at: new Date().toISOString() })
+    .eq('room_code', code)
+    .eq('player_id', sameIdentityPlayerId);
+  assert(!otherPresenceError);
+  const { error: hostPresenceError } = await admin
+    .from('bingo_rooms')
+    .update({ host_seen_at: staleTime })
+    .eq('code', code);
+  assert(!hostPresenceError);
+  response = await relay(guest, {
+    operation: 'publish',
+    code,
+    playerId: guestId,
+    message: { t: 'action', action: { t: 'claim', index: 0 } },
+  });
+  assert.equal(response.status, 200);
+  assert.equal(response.data.state.players[hostId].connected, false);
+  const hostlessClaim = response.data.state.pendingClaim;
+  assert(hostlessClaim);
+  response = await relay(host, {
+    operation: 'publish',
+    code,
+    playerId: sameIdentityPlayerId,
+    message: { t: 'action', action: { t: 'vote', claimId: hostlessClaim.claimId, agree: true } },
+  });
+  assert.equal(response.status, 200);
+  assert(response.data.state.acceptedTropes.includes(hostlessClaim.text));
+  assert.deepEqual(response.data.state.hostIds, [hostId]);
+  Object.assign(state, response.data.state);
+  const { data: hostlessRow, error: hostlessReadError } = await admin
+    .from('bingo_rooms')
+    .select('host_seen_at')
+    .eq('code', code)
+    .single();
+  assert(!hostlessReadError);
+  assert.equal(new Date(hostlessRow.host_seen_at).getTime(), new Date(staleTime).getTime());
+  passed('claims and votes commit without a connected host or refreshed host heartbeat');
+  const { error: restoredPresenceError } = await admin
+    .from('bingo_room_members')
+    .update({ last_seen_at: new Date().toISOString() })
+    .eq('room_code', code)
+    .eq('player_id', hostId);
+  assert(!restoredPresenceError);
+  state.players[hostId].connected = true;
+  response = await publishState(host, code, hostId, state);
+  assert.equal(response.status, 200);
+  Object.assign(state, response.data.state);
 
   response = await relay(guest, { operation: 'set-host-recovery-password', code, playerId: guestId, password });
   assert.equal(response.status, 403);
@@ -426,6 +491,20 @@ try {
   const expiredSession = await relay(returning, { operation: 'join-status', code, playerId: hostId });
   assert.equal(expiredSession.data.status, 'expired');
   passed('saved-session status hides expired rooms');
+  const abusive = await newUser();
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const invalid = await relay(abusive, { operation: 'create', code: 'ABCD', playerId: 'invalid' });
+    assert.equal(invalid.status, 400);
+  }
+  const limited = await relay(abusive, { operation: 'create', code: 'ABCD', playerId: 'invalid' });
+  assert.equal(limited.status, 429);
+  assert(Number(limited.retryAfter) > 0);
+  const deniedBudgetAccess = await abusive.client.rpc('consume_bingo_relay_request', {
+    p_user_id: users.at(-1),
+    p_operation: 'publish',
+  });
+  assert(deniedBudgetAccess.error, 'A browser role could alter relay request budgets.');
+  passed('malformed payloads are rejected, counted, and rate-limited with retry information');
   console.log(`Live smoke checks passed: ${checks}`);
 } catch (error) {
   console.error(`SMOKE FAILED: ${error.message}`);
@@ -440,6 +519,14 @@ try {
     }
   }
   for (const id of users) {
+    const { error: relayBudgetError } = await admin
+      .from('bingo_relay_request_budget')
+      .delete()
+      .like('subject', `user:${id}:%`);
+    if (relayBudgetError) {
+      console.error('Temporary relay budget cleanup failed.');
+      process.exitCode = 1;
+    }
     const { error: budgetError } = await admin.from('bingo_movie_lookup_budget').delete().eq('subject', `user:${id}`);
     if (budgetError) {
       console.error('Temporary lookup budget cleanup failed.');

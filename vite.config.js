@@ -6,14 +6,15 @@ export default defineConfig({
   base: './', // relative asset paths so the build works from any subpath (e.g. GitHub Pages project sites)
   plugins: [react()],
   test: {
+    alias: [{ find: /^npm:@supabase\/supabase-js@[\d.]+$/, replacement: '@supabase/supabase-js' }],
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test/setup.js'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],
-      include: ['src/**/*.{js,jsx}'],
-      exclude: ['src/main.jsx', 'src/test/**'],
+      include: ['src/**/*.{js,jsx}', 'supabase/functions/**/*.js'],
+      exclude: ['src/main.jsx', 'src/test/**', '**/*.test.{js,jsx}'],
     },
   },
   build: {

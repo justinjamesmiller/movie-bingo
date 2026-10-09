@@ -7,15 +7,19 @@ export default function PlayerManagementModal({
   isHost,
   isSelf = false,
   canRestoreBoard = false,
-  disconnectedPlayers = [],
+  recoverablePlayers = [],
+  onRequestBoardRecovery,
   onAddHost,
-  onRestoreBoard,
   onProposeProfile,
   onEditProfile,
   onViewStats,
+  onBadgeProgress,
   onCancel,
 }) {
   const [sourceId, setSourceId] = useState('');
+  const [timeoutSeconds, setTimeoutSeconds] = useState(30);
+  const [confirmRecovery, setConfirmRecovery] = useState(false);
+  const source = recoverablePlayers.find((candidate) => candidate.id === sourceId);
   return (
     <ModalShell onClose={onCancel}>
       <div className="modal-content">
@@ -31,27 +35,67 @@ export default function PlayerManagementModal({
           <button className="btn" onClick={onViewStats}>
             📊 View Stats
           </button>
+          {isSelf && onBadgeProgress && (
+            <button className="btn" onClick={onBadgeProgress}>
+              Badge Progress
+            </button>
+          )}
           <button className="btn" onClick={isSelf ? onEditProfile : onProposeProfile}>
             {isSelf ? '✏️ Edit Name & Avatar' : 'Propose Name & Avatar'}
           </button>
-          {canRestoreBoard && disconnectedPlayers.length > 0 && (
+          {canRestoreBoard && onRequestBoardRecovery && recoverablePlayers.length > 0 && (
             <div className="restore-board-control">
-              <label htmlFor="restore-disconnected-board">Restore board from</label>
-              <select
-                id="restore-disconnected-board"
-                value={sourceId}
-                onChange={(event) => setSourceId(event.target.value)}
-              >
-                <option value="">Choose disconnected player</option>
-                {disconnectedPlayers.map((disconnected) => (
-                  <option key={disconnected.id} value={disconnected.id}>
-                    {formatPlayerName(disconnected)}
-                  </option>
-                ))}
-              </select>
-              <button className="btn" disabled={!sourceId} onClick={() => onRestoreBoard(sourceId)}>
-                Restore board and remove old seat
-              </button>
+              {confirmRecovery && source ? (
+                <>
+                  <h4>Recover {formatPlayerName(source)}?</h4>
+                  <p className="hint">
+                    {formatPlayerName(player)} will receive this player's name, avatar, board, wagers, and progress.
+                    Their current progress will be replaced, and the old seat will be removed.
+                  </p>
+                  <p className="hint">
+                    {timeoutSeconds === 0
+                      ? 'No prompt will be sent. The old session will be removed immediately.'
+                      : `The old player has ${timeoutSeconds === 300 ? '5 minutes' : `${timeoutSeconds} seconds`} to confirm they are still playing. Board-changing proposals pause during this check.`}
+                  </p>
+                  <button className="btn disagree" onClick={() => onRequestBoardRecovery(sourceId, timeoutSeconds)}>
+                    {timeoutSeconds === 0 ? 'Recover immediately' : 'Send recovery prompt'}
+                  </button>
+                  <button className="btn" onClick={() => setConfirmRecovery(false)}>
+                    Back
+                  </button>
+                </>
+              ) : (
+                <>
+                  <label htmlFor="recover-player-from">Recover player from</label>
+                  <select
+                    id="recover-player-from"
+                    value={sourceId}
+                    onChange={(event) => setSourceId(event.target.value)}
+                  >
+                    <option value="">Choose old player seat</option>
+                    {recoverablePlayers.map((candidate) => (
+                      <option key={candidate.id} value={candidate.id}>
+                        {formatPlayerName(candidate)}
+                        {candidate.connected ? '' : ' (disconnected)'}
+                      </option>
+                    ))}
+                  </select>
+                  <label htmlFor="recovery-response-time">Response time</label>
+                  <select
+                    id="recovery-response-time"
+                    value={timeoutSeconds}
+                    onChange={(event) => setTimeoutSeconds(Number(event.target.value))}
+                  >
+                    <option value={0}>Immediate</option>
+                    <option value={10}>10 seconds</option>
+                    <option value={30}>30 seconds</option>
+                    <option value={300}>5 minutes</option>
+                  </select>
+                  <button className="btn" disabled={!source} onClick={() => setConfirmRecovery(true)}>
+                    Recover player
+                  </button>
+                </>
+              )}
             </div>
           )}
           <button className="btn disagree" onClick={onCancel}>

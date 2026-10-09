@@ -17,29 +17,34 @@ and an Edge Function that authenticates and authorizes every state/action relay.
   Tapping a trope always shows its description; opting in also adds an action to add or remove that wager.
 - During the game, tapping a space shows the trope description, then lets the player claim that trope happened; other players vote to confirm.
   A majority is required to mark it — and it marks that same trope on every board that has it.
-- Players can view accepted tropes; Advanced Options additionally exposes the full trope pool, everyone's wagers,
-  activity history, game stats, and whole-board swaps. Unaccepted trope list items open the same
+  Submitting counts as your approval. Solo submissions resolve immediately; with two players, the other player's
+  approval completes the majority.
+- Advanced Options → Explore & Stats exposes accepted tropes, the claim queue, the full trope pool, everyone's wagers,
+  activity history, game stats, and marathon history. My Tools contains Accessibility, wager management, custom
+  submissions, whole-board swaps, and Board Focus. Unaccepted trope list items open the same
   description window and can be used to propose swapping a trope out.
 - Mid-game changes such as custom trope submissions, wager changes, and whole-board swaps go through the same
   majority-vote flow.
 - Bingos are detected automatically. Everyone sees the celebration banner, and the player list/final recap show each player's bingo count.
 - Players subscribe to an authenticated private Realtime channel named after the game code. An Edge
-  Function binds every message to its Supabase Auth membership, accepts state only from a registered
-  host, and relays guest actions with a server-derived player ID. Co-hosts retain host permission; if
-  every authorized host disconnects, game-changing actions pause until a host reconnects.
+  Function binds every message to its Supabase Auth membership and executes ordinary player actions against
+  the stored room snapshot with transactional revision checks. Claims, votes, calls, and player tools continue
+  if every host disconnects; host-only controls and approval of new mid-game players still require a host.
 
 ## Player features
 
 - **Claim queue:** trope claims, challenges, swaps, and custom submissions wait in order while another vote or
   replacement choice is active. Matching proposals merge and co-proposers automatically agree when their vote starts.
-  Open Claim Queue from the menu or View waiting proposals from a vote to withdraw your own participation. Limits are
+  The proposal/voting dialog's Advanced options button reveals Queue another trope and View waiting proposals.
+  That reveal button disappears after selection; each new proposal starts collapsed again.
+  Open Advanced Options → Explore & Stats → Claim Queue, or expand those options in a vote, to withdraw your own participation. Limits are
   30 waiting entries per game and five new waiting entries per player. Disconnected proposals wait for a proposer to
   return; obsolete proposals are skipped. Ending or resetting clears the queue.
 - **Scene context:** optionally add a note (240 characters) and movie timestamp (`M:SS` or `H:MM:SS`) to a trope proposal.
   Context appears with the vote and is retained in its activity entry and recap history.
 - **Trope search:** All Tropes and Accepted Tropes support case-insensitive search combined with filters for accepted
   status, your board, your wagers, and active or successful calls.
-- **Accessibility:** the menu offers larger text, a readable single-column board, visible space-state labels, and
+- **Accessibility:** Advanced Options → My Tools → Accessibility offers larger text, a readable single-column board, visible space-state labels, and
   reduced animations. Board spaces support Enter/Space. These preferences stay on your device in
   `bingo-accessibility` localStorage and do not change other players' views.
 - **Optional trope presets:** Advanced Host Setup and Reset Game include checkboxes in the custom-trope editor for
@@ -59,21 +64,28 @@ and an Edge Function that authenticates and authorizes every state/action relay.
   Auth identity; after play starts, the host must approve it. The home-page card appears only while the server confirms
   that the room and seat are still active; it is hidden after expiry or game end. It is unavailable after a player
   deliberately leaves.
-- **Host recovery password:** the original host can set a password of at least 12 characters in Advanced Options →
-  Host Settings. On a new device, join with the game code and password to restore the original host seat, board, and
-  permissions. If the old device still appears connected, wait up to about a minute after its last heartbeat and retry.
+- **Host recovery password:** the original host can optionally enter a password of at least 2 characters during game
+  setup, or set/replace it later in Menu → Advanced Options → Host Settings. On a new device, join with the game code
+  and password to restore the original host seat, board, and permissions. If the old device still appears connected,
+  wait up to about a minute after its last heartbeat and retry.
   Only a PBKDF2 verifier is stored; recovery attempts are rate-limited. A successful recovery replaces the old
   device's Auth membership.
-- **Restore a board after changing devices:** have the player join as a new player, then a host can open that
-  connected player's options, choose their disconnected non-host seat, and restore its board, marks, wagers, and call
-  history. The connected player's current name/avatar and authenticated identity are kept; the abandoned seat is
-  removed. Finish pending votes, replacements, and queued claims first. This is an explicit host action, not a way to
-  transfer another person's Auth identity.
+- **Recover a player after changing devices:** have the player join as a new player and approve any pending join.
+  The host opens the receiving player's options → Recover player from and selects the old non-host seat, whether
+  or not it still appears connected. Choose Immediate, 10 seconds, 30 seconds, or 5 minutes and confirm. Timed
+  recovery shows the same deadline-based countdown to the host and challenged player; "I'm still playing" or the
+  host's Cancel recovery stops it. On expiry, the receiving session inherits the old name, avatar, board, marks,
+  wagers, calls, stats, and marathon history; its temporary progress is replaced and the old seat is retired.
+  Immediate skips the prompt. Finish votes/replacements/queued claims first; board-changing proposals pause during
+  the check. The receiving session retains its own authenticated identity; the retired membership can no longer
+  perform actions or reconnect. Revocation of an already-open Realtime subscription still needs the non-cooperative
+  live test described in Security Operations. Host seats remain protected and use the host recovery password path.
 - **Invite sharing:** the in-game menu can copy a join link with the code pre-filled or show the same link as a QR
   code. Both reflect the current code after a rotation.
 - **Movie details:** any player can tap the selected title to view its saved poster, year, director, cast, genres,
   and IMDb link. Details from IMDb selection are shared with the game and saved in reconnect snapshots. Hosts can
-  edit the selection; manual entry starts empty and requires a nonblank title before confirmation.
+  edit the selection; manual entry starts empty and requires a nonblank title before confirmation. During host
+  setup, Manual title → Use manual title sets the title before game creation, even when lookup is unavailable.
 - **Activity feed:** approved marks, swaps, wager changes, resets, and unaccepted trope proposals are logged for anyone who looked away. Unaccepted trope proposals include anonymous decline reason totals, or state that no reasons were provided. Player names include their avatars, preserved as they appeared when the event was logged.
 - **Reactions:** quick emoji reactions broadcast briefly to everyone without starting a vote.
 - **Recap:** the host can end the game to show everyone final marked counts, bingo counts, and wager hits. Leader markers
@@ -82,7 +94,7 @@ and an Edge Function that authenticates and authorizes every state/action relay.
   100 trope-vote outcomes; older snapshots cannot reconstruct highlights that were not recorded.
 - **Stats:** Advanced Options includes a shared current-game dashboard. Players can tap another player's name to
   view their current metrics; hosts get the same read-only view from player management. Tapping your own name opens
-  player options with View Stats and Edit Name & Avatar, available to hosts and non-hosts alike.
+  player options with Badge Progress, View Stats, and Edit Name & Avatar, available to hosts and non-hosts alike.
 - **Player distinctions:** explanation opens, trope proposals, outcomes, approval votes, and first-event milestones
   are tracked in replicated game state. All players see the same evidence-based badges; comparative distinctions
   require an untied leader, simultaneous firsts are not singled out, and resets clear the watch's tracking.
@@ -91,6 +103,16 @@ and an Edge Function that authenticates and authorizes every state/action relay.
   clicks; most-bingo recognition needs at least two lines and an untied lead; Trophy Hunter needs three lines;
   end-of-watch badges wait until the watch ends. Stronger achievements supersede lighter ones. Players can have no
   badge, while multiple players may share a genuinely earned non-comparative achievement.
+  The 51-badge lineup includes attainable milestones such as Trope Scout (one accepted proposal), Team Player
+  (helping approve another player's claim), and Trope Explorer (two different explanations). Earned progress
+  automatically upgrades badges: Team Player → Consensus Builder → Watch Party MVP → Consensus Captain, or
+  Bingo Buddy → Double Feature → Trophy Hunter. Successful calls can earn Right on Cue, Prediction Pro, and
+  Crystal Ball; failed or merely attempted predictions do not count. The highest earned tier always takes precedence.
+  Your own name → Badge Progress is available before earning a badge and shows up to three stronger milestone goals with
+  live evidence counts. Clicking a badge shows the same player's progress. New displayed badges and upgrades are
+  announced to every connected viewer in grouped, queued notifications that wait behind menus, modals, toasts,
+  tutorials, and celebrations. Initial/reconnected snapshots are silent; repeated snapshots and badge reappearance
+  do not replay announcements. Resetting a watch clears old notifications and starts fresh achievement tracking.
 - **Calls:** during a game, a trope's `Advanced actions` menu lets any player call one trope they expect next. A
   player's score appears only after making a call. Live player-list and final recap scores are clickable, explaining
   correct calls / calls made (including changed or withdrawn predictions) and how to make a call from a board trope.
@@ -112,10 +134,30 @@ and an Edge Function that authenticates and authorizes every state/action relay.
   Marathon History view tracks each player's completed watches, accepted tropes, bingos, and wager hits without
   assigning points or a winner.
 - **Co-hosts:** a host can add other connected players as hosts. Every host has the same host controls, can add more
-  hosts, and can resign once another host remains.
+  hosts, and can resign once another host remains, except that recovery-password configuration is exclusive to the
+  original host.
 - **PWA support:** the site includes a web app manifest and service worker so it can be installed via "Add to Home Screen" / browser install prompts. The app still needs network access for live multiplayer relay traffic.
 - **Notifications:** sound alerts can be muted from the header. iPhone/iPad browsers do not provide reliable webpage
   vibration support, so the app also uses visible vote prompts and a tab-title alert when an answer is needed.
+
+## Testing
+
+`npm test` runs unit/component tests, real Edge entrypoint tests with a mocked SDK/Deno boundary, and PGlite
+tests that execute the database migrations. `npm run coverage` includes frontend and Supabase function code;
+untested entrypoint lines stay visible instead of being excluded from the headline percentage.
+
+For browser regression, install Chromium once and run:
+
+```sh
+npx playwright install chromium
+npm run test:browser
+```
+
+The browser command starts the real app with an isolated local backend, uses ten independent Chromium contexts,
+and exercises desktop/mobile gameplay, menus, voting, badges, reconnect-related behavior, and recovery. It requires
+no cloud credentials and does not access production Supabase. Reports/screenshots go to `test-results/browser`
+(override with `BROWSER_TEST_OUTPUT`). CI and Pages builds run this command and upload its results even on failure.
+These tests complement, rather than replace, the separately authorized live Supabase smoke/revocation checks.
 
 ## Supabase setup (required)
 
@@ -157,7 +199,48 @@ protocol. The migration stores authoritative room snapshots and Auth-bound membe
 Realtime read access is limited to active members; direct client broadcast writes are not allowed. Pending
 mid-game joiners remain off the room channel until the host approves them.
 
+### Relay Abuse Limits and Payload Validation
+
+Authenticated relay requests use database-backed counters shared across function instances. Defaults:
+
+| Scope                                            | Limit                                     |
+| ------------------------------------------------ | ----------------------------------------- |
+| Per user, all relay requests                     | 600 per minute                            |
+| Per user, room creation attempts                 | 6 per 10 minutes                          |
+| Per user, joins                                  | 20 per minute                             |
+| Per user, host recovery/password configuration   | 10 per 15 minutes                         |
+| Per user, gameplay/state publishes               | 480 per minute                            |
+| Per user, status polling and heartbeats combined | 180 per minute                            |
+| Per user, other/control requests                 | 30 per minute                             |
+| Project, all relay requests                      | 6,000 per minute and 120,000 per 24 hours |
+| Project, room creation attempts                  | 500 per 24 hours                          |
+
+Join-form recovery passwords use the recovery bucket; the existing per-room five-attempt lockout remains.
+Denied operation attempts still consume aggregate allowances. Project-wide caps also bound rotating-identity
+traffic, but can stop service for all users when exhausted; they do not replace Auth signup protections.
+Expired user counters are cleaned after two days. Browser roles cannot read or alter counters or invoke their RPC.
+Exhausted budgets return HTTP 429 with `Retry-After` and `retryAfterSeconds`; budget failures return HTTP 503
+without executing an operation.
+
+Bodies are read through a bounded stream before JSON parsing: at most 1,100,000 bytes, regardless of claimed
+Content-Length. Malformed JSON, excessive nesting/complexity, prototype-like keys, unknown operations/messages/
+actions, and invalid field sizes/types are rejected. Zod schemas validate indexes, votes, identity envelopes,
+board shapes, pending claims/recovery, and snapshot roster/revision consistency. Invalid requests return HTTP 400;
+oversized bodies return HTTP 413. Rejected authenticated payloads still count toward abuse budgets. Sender identity
+remains server-derived and role checks still apply after validation; this is not a redesign of host privileges.
+
+Apply `202610080002_relay_abuse_limits.sql` with the other pending migrations **before deploying the revised
+game-relay function**. The function fails closed if its budget RPC is missing. Room codes, password length,
+admission rules, and gameplay behavior are unchanged by these safeguards.
+
 ### Live Security Smoke Test
+
+The relay also bounds body-read time to eight seconds, preserves saved-action acknowledgements after broadcast
+failure, and supports replay-safe UUID action IDs through atomic receipts retained for 24 hours. Seat reclamation
+uses a single database transaction. Apply `202610080003_reliable_game_actions.sql` after the earlier migrations
+before deploying this function revision. Updated clients reuse IDs for uncertain retries; older clients without
+IDs remain compatible but do not receive deduplication. See [Security Operations](docs/security-operations.md)
+for privacy-safe log events, quota/signup monitoring, and the required non-cooperative revocation test.
 
 After deployment, run `node scripts/supabase-smoke.js` from the repository root. It uses local Supabase
 configuration and your deployment login (macOS CLI keychain, or `SUPABASE_ACCESS_TOKEN` on other systems).
@@ -204,7 +287,7 @@ works alongside the configured movie lookup proxy (see above).
 
 Use Node.js 22.12 or newer and npm; this matches the Vite and Vitest engine requirements.
 
-```
+```sh
 npm install
 npm run dev
 ```
@@ -214,9 +297,10 @@ multiplayer — everyone just needs to reach the same Supabase project.
 
 Useful checks before shipping changes:
 
-```
+```sh
 npm run format:check
 npm run test
+npm run test:browser
 npm run lint
 npm audit --audit-level=high
 npm run build
@@ -224,11 +308,12 @@ npm run build
 
 Use `npm run format` to apply formatting before `npm run format:check` if needed.
 
-`npm run coverage` prints the Vitest coverage report.
+`npm run coverage` reports frontend and backend coverage. Install Chromium before the first browser run with
+`npx playwright install chromium`; generated browser results are ignored by Git and formatting checks.
 
 ## Build & deploy (GitHub Pages)
 
-```
+```sh
 npm run build
 ```
 
@@ -288,7 +373,7 @@ its updates thereafter. If a genuine release already exists when setup is pushed
 release history instead.
 
 1. Review/stage the intended app changes and these release files, run `npm run format:check`, `npm run lint`,
-   `npm run test`, and `npm run build`, then commit using a meaningful `feat:` or `fix:` message and push to `main`.
+   `npm run test`, `npm run test:browser`, and `npm run build`, then commit using a meaningful `feat:` or `fix:` message and push to `main`.
    No staged/uncommitted work is included in a release until you commit and push it.
 2. Watch **Actions → Release Please**. If no release PR appears, check that there is an eligible Conventional Commit
    and that the repository permits the bot to create PRs. The workflow can also be run manually on `main`.
@@ -318,11 +403,19 @@ The displayed version and the downloadable release build both follow the committ
 
 ## Notes & limitations
 
+- Browsers already keep a live local copy of game state for rendering. Reactions and result notifications do not
+  block the ordered gameplay/state-save queue. The server reuses a room snapshot only within its current request,
+  overlaps independent room/membership reads, and reloads after revision conflicts. Membership and expiry checks
+  remain active; cached client state is not a substitute for an authoritative Supabase save.
+- The frontend negotiates server gameplay from the relay's `gameplayMode: 'server'` response. Older relay deployments
+  that do not advertise it retain host-coordinated gameplay, including immediate solo acceptance and the proposer's
+  automatic approval. Hostless play requires the updated relay and migrations; an older relay still needs a host.
 - No peer-to-peer networking, so no NAT/firewall connectivity issues — everyone just needs a normal
   internet connection to reach Supabase.
 - Supabase stores the authoritative room snapshot and memberships until the room expires; connected browsers also
-  hold the live state. A game can change only while an authorized host is connected. If every host disconnects,
-  player actions pause until a host reconnects or the original host recovers their seat with a configured password.
+  hold a live copy. Ordinary player actions continue without a connected host. The server enforces vote deadlines;
+  connected clients request settlement at the deadline and on periodic heartbeats. If everyone disconnects, due
+  votes settle on the next authenticated request. Presence retains a short grace period for backgrounded phones.
 - Host permissions can be held by multiple players. Ordinary players do not become hosts when all designated hosts
   disconnect. A host who deliberately leaves while others remain can add a host before departing.
 - Ending a game clears its reconnect data. Deliberately leaving also clears that player's reconnect data, so a game
@@ -332,6 +425,6 @@ The displayed version and the downloadable release build both follow the committ
   Realtime being reachable.
 - Multiplayer requires a Supabase project (see setup above). Optional movie lookup uses the OMDb proxy, and optional
   sub-genre suggestions query Wikidata.
-- Supabase's free tier includes generous Realtime limits (concurrent connections and messages/month)
-  more than sufficient for casual game nights; check current limits on their pricing page if you
-  expect heavy use.
+- Supabase quotas depend on the current plan and workload. Review Realtime connections/messages, database storage,
+  Edge invocations, and anonymous Auth growth on the dashboard and current pricing page; local ten-player tests do
+  not establish production capacity or guarantee the free tier is sufficient.

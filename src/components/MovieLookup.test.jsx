@@ -32,6 +32,23 @@ describe('MovieLookup', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
+  it('accepts a manual title without lookup and preserves the genre selection', () => {
+    mocks.available.mockReturnValue(false);
+    const onFound = vi.fn();
+    const onMovieSelected = vi.fn();
+    render(<MovieLookup onFound={onFound} onMovieSelected={onMovieSelected} allowManualTitle />);
+    expect(screen.queryByRole('button', { name: 'Search' })).toBeNull();
+    const button = screen.getByRole('button', { name: 'Use manual title' });
+    expect(button).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('Manual title'), { target: { value: '   ' } });
+    expect(button).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('Manual title'), { target: { value: '  Private screening  ' } });
+    fireEvent.click(button);
+    expect(onMovieSelected).toHaveBeenCalledWith({ title: 'Private screening', poster: null });
+    expect(onFound).not.toHaveBeenCalled();
+    expect(screen.getByText('Selected title: Private screening')).toBeInTheDocument();
+  });
+
   it('searches, selects a title, and applies compatible genre suggestions', async () => {
     const onFound = vi.fn();
     const onMovieSelected = vi.fn();
@@ -52,7 +69,7 @@ describe('MovieLookup', () => {
       { genre: 'horror', subgenre: 'slasher' },
       { genre: 'comedy', subgenre: 'rom-com' },
     ]);
-    render(<MovieLookup onFound={onFound} onMovieSelected={onMovieSelected} />);
+    render(<MovieLookup onFound={onFound} onMovieSelected={onMovieSelected} allowManualTitle />);
 
     fireEvent.change(screen.getByLabelText(/Look up a movie/i), { target: { value: 'Example' } });
     fireEvent.click(screen.getByRole('button', { name: 'Search' }));
@@ -76,6 +93,18 @@ describe('MovieLookup', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Search a different title' }));
     expect(screen.queryByText(/Picked "Example Show"/)).toBeNull();
+    fireEvent.change(screen.getByLabelText('Manual title'), { target: { value: 'Private screening' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Use manual title' }));
+    expect(onMovieSelected).toHaveBeenLastCalledWith({ title: 'Private screening', poster: null });
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Example Show/ }));
+    expect(await screen.findByText(/Picked "Example Show"/)).toBeInTheDocument();
+    expect(screen.queryByText('Selected title: Private screening')).toBeNull();
+    expect(screen.getByLabelText('Manual title')).toHaveValue('');
+    fireEvent.change(screen.getByLabelText('Manual title'), { target: { value: 'Another screening' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Use manual title' }));
+    expect(screen.queryByText(/Picked "Example Show"/)).toBeNull();
+    expect(onMovieSelected).toHaveBeenLastCalledWith({ title: 'Another screening', poster: null });
   });
 
   it('shows a loader while a search is in flight and hides it afterward', async () => {
@@ -94,7 +123,8 @@ describe('MovieLookup', () => {
 
   it('shows a lookup error and allows another search', async () => {
     mocks.searchMovies.mockRejectedValue(new Error('Nothing found.'));
-    render(<MovieLookup onFound={vi.fn()} />);
+    const onMovieSelected = vi.fn();
+    render(<MovieLookup onFound={vi.fn()} onMovieSelected={onMovieSelected} allowManualTitle />);
 
     const input = screen.getByLabelText(/Look up a movie/i);
     fireEvent.change(input, { target: { value: 'Unknown' } });
@@ -102,5 +132,9 @@ describe('MovieLookup', () => {
 
     expect(await screen.findByText('Nothing found.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Search' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    fireEvent.change(screen.getByLabelText('Manual title'), { target: { value: 'Unknown' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Use manual title' }));
+    expect(onMovieSelected).toHaveBeenCalledWith({ title: 'Unknown', poster: null });
   });
 });

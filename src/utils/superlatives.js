@@ -129,6 +129,35 @@ export const SUPERLATIVE_DEFINITIONS = [
     'Has every playable trope on their board accepted.',
     (m) => m.playableSpaces > 0 && m.accepted === m.playableSpaces,
   ],
+  ['Trope Scout', 'Had their first trope proposal accepted by the group.', (m) => m.acceptedProposals >= 1],
+  ['Scene Spotter', 'Had at least two of their trope proposals accepted.', (m) => m.acceptedProposals >= 2],
+  ['Scene Sleuth', 'Had at least five of their trope proposals accepted.', (m) => m.acceptedProposals >= 5],
+  ['Team Player', "Helped approve another player's accepted trope claim.", (m) => m.otherApprovalVotes >= 1],
+  [
+    'Watch Party MVP',
+    "Helped approve at least eight other players' accepted trope claims.",
+    (m) => m.otherApprovalVotes >= 8,
+  ],
+  [
+    'Consensus Captain',
+    "Helped approve at least fifteen other players' accepted trope claims.",
+    (m) => m.otherApprovalVotes >= 15,
+  ],
+  ['Trope Explorer', 'Opened explanations for at least two different tropes.', (m) => m.viewedTropeCount >= 2],
+  ['Trope Librarian', 'Explored explanations for at least fifteen different tropes.', (m) => m.viewedTropeCount >= 15],
+  [
+    'Trope Scholar',
+    'Explored explanations for at least twenty-five different tropes.',
+    (m) => m.viewedTropeCount >= 25,
+  ],
+  ['On a Roll', 'Has at least three accepted tropes on their board.', (m) => m.accepted >= 3],
+  ['Scene Collector', 'Has at least eight accepted tropes on their board.', (m) => m.accepted >= 8],
+  ['Bingo Buddy', 'Completed a bingo line in this watch.', (m) => m.bingos >= 1],
+  ['Double Feature', 'Completed at least two bingo lines in this watch.', (m) => m.bingos >= 2],
+  ['Lucky Pick', 'Had a wagered trope accepted by the group.', (m) => m.wagerHits >= 1],
+  ['Right on Cue', 'Correctly called a trope before it was accepted.', (m) => m.correctCalls >= 1],
+  ['Prediction Pro', 'Correctly called at least three tropes in this watch.', (m) => m.correctCalls >= 3],
+  ['Crystal Ball', 'Correctly called at least five tropes in this watch.', (m) => m.correctCalls >= 5],
 ];
 
 const leaderScores = {
@@ -177,6 +206,18 @@ const awardStages = {
   'Wager Whisperer': 2,
   'Wager In Progress': 2,
   'Full House': 2,
+  'Scene Spotter': 2,
+  'Watch Party MVP': 3,
+  'Trope Librarian': 3,
+  'Scene Collector': 3,
+  'Right on Cue': 3,
+  'Scene Sleuth': 4,
+  'Consensus Captain': 4,
+  'Trope Scholar': 4,
+  'Bingo Buddy': 4,
+  'Prediction Pro': 4,
+  'Double Feature': 5,
+  'Crystal Ball': 5,
 };
 
 const definitions = SUPERLATIVE_DEFINITIONS.map(([name, description, qualifies, score], index) => ({
@@ -245,6 +286,7 @@ export function getSuperlativeMetrics(
     approvalVotes: personalStats.approvalVotes || 0,
     otherApprovalVotes: personalStats.otherApprovalVotes || 0,
     acceptedProposals: personalStats.acceptedProposals || 0,
+    correctCalls: gameState.callStats?.[player.id]?.correct || 0,
     acceptedAfterRejection: personalStats.acceptedAfterRejection || 0,
     marksAfterRejection: personalStats.marksAfterRejection || 0,
     viewedTropeCount: new Set(personalStats.viewedTropes || []).size,
@@ -275,7 +317,7 @@ export function getPlayerSuperlative(player, gameState, personalStats, milestone
   return award ? { ...award, metrics } : null;
 }
 
-export function getPlayerSuperlatives(players, gameState) {
+function superlativeCandidates(players, gameState) {
   const candidates = players.map((player) => {
     const metrics = getSuperlativeMetrics(player, gameState);
     return {
@@ -286,8 +328,6 @@ export function getPlayerSuperlatives(players, gameState) {
         .sort((a, b) => b.stage - a.stage || b.score(metrics) - a.score(metrics) || b.priority - a.priority),
     };
   });
-  const assignments = {};
-  const used = new Set();
   for (const candidate of candidates) {
     candidate.eligible = candidate.eligible.filter(
       (definition) =>
@@ -300,6 +340,13 @@ export function getPlayerSuperlatives(players, gameState) {
         ),
     );
   }
+  return candidates;
+}
+
+export function getPlayerSuperlatives(players, gameState) {
+  const candidates = superlativeCandidates(players, gameState);
+  const assignments = {};
+  const used = new Set();
 
   // Reserve rare/earned distinctions first, so a later player cannot consume
   // the only fitting award for someone with a stronger claim to it.
@@ -311,15 +358,201 @@ export function getPlayerSuperlatives(players, gameState) {
         (a.player.id < b.player.id ? -1 : a.player.id > b.player.id ? 1 : 0),
     )
     .forEach(({ player, metrics, eligible }) => {
-      const highestStage = eligible[0]?.stage;
+      const strongest = eligible[0];
       const award =
-        eligible.find((definition) => definition.stage === highestStage && !used.has(definition.id)) || eligible[0];
+        eligible.find(
+          (definition) =>
+            definition.stage === strongest?.stage &&
+            definition.score(metrics) === strongest.score(metrics) &&
+            !used.has(definition.id),
+        ) || strongest;
       if (!award) return;
       used.add(award.id);
       assignments[player.id] = { ...award, metrics };
     });
 
   return assignments;
+}
+
+const progressTracks = [
+  {
+    metric: 'acceptedProposals',
+    label: 'Accepted proposals',
+    goals: [
+      ['Trope Scout', 1],
+      ['Scene Spotter', 2],
+      ['Sharp Eye', 3],
+      ['Scene Sleuth', 5],
+    ],
+  },
+  {
+    metric: 'otherApprovalVotes',
+    label: 'Helpful approvals',
+    goals: [
+      ['Team Player', 1],
+      ['Consensus Builder', 3],
+      ['Watch Party MVP', 8],
+      ['Consensus Captain', 15],
+    ],
+  },
+  {
+    metric: 'viewedTropeCount',
+    label: 'Different explanations explored',
+    goals: [
+      ['Trope Explorer', 2],
+      ['Board Cartographer', 3],
+      ['Curious Mind', 8],
+      ['Trope Librarian', 15],
+      ['Trope Scholar', 25],
+    ],
+  },
+  {
+    metric: 'accepted',
+    label: 'Accepted board spaces',
+    goals: [
+      ['On a Roll', 3],
+      ['Scene Collector', 8],
+      ['Blackout Bound', (metrics) => Math.ceil(metrics.playableSpaces * 0.8)],
+      ['Blackout', (metrics) => metrics.playableSpaces],
+    ],
+  },
+  {
+    metric: 'bingos',
+    label: 'Completed bingo lines',
+    goals: [
+      ['Bingo Buddy', 1],
+      ['Double Feature', 2],
+      ['Trophy Hunter', 3],
+    ],
+  },
+  { metric: 'wagers', label: 'Wagers placed', goals: [['Full House', 5]] },
+  {
+    metric: 'wagerHits',
+    label: 'Successful wagers',
+    goals: [
+      ['Lucky Pick', 1],
+      ['Wager Whisperer', 2],
+      ['Wager Architect', 3, (metrics) => metrics.wagers === 5],
+      ['Clean Sweep', (metrics) => metrics.wagers, (metrics) => metrics.wagers >= 3],
+    ],
+  },
+  {
+    metric: 'correctCalls',
+    label: 'Correct predictions',
+    goals: [
+      ['Right on Cue', 1],
+      ['Prediction Pro', 3],
+      ['Crystal Ball', 5],
+    ],
+  },
+];
+
+export function getBadgeProgress(player, gameState, currentAward) {
+  const metrics = getSuperlativeMetrics(player, gameState);
+  const current =
+    currentAward === undefined
+      ? getPlayerSuperlatives(
+          Object.values(gameState.players || {}).length ? Object.values(gameState.players) : [player],
+          gameState,
+        )[player.id]
+      : currentAward;
+  return progressTracks
+    .flatMap((track, index) => {
+      const goal = track.goals.find(([name, , available]) => {
+        const definition = definitions.find((entry) => entry.name === name);
+        const stronger =
+          !current ||
+          definition.stage > current.stage ||
+          (definition.stage === current.stage &&
+            definition.score(metrics) >= current.score(metrics) &&
+            definition.priority > current.priority);
+        return stronger && (!available || available(metrics)) && !definition.qualifies(metrics);
+      });
+      if (!goal) return [];
+      const [name, threshold] = goal;
+      const target = typeof threshold === 'function' ? threshold(metrics) : threshold;
+      if (target <= 0) return [];
+      const definition = definitions.find((entry) => entry.name === name);
+      const value = Math.max(0, Math.min(target, metrics[track.metric] || 0));
+      return [
+        {
+          id: definition.id,
+          name,
+          description: definition.description,
+          stage: definition.stage,
+          label: track.label,
+          value,
+          target,
+          fraction: value / target,
+          order: index,
+        },
+      ];
+    })
+    .sort(
+      (first, second) => second.fraction - first.fraction || first.stage - second.stage || first.order - second.order,
+    )
+    .slice(0, 3);
+}
+
+export function createBadgeAchievementTracker() {
+  let initialized = false;
+  let previousStarted = false;
+  let previousWatch = 0;
+  let seen = new Map();
+  let watchVersion = 0;
+  let previousRevision;
+  return {
+    get watchVersion() {
+      return watchVersion;
+    },
+    reset() {
+      initialized = false;
+      seen = new Map();
+    },
+    update(state) {
+      if (
+        initialized &&
+        Number.isSafeInteger(state.serverRevision) &&
+        Number.isSafeInteger(previousRevision) &&
+        state.serverRevision <= previousRevision
+      )
+        return [];
+      previousRevision = state.serverRevision;
+      const watch = state.marathon?.watches?.length || 0;
+      const reset = initialized && (watch !== previousWatch || (previousStarted && !state.started));
+      if (reset) {
+        seen = new Map();
+        watchVersion += 1;
+      }
+      const players = Object.values(state.players);
+      const candidates = superlativeCandidates(players, state);
+      const awards = getPlayerSuperlatives(players, state);
+      const achievements = [];
+      for (const { player, eligible } of candidates) {
+        const previous = seen.get(player.id);
+        const award = awards[player.id];
+        if (initialized && !reset && previous && award && !previous.has(award.id)) {
+          achievements.push({
+            playerId: player.id,
+            name: player.name,
+            avatar: player.avatar,
+            badgeId: award.id,
+            badgeName: award.name,
+            stage: award.stage,
+          });
+        }
+        const remembered = previous || new Set();
+        for (const definition of eligible) remembered.add(definition.id);
+        seen.set(player.id, remembered);
+      }
+      initialized = true;
+      previousWatch = watch;
+      previousStarted = !!state.started;
+      return achievements.sort(
+        (first, second) => (state.players[first.playerId].seat || 0) - (state.players[second.playerId].seat || 0),
+      );
+    },
+  };
 }
 
 export function getAllSuperlatives() {

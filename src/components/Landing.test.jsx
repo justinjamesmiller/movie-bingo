@@ -101,7 +101,56 @@ describe('Landing', () => {
       { horror: 100 },
       { horror: { general: 100 } },
       null,
+      '',
     );
+  });
+
+  it('forwards an optional recovery password when creating a game', () => {
+    const onHost = vi.fn();
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    renderLanding({ onHost });
+    fireEvent.change(screen.getByPlaceholderText('e.g. Ashley'), { target: { value: 'Ashley' } });
+    fireEvent.change(screen.getByLabelText('Host recovery password (optional)'), { target: { value: 'xy' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Host Game' }));
+
+    expect(onHost).toHaveBeenCalledWith(
+      'Ashley',
+      ['horror'],
+      [],
+      false,
+      { horror: 50 },
+      40,
+      [],
+      { horror: 100 },
+      { horror: { general: 100 } },
+      null,
+      'xy',
+    );
+    expect(screen.getByLabelText('Host recovery password (optional)')).toHaveValue('');
+  });
+
+  it('creates a game with a manually selected title', () => {
+    const onHost = vi.fn();
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    renderLanding({ onHost });
+    fireEvent.change(screen.getByPlaceholderText('e.g. Ashley'), { target: { value: 'Ashley' } });
+    fireEvent.change(screen.getByLabelText('Manual title'), { target: { value: '  Private screening  ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Use manual title' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Host Game' }));
+    expect(onHost.mock.calls[0][9]).toEqual({ title: 'Private screening', poster: null });
+    expect(onHost.mock.calls[0][1]).toEqual(['horror']);
+  });
+
+  it('rejects a one-character recovery password before creating a game', () => {
+    const onHost = vi.fn();
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    renderLanding({ onHost });
+    fireEvent.change(screen.getByPlaceholderText('e.g. Ashley'), { target: { value: 'Ashley' } });
+    fireEvent.change(screen.getByLabelText('Host recovery password (optional)'), { target: { value: 'x' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Host Game' }));
+
+    expect(onHost).not.toHaveBeenCalled();
+    expect(screen.getByText('Use a host recovery password of at least 2 characters.')).toBeInTheDocument();
   });
 
   it('asks for only the missing join fields and submits them', () => {
@@ -126,12 +175,26 @@ describe('Landing', () => {
     renderLanding({ onJoin });
     fireEvent.change(screen.getByPlaceholderText('e.g. Sidney'), { target: { value: 'Alice' } });
     fireEvent.change(screen.getByPlaceholderText('ABCD'), { target: { value: 'ABCD' } });
-    fireEvent.change(screen.getByLabelText('Host recovery password (optional)'), {
+    expect(screen.queryByLabelText('Host recovery password')).toBeNull();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Are you a Host?' }));
+    fireEvent.change(screen.getByLabelText('Host recovery password'), {
       target: { value: 'long secure phrase' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Join Game' }));
     expect(onJoin).toHaveBeenCalledWith('Alice', 'ABCD', 'long secure phrase');
-    expect(screen.getByLabelText('Host recovery password (optional)')).toHaveValue('');
+    expect(screen.getByLabelText('Host recovery password')).toHaveValue('');
+  });
+
+  it('hides the recovery password field and clears it when Are you a Host is unchecked', () => {
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    renderLanding();
+    const hostToggle = screen.getByRole('checkbox', { name: 'Are you a Host?' });
+    fireEvent.click(hostToggle);
+    fireEvent.change(screen.getByLabelText('Host recovery password'), { target: { value: 'host-pass' } });
+    fireEvent.click(hostToggle);
+    expect(screen.queryByLabelText('Host recovery password')).toBeNull();
+    fireEvent.click(hostToggle);
+    expect(screen.getByLabelText('Host recovery password')).toHaveValue('');
   });
 
   it('shows only the name field when a join code is already provided', () => {

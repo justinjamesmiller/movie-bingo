@@ -24,6 +24,61 @@ function pendingClaim(overrides = {}) {
 }
 
 describe('ClaimModal', () => {
+  it.each(['p1', 'p2'])('hides queue controls behind advanced options for %s', (myId) => {
+    const onBrowseQueue = vi.fn();
+    const onShowQueue = vi.fn();
+    render(
+      <ClaimModal
+        pendingClaim={pendingClaim()}
+        myId={myId}
+        players={players}
+        onAgree={vi.fn()}
+        onDisagree={vi.fn()}
+        onCancel={vi.fn()}
+        onBrowseQueue={onBrowseQueue}
+        onShowQueue={onShowQueue}
+      />,
+    );
+    const toggle = screen.getByRole('button', { name: 'Advanced options' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('button', { name: 'Queue another trope' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'View waiting proposals' })).toBeNull();
+    expect(
+      screen.getByRole('button', { name: myId === 'p1' ? 'Cancel / undo my claim' : '👍 Agree, it happened' }),
+    ).toBeInTheDocument();
+    fireEvent.click(toggle);
+    expect(screen.queryByRole('button', { name: 'Advanced options' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Queue another trope' })).toHaveFocus();
+    fireEvent.click(screen.getByRole('button', { name: 'Queue another trope' }));
+    fireEvent.click(screen.getByRole('button', { name: 'View waiting proposals' }));
+    expect(onBrowseQueue).toHaveBeenCalledTimes(1);
+    expect(onShowQueue).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Queue another trope' })).toBeInTheDocument();
+  });
+
+  it('keeps advanced options open for vote updates but resets them for a new proposal', () => {
+    const props = {
+      myId: 'p2',
+      players,
+      onAgree: vi.fn(),
+      onDisagree: vi.fn(),
+      onCancel: vi.fn(),
+      onShowQueue: vi.fn(),
+    };
+    const view = render(<ClaimModal {...props} pendingClaim={pendingClaim()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced options' }));
+    view.rerender(<ClaimModal {...props} pendingClaim={pendingClaim({ votes: { p1: true, p2: true } })} />);
+    expect(screen.queryByRole('button', { name: 'Advanced options' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'View waiting proposals' })).toBeInTheDocument();
+    view.rerender(<ClaimModal {...props} pendingClaim={pendingClaim({ claimId: 'claim-2' })} />);
+    expect(screen.getByRole('button', { name: 'Advanced options' })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('button', { name: 'View waiting proposals' })).toBeNull();
+  });
+
+  it('omits advanced options when there are no queue actions', () => {
+    render(<ClaimModal pendingClaim={pendingClaim()} myId="p1" players={players} onCancel={vi.fn()} />);
+    expect(screen.queryByRole('button', { name: 'Advanced options' })).toBeNull();
+  });
   it('shows how many votes are still needed before majority is reached', () => {
     render(
       <ClaimModal

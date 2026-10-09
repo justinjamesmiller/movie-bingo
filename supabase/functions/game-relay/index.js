@@ -1,4 +1,8 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.117.3';
+import { SERVER_GAMEPLAY_ACTIONS } from '../../../src/net/relay.js';
+import { executeGameplay } from './gameplay.js';
+import { gateRelayRequest } from './requestGate.js';
+import { reportSecurityEvent } from './securityEvents.js';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL');
 const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -6,6 +10,7 @@ const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, apikey, content-type, x-client-info',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Expose-Headers': 'Retry-After',
 };
 const hostOnlyActions = new Set([
   'start',
@@ -16,6 +21,8 @@ const hostOnlyActions = new Set([
   'updateMovie',
   'proposeProfileChange',
   'restoreDisconnectedBoard',
+  'requestBoardRecovery',
+  'cancelBoardRecovery',
   'addHost',
   'resignHost',
   'kick',
@@ -24,7 +31,7 @@ const hostOnlyActions = new Set([
 ]);
 const MAX_ROOM_PLAYERS = 32;
 const RECOVERY_PASSWORD_ITERATIONS = 310000;
-const MIN_RECOVERY_PASSWORD_LENGTH = 12;
+const MIN_RECOVERY_PASSWORD_LENGTH = 2;
 const MAX_RECOVERY_PASSWORD_LENGTH = 128;
 const textEncoder = new TextEncoder();
 
@@ -32,10 +39,10 @@ const service = createClient(supabaseUrl, serviceRoleKey, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
 
-function json(body, status = 200) {
-  return new Response(JSON.stringify(body), {
+function json(body, status = 200, headers = {}) {
+  return new Response(JSON.stringify({ ...body, gameplayMode: 'server' }), {
     status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    headers: { ...corsHeaders, 'Content-Type': 'application/json', ...headers },
   });
 }
 
@@ -126,7 +133,7 @@ async function setHostRecoveryPassword(user, body) {
     password.length < MIN_RECOVERY_PASSWORD_LENGTH ||
     password.length > MAX_RECOVERY_PASSWORD_LENGTH
   ) {
-    return json({ error: 'Use a host recovery password between 12 and 128 characters.' }, 400);
+    return json({ error: 'Use a host recovery password between 2 and 128 characters.' }, 400);
   }
   const { data: member } = await membershipQuery(code, user.id, playerId).maybeSingle();
   if (!member?.is_host || member.status !== 'active') return json({ error: 'An active host seat is required.' }, 403);
@@ -246,16 +253,32 @@ async function broadcast(code, message, sender) {
 async function createRoom(user, body) {
   const { code, playerId: hostPlayerId } = body;
   const state = body.state && typeof body.state === 'object' ? { ...body.state, serverRevision: 0 } : body.state;
+  const recoveryPassword = body.hostRecoveryPassword;
   if (!validCode(code) || !validPlayerId(hostPlayerId) || !validState(state, code, hostPlayerId)) {
     return json({ error: 'Invalid room setup.' }, 400);
   }
+  if (
+    recoveryPassword != null &&
+    recoveryPassword !== '' &&
+    (typeof recoveryPassword !== 'string' ||
+      recoveryPassword.length < MIN_RECOVERY_PASSWORD_LENGTH ||
+      recoveryPassword.length > MAX_RECOVERY_PASSWORD_LENGTH)
+  ) {
+    return json({ error: 'Use a host recovery password between 2 and 128 characters.' }, 400);
+  }
+  const recoveryPasswordHash = recoveryPassword ? await hashRecoveryPassword(recoveryPassword) : null;
   state.serverRevision = 0;
   const expiresAt = Number.isFinite(state.sessionExpiresAt)
     ? new Date(state.sessionExpiresAt).toISOString()
     : new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString();
-  const { error: roomError } = await service
-    .from('bingo_rooms')
-    .insert({ code, state, expires_at: expiresAt, host_seen_at: new Date().toISOString() });
+  const { error: roomError } = await service.from('bingo_rooms').insert({
+    code,
+    state,
+    expires_at: expiresAt,
+    host_seen_at: new Date().toISOString(),
+    host_recovery_player_id: recoveryPasswordHash ? hostPlayerId : null,
+    host_recovery_password_hash: recoveryPasswordHash,
+  });
   if (roomError) return json({ error: 'Could not create that game code.' }, 409);
   const { error: memberError } = await service.from('bingo_room_members').insert({
     room_code: code,
@@ -356,29 +379,21 @@ async function claimSeat(user, body) {
   if (!validCode(code) || !validPlayerId(currentId) || !validPlayerId(seatId)) {
     return json({ error: 'Invalid seat transfer.' }, 400);
   }
-  const { data: room } = await service.from('bingo_rooms').select('state').eq('code', code).maybeSingle();
-  if (!room?.state?.players?.[seatId] || room.state.players[seatId].connected || room.state.hostIds?.includes(seatId)) {
-    return json({ error: 'That seat is not available to reclaim.' }, 409);
+  const { data, error } = await service.rpc('claim_bingo_seat', {
+    p_code: code,
+    p_user_id: user.id,
+    p_current_id: currentId,
+    p_seat_id: seatId,
+  });
+  if (error) return json({ error: 'Could not transfer that seat.' }, 500);
+  if (data?.error)
+    return json({ error: 'That seat cannot be reclaimed.' }, data.error === 'membership_required' ? 403 : 409);
+  try {
+    await broadcast(code, { t: 'state', state: data.state }, 'pserver');
+  } catch {
+    reportSecurityEvent('relay_delivery_pending', 'claim-seat', 200);
   }
-  const { data: current } = await membershipQuery(code, user.id, currentId).maybeSingle();
-  const { data: former } = await service
-    .from('bingo_room_members')
-    .select('user_id, is_host')
-    .eq('room_code', code)
-    .eq('player_id', seatId)
-    .maybeSingle();
-  if (!current || current.status === 'revoked' || former?.user_id !== user.id || former?.is_host) {
-    return json({ error: 'That seat cannot be reclaimed.' }, 403);
-  }
-  if (former) await service.from('bingo_room_members').delete().eq('room_code', code).eq('player_id', seatId);
-  const { error } = await service
-    .from('bingo_room_members')
-    .update({ player_id: seatId, status: 'active' })
-    .eq('room_code', code)
-    .eq('user_id', user.id)
-    .eq('player_id', currentId);
-  if (error) return json({ error: 'Could not transfer that seat.' }, 409);
-  return json({ playerId: seatId });
+  return json(data);
 }
 
 async function commitRoomState(code, state, expectedRevision, expiresAt, newCode = null) {
@@ -389,6 +404,11 @@ async function commitRoomState(code, state, expectedRevision, expiresAt, newCode
     p_expires_at: expiresAt,
     p_new_code: newCode,
   });
+}
+
+async function processGameplay(code, playerId, action, userId, initialRoom, requestId) {
+  const result = await executeGameplay({ service, broadcast, code, playerId, action, userId, initialRoom, requestId });
+  return json(result.body, result.status);
 }
 
 async function publish(user, body) {
@@ -406,7 +426,7 @@ async function publish(user, body) {
   if (!member || member.status === 'revoked') return json({ error: 'Player is not a member of this game.' }, 403);
   const { data: room } = await service
     .from('bingo_rooms')
-    .select('state, expires_at, host_seen_at')
+    .select('state, revision, expires_at, host_seen_at')
     .eq('code', code)
     .maybeSingle();
   if (!room || new Date(room.expires_at).getTime() <= Date.now()) return json({ error: 'Game session expired.' }, 410);
@@ -421,6 +441,9 @@ async function publish(user, body) {
     }
     if (member.status !== 'active' && message.action.t !== 'join' && message.action.t !== 'rejoin') {
       return json({ error: 'This seat is awaiting host approval.' }, 403);
+    }
+    if (SERVER_GAMEPLAY_ACTIONS.has(message.action.t)) {
+      return await processGameplay(code, member.player_id, message.action, user.id, room, body.requestId);
     }
     if (!member.is_host && Date.now() - new Date(room.host_seen_at).getTime() > 60_000) {
       return json({ error: 'No authorized host is currently connected.' }, 409);
@@ -494,6 +517,14 @@ async function publish(user, body) {
   try {
     await broadcast(code, outgoing, member.player_id);
   } catch (error) {
+    if (commit)
+      return json({
+        ok: true,
+        revision: commit.revision,
+        state: commit.state,
+        code: commit.code,
+        deliveryPending: true,
+      });
     return json({ error: error.message || 'Could not relay the message.' }, 502);
   }
 
@@ -518,69 +549,78 @@ Deno.serve(async (request) => {
   try {
     const user = await authenticate(request);
     if (!user) return json({ error: 'A valid anonymous-auth session is required.' }, 401);
-    const body = await request.json();
-    if (body.operation === 'create') return await createRoom(user, body);
-    if (body.operation === 'join') return await joinRoom(user, body);
-    if (body.operation === 'set-host-recovery-password') return await setHostRecoveryPassword(user, body);
-    if (body.operation === 'recover-host') return await recoverHost(user, body);
-    if (body.operation === 'join-status') {
-      const { code, playerId: memberId } = body;
-      if (!validCode(code) || !validPlayerId(memberId)) return json({ error: 'Invalid join status request.' }, 400);
-      const { data: member } = await membershipQuery(code, user.id, memberId).maybeSingle();
-      if (!member) return json({ status: 'revoked' });
-      if (member.status !== 'active') return json({ status: member.status });
-      const { data: room, error } = await service
-        .from('bingo_rooms')
-        .select('state, expires_at')
-        .eq('code', code)
-        .maybeSingle();
-      if (error) return json({ error: 'Could not check the saved game session.' }, 500);
-      if (!room) return json({ status: 'revoked' });
-      const expiresAt = new Date(room.expires_at).getTime();
-      if (!Number.isFinite(expiresAt) || expiresAt <= Date.now() || room.state?.gameOver) {
-        return json({ status: 'expired', expiresAt });
-      }
-      if (!Object.hasOwn(room.state.players || {}, memberId)) return json({ status: 'revoked' });
-      return json({ status: 'active', state: room.state, expiresAt });
-    }
-    if (body.operation === 'cancel-join') {
-      const { code, playerId: memberId } = body;
-      if (!validCode(code) || !validPlayerId(memberId)) return json({ error: 'Invalid join cancellation.' }, 400);
-      await service
-        .from('bingo_room_members')
-        .update({ status: 'revoked' })
-        .eq('room_code', code)
-        .eq('player_id', memberId)
-        .eq('user_id', user.id)
-        .eq('status', 'pending');
-      return json({ ok: true });
-    }
-    if (body.operation === 'claim-seat') return await claimSeat(user, body);
-    if (body.operation === 'publish') return await publish(user, body);
-    if (body.operation === 'heartbeat') {
-      const { code, playerId: memberId } = body;
-      if (!validCode(code) || !validPlayerId(memberId)) return json({ error: 'Invalid heartbeat.' }, 400);
-      const { data: member } = await membershipQuery(code, user.id, memberId).maybeSingle();
-      if (!member?.is_host || member.status !== 'active') return json({ error: 'Host membership required.' }, 403);
-      const { error } = await service
-        .from('bingo_rooms')
-        .update({ host_seen_at: new Date().toISOString() })
-        .eq('code', code);
-      if (error) return json({ error: 'Could not update host presence.' }, 500);
-      return json({ ok: true });
-    }
-    if (body.operation === 'leave') {
-      const { code, playerId: memberId } = body;
-      if (!validCode(code) || !validPlayerId(memberId)) return json({ error: 'Invalid leave request.' }, 400);
-      await service
-        .from('bingo_room_members')
-        .delete()
-        .eq('room_code', code)
-        .eq('user_id', user.id)
-        .eq('player_id', memberId);
-      return json({ ok: true });
-    }
-    return json({ error: 'Unknown relay operation.' }, 400);
+    return await gateRelayRequest({
+      request,
+      service,
+      userId: user.id,
+      respond: json,
+      handle: async (body) => {
+        if (body.operation === 'create') return await createRoom(user, body);
+        if (body.operation === 'join') return await joinRoom(user, body);
+        if (body.operation === 'set-host-recovery-password') return await setHostRecoveryPassword(user, body);
+        if (body.operation === 'recover-host') return await recoverHost(user, body);
+        if (body.operation === 'join-status') {
+          const { code, playerId: memberId } = body;
+          if (!validCode(code) || !validPlayerId(memberId)) return json({ error: 'Invalid join status request.' }, 400);
+          const { data: member } = await membershipQuery(code, user.id, memberId).maybeSingle();
+          if (!member) return json({ status: 'revoked' });
+          if (member.status !== 'active') return json({ status: member.status });
+          const { data: room, error } = await service
+            .from('bingo_rooms')
+            .select('state, expires_at')
+            .eq('code', code)
+            .maybeSingle();
+          if (error) return json({ error: 'Could not check the saved game session.' }, 500);
+          if (!room) return json({ status: 'revoked' });
+          const expiresAt = new Date(room.expires_at).getTime();
+          if (!Number.isFinite(expiresAt) || expiresAt <= Date.now() || room.state?.gameOver) {
+            return json({ status: 'expired', expiresAt });
+          }
+          if (!Object.hasOwn(room.state.players || {}, memberId)) return json({ status: 'revoked' });
+          return json({ status: 'active', state: room.state, expiresAt });
+        }
+        if (body.operation === 'cancel-join') {
+          const { code, playerId: memberId } = body;
+          if (!validCode(code) || !validPlayerId(memberId)) return json({ error: 'Invalid join cancellation.' }, 400);
+          await service
+            .from('bingo_room_members')
+            .update({ status: 'revoked' })
+            .eq('room_code', code)
+            .eq('player_id', memberId)
+            .eq('user_id', user.id)
+            .eq('status', 'pending');
+          return json({ ok: true });
+        }
+        if (body.operation === 'claim-seat') return await claimSeat(user, body);
+        if (body.operation === 'publish') return await publish(user, body);
+        if (body.operation === 'heartbeat') {
+          const { code, playerId: memberId } = body;
+          if (!validCode(code) || !validPlayerId(memberId)) return json({ error: 'Invalid heartbeat.' }, 400);
+          const { data: member } = await membershipQuery(code, user.id, memberId).maybeSingle();
+          if (!member || member.status !== 'active') return json({ error: 'Active membership required.' }, 403);
+          if (member.is_host) {
+            const { error } = await service
+              .from('bingo_rooms')
+              .update({ host_seen_at: new Date().toISOString() })
+              .eq('code', code);
+            if (error) return json({ error: 'Could not update host presence.' }, 500);
+          }
+          return await processGameplay(code, member.player_id, { t: 'settleClaim' }, user.id);
+        }
+        if (body.operation === 'leave') {
+          const { code, playerId: memberId } = body;
+          if (!validCode(code) || !validPlayerId(memberId)) return json({ error: 'Invalid leave request.' }, 400);
+          await service
+            .from('bingo_room_members')
+            .delete()
+            .eq('room_code', code)
+            .eq('user_id', user.id)
+            .eq('player_id', memberId);
+          return json({ ok: true });
+        }
+        return json({ error: 'Unknown relay operation.' }, 400);
+      },
+    });
   } catch (error) {
     return json({ error: error.message || 'Relay request failed.' }, 500);
   }

@@ -21,7 +21,6 @@ function renderMenu(overrides = {}) {
     onShowAllWagers: vi.fn(),
     onShowActivityFeed: vi.fn(),
     onBoardFocus: vi.fn(),
-    onAssignHost: vi.fn(),
     onResignHost: vi.fn(),
     hostCount: 2,
     onResetGame: vi.fn(),
@@ -44,6 +43,13 @@ function renderMenu(overrides = {}) {
 }
 
 describe('GameMenu', () => {
+  it('keeps secondary tools and accepted tropes out of simple options', () => {
+    renderMenu({ advancedGameplay: false, onAccessibility: vi.fn(), onShowClaimQueue: vi.fn(), queueCount: 3 });
+    expect(screen.queryByRole('button', { name: 'Badge Progress' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Accessibility' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Claim Queue (3)' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Accepted Tropes (2)' })).toBeNull();
+  });
   it('offers tutorial restart in simple mode and pause when active', () => {
     const onStartTutorial = vi.fn();
     const onPauseTutorial = vi.fn();
@@ -58,6 +64,7 @@ describe('GameMenu', () => {
     renderMenu({ tutorialActive: true, onPauseTutorial });
     fireEvent.click(screen.getByRole('button', { name: '📖 Pause tutorial' }));
     expect(onPauseTutorial).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Explore & Stats' }));
     expect(screen.getByRole('button', { name: 'Accepted Tropes (2)' })).toBeInTheDocument();
   });
 
@@ -70,7 +77,7 @@ describe('GameMenu', () => {
     expect(screen.getByRole('button', { name: 'My Tools' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Host Settings' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '🎯 Manage Wagers' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'Accepted Tropes (2)' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Accepted Tropes (2)' })).toBeNull();
     expect(screen.getByRole('button', { name: '🏁 End Game' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '🔄 Reset Game' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Use Simple Options' })).toHaveAttribute('aria-expanded', 'true');
@@ -104,6 +111,22 @@ describe('GameMenu', () => {
     fireEvent.click(screen.getByRole('button', { name: 'All Tropes (40)' }));
     expect(props.onShowAllTropes).toHaveBeenCalledTimes(1);
     expect(props.onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('groups shared trope tools under Explore & Stats and personal settings under My Tools', () => {
+    const props = renderMenu({ onAccessibility: vi.fn(), onShowClaimQueue: vi.fn(), queueCount: 3 });
+    fireEvent.click(screen.getByRole('button', { name: 'Explore & Stats' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Accepted Tropes (2)' }));
+    expect(props.onShowAcceptedTropes).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Claim Queue (3)' }));
+    expect(props.onShowClaimQueue).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('button', { name: 'Accessibility' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'My Tools' }));
+    expect(screen.queryByRole('button', { name: 'Accepted Tropes (2)' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Claim Queue (3)' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Accessibility' }));
+    expect(props.onAccessibility).toHaveBeenCalledTimes(1);
+    expect(props.onClose).toHaveBeenCalledTimes(3);
   });
 
   it('opens the QR invite action and closes the menu', () => {

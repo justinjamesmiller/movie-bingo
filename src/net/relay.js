@@ -2,11 +2,9 @@
 // Realtime channel (named after the 4-character game code) and broadcasts
 // messages to it -- Supabase's server relays messages to everyone else on the
 // channel, so no peer-to-peer networking or NAT traversal is needed. Presence
-// tracks who is currently connected. The player with the lowest connected
-// "seat" number (join order) acts as the authoritative host; if they
-// disconnect, authority automatically migrates to the next lowest connected
-// seat -- every client can compute this independently since game state is
-// replicated to everyone via broadcast.
+// tracks who is currently connected. Ordinary gameplay runs on the Edge
+// Function against the stored room snapshot, even without a connected host.
+// The lowest-seat connected authorized host coordinates host-only controls.
 import { createClient } from '@supabase/supabase-js';
 import {
   pickTropePool,
@@ -27,8 +25,8 @@ import { DEFAULT_SESSION_LIFETIME_HOURS, SESSION_LIFETIME_OPTIONS } from '../dat
 import { getCompletedLines } from '../utils/bingoLines.js';
 import { formatPlayerName } from '../utils/playerName.js';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const SUPABASE_URL = import.meta.env?.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env?.VITE_SUPABASE_ANON_KEY;
 const CHANNEL_PREFIX = 'bingo-';
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I
 const CLAIM_TIMEOUT_MS = 20000;
@@ -59,6 +57,69 @@ const MESSAGE_RATE_WINDOW_MS = 10_000;
 const MAX_MESSAGES_PER_WINDOW = 60;
 const MAX_TRACKED_MESSAGE_SENDERS = 128;
 const ALLOWED_REACTIONS = new Set(['👏', '😂', '😱', '🔥', '❤️']);
+
+export const SERVER_GAMEPLAY_ACTIONS = new Set([
+  'recordTropeView',
+  'setWager',
+  'proposeWagerChange',
+  'proposeBoardSwap',
+  'claim',
+  'challenge',
+  'vote',
+  'toggleCall',
+  'withdrawQueuedClaim',
+  'cancelClaim',
+  'changeName',
+  'changeAvatar',
+  'respondToProfileChange',
+  'proposeCustom',
+  'proposeReplace',
+  'proposeAccept',
+  'settleClaim',
+  'chooseReplacement',
+  'cycleReplacement',
+  'cancelReplacement',
+  'requestBoardRecovery',
+  'respondToBoardRecovery',
+  'cancelBoardRecovery',
+]);
+
+export function applyServerGameAction(snapshot, playerId, action) {
+  if (!SERVER_GAMEPLAY_ACTIONS.has(action?.t) || !Object.hasOwn(snapshot.players, playerId)) {
+    throw new Error('Invalid server gameplay action.');
+  }
+  const messages = [];
+  const engine = Object.create(GameClient.prototype);
+  Object.assign(engine, {
+    state: structuredClone(snapshot),
+    myId: playerId,
+    code: snapshot.code,
+    _serverMode: true,
+    _pendingDisconnects: new Map(),
+    _emitState() {},
+    onEvent(event) {
+      if (event.type === 'proposalRejected')
+        messages.push({ t: 'proposalRejected', to: playerId, message: event.message });
+      if (event.type === 'claimCancelled') messages.push({ t: 'claimCancelled', text: event.text });
+    },
+    _saveSession() {},
+    _send(message) {
+      if (message.t !== 'state') messages.push(structuredClone(message));
+    },
+  });
+  if (engine.state.pendingClaim) engine.state.pendingClaim.serverManaged = true;
+  if (engine.state.pendingClaim && !Number.isFinite(engine.state.pendingClaim.expiresAt)) {
+    const createdAt = Number(engine.state.pendingClaim.claimId.split('-')[1]);
+    engine.state.pendingClaim.expiresAt = (Number.isFinite(createdAt) ? createdAt : Date.now()) + CLAIM_TIMEOUT_MS;
+    engine.state.pendingClaim.serverManaged = true;
+  }
+  if (engine.state.pendingClaim?.expiresAt <= Date.now()) {
+    engine._resolveClaim(engine.state.pendingClaim.claimId);
+  }
+  if (engine.state.pendingBoardRecovery?.expiresAt <= Date.now()) engine._completeBoardRecovery();
+  if (action.t !== 'settleClaim') engine._applyAction(playerId, action);
+  return { state: engine.state, messages };
+}
 
 // Storage can be entirely unavailable (private browsing, blocked cookies) or
 // throw on write (quota), and none of it is worth failing a game over.
@@ -297,6 +358,8 @@ export class GameClient {
     this._queuedActions = [];
     this._messageRateLimits = new Map();
     this._publishQueue = Promise.resolve();
+    this._actionQueue = Promise.resolve();
+    this._serverGameplayEnabled = false;
     this._statePublishGeneration = 0;
     this._hostHeartbeatTimer = null;
     this._installLifecycleListeners();
@@ -320,20 +383,32 @@ export class GameClient {
     const { data, error } = await this.supabase.functions.invoke('game-relay', {
       body: { operation, ...values },
     });
-    if (error) throw new Error(error.message || 'Could not reach the secure game relay.');
+    if (error) {
+      const failure = new Error(error.message || 'Could not reach the secure game relay.');
+      failure.retryable = !error.context?.status || error.context.status >= 500;
+      throw failure;
+    }
     if (data?.error) throw new Error(data.error);
+    this._serverGameplayEnabled = data?.gameplayMode === 'server';
     return data;
   }
 
   _syncHostHeartbeat() {
-    if (!this.state || !this.code || !this.isHost() || this._destroyed || this.channel?.state !== 'joined') {
+    if (!this.state || !this.code || this._destroyed || this.channel?.state !== 'joined') {
       clearInterval(this._hostHeartbeatTimer);
       this._hostHeartbeatTimer = null;
       return;
     }
     if (this._hostHeartbeatTimer) return;
     this._hostHeartbeatTimer = setInterval(() => {
-      this._relayRequest('heartbeat', { code: this.code, playerId: this.myId }).catch(() => {});
+      this._relayRequest('heartbeat', { code: this.code, playerId: this.myId })
+        .then((result) => {
+          if (isValidReplicatedState(result?.state) && result.state.serverRevision > this.state.serverRevision) {
+            this.state = result.state;
+            this._emitState();
+          }
+        })
+        .catch(() => {});
     }, HOST_HEARTBEAT_INTERVAL_MS);
     this._hostHeartbeatTimer.unref?.();
   }
@@ -369,6 +444,7 @@ export class GameClient {
     this._pendingJoin = null;
     clearTimeout(this.claimTimeout);
     clearTimeout(this._reconnectTimer);
+    clearTimeout(this._boardRecoveryTimer);
     clearTimeout(this._sessionExpiryTimer);
     clearInterval(this._hostHeartbeatTimer);
     this._reconnectTimer = null;
@@ -460,6 +536,7 @@ export class GameClient {
     genrePercents,
     subgenrePercents,
     movie,
+    hostRecoveryPassword = '',
   ) {
     const trimmedName = (name || '').trim();
     if (!trimmedName) throw new Error('Please enter your name.');
@@ -484,7 +561,12 @@ export class GameClient {
       subgenrePercents,
       movie,
     );
-    await this._relayRequest('create', { code, playerId: this.myId, state: this.state });
+    await this._relayRequest('create', {
+      code,
+      playerId: this.myId,
+      state: this.state,
+      hostRecoveryPassword: hostRecoveryPassword || undefined,
+    });
     await this._connectChannel(code);
     this._saveSession(code, trimmedName);
     this._emitState();
@@ -902,6 +984,18 @@ export class GameClient {
     this._dispatch({ t: 'restoreDisconnectedBoard', targetId, sourceId });
   }
 
+  requestBoardRecovery(targetId, sourceId, timeoutSeconds = 30) {
+    return this._dispatch({ t: 'requestBoardRecovery', targetId, sourceId, timeoutSeconds });
+  }
+
+  respondToBoardRecovery(requestId) {
+    return this._dispatch({ t: 'respondToBoardRecovery', requestId });
+  }
+
+  cancelBoardRecovery(requestId) {
+    return this._dispatch({ t: 'cancelBoardRecovery', requestId });
+  }
+
   setHostRecoveryPassword(password) {
     return this._relayRequest('set-host-recovery-password', {
       code: this.code,
@@ -1103,9 +1197,20 @@ export class GameClient {
   _send(msg) {
     if (msg.t === 'state' && this.state) this.state.rev = (this.state.rev || 0) + 1;
     const message = msg;
+    const fingerprint = message.t === 'action' ? JSON.stringify(message.action) : null;
+    this._uncertainActions ||= new Map();
+    const uncertain = this._uncertainActions.get(fingerprint);
+    const actionRevision = this.state?.serverRevision;
+    const requestId =
+      message.t === 'action'
+        ? uncertain?.revision === actionRevision
+          ? uncertain.requestId
+          : crypto.randomUUID()
+        : undefined;
     const isSnapshot = message.t === 'state' || message.t === 'welcome' || message.t === 'migrate';
+    const independent = ['reaction', 'resolved', 'replacementResolved'].includes(message.t);
     const generation = this._statePublishGeneration;
-    const request = this._publishQueue.then(async () => {
+    const publish = async () => {
       if (isSnapshot && generation !== this._statePublishGeneration) return null;
       const expectedRevision = isSnapshot
         ? Number.isSafeInteger(message.state?.serverRevision)
@@ -1115,12 +1220,23 @@ export class GameClient {
             : 0
         : undefined;
       if (isSnapshot && message.state?.serverRevision == null) message.state.serverRevision = expectedRevision;
-      const result = await this._relayRequest('publish', {
+      const values = {
         code: this.code,
         playerId: this.myId,
         ...(isSnapshot && { expectedRevision }),
+        ...(requestId && { requestId }),
         message,
-      });
+      };
+      let result;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          result = await this._relayRequest('publish', values);
+          break;
+        } catch (error) {
+          if (!requestId || !this._serverGameplayEnabled || !error.retryable || attempt === 2) throw error;
+        }
+      }
+      if (fingerprint) this._uncertainActions.delete(fingerprint);
       if (result?.conflict && isValidReplicatedState(result.state)) {
         this._statePublishGeneration += 1;
         this.state = result.state;
@@ -1133,13 +1249,19 @@ export class GameClient {
         result.revision > (this.state?.serverRevision || 0) &&
         result.code === this.state?.code
       ) {
+        if (message.t === 'action' && isValidReplicatedState(result.state)) this.state = result.state;
         this.state.serverRevision = result.revision;
         this._emitState();
       }
       return result;
-    });
-    this._publishQueue = request.catch(() => {});
+    };
+    const request = independent ? publish() : this._publishQueue.then(publish);
+    if (!independent) this._publishQueue = request.catch(() => {});
     return request.catch((error) => {
+      if (fingerprint && this._serverGameplayEnabled && error.retryable) {
+        this._uncertainActions.set(fingerprint, { requestId, revision: actionRevision });
+        if (this._uncertainActions.size > 32) this._uncertainActions.delete(this._uncertainActions.keys().next().value);
+      }
       this.onEvent({ type: 'relayError', message: error.message || 'The secure game relay rejected an update.' });
       return null;
     });
@@ -1163,6 +1285,18 @@ export class GameClient {
       this.onEvent({ type: 'actionQueued', actionType: action.t });
       return;
     }
+    const request = this._actionQueue.then(async () => {
+      await this._publishQueue;
+      return this._dispatchConnected(action);
+    });
+    this._actionQueue = request.catch(() => {});
+    return request;
+  }
+
+  _dispatchConnected(action) {
+    if (this._serverGameplayEnabled && SERVER_GAMEPLAY_ACTIONS.has(action?.t)) {
+      return this._send({ t: 'action', from: this.myId, action });
+    }
     const currentHostId = this._currentHostId();
     if (!currentHostId) {
       this._queuedActions.push(action);
@@ -1170,7 +1304,8 @@ export class GameClient {
       return;
     }
     if (currentHostId === this.myId) {
-      return this._applyAction(this.myId, action);
+      this._applyAction(this.myId, action);
+      return this._publishQueue;
     } else {
       return this._send({ t: 'action', from: this.myId, action });
     }
@@ -1214,6 +1349,24 @@ export class GameClient {
   }
 
   _emitState() {
+    if (this.state && !Object.hasOwn(this.state.players, this.myId) && !this._pendingJoin) {
+      GameClient.clearSavedSession();
+      this.onEvent({ type: 'kicked', reason: 'Your player session was recovered on another device.' });
+      this.destroy();
+      this.state = null;
+      return;
+    }
+    clearTimeout(this._boardRecoveryTimer);
+    const recovery = this.state?.pendingBoardRecovery;
+    if (recovery) {
+      this._boardRecoveryTimer = setTimeout(
+        () => {
+          if (this._serverGameplayEnabled) this._dispatch({ t: 'settleClaim' });
+          else if (this._currentHostId() === this.myId) this._completeBoardRecovery();
+        },
+        Math.max(0, recovery.expiresAt - Date.now()),
+      );
+    }
     this._saveSnapshot();
     const saved = GameClient.getSavedSession();
     const me = this.state?.players?.[this.myId];
@@ -1226,6 +1379,14 @@ export class GameClient {
       this._saveSession(this.code, me.name);
     }
     this._scheduleSessionExpiry();
+    if (this.state?.pendingClaim?.serverManaged) {
+      clearTimeout(this.claimTimeout);
+      const claim = this.state.pendingClaim;
+      this.claimTimeout = setTimeout(
+        () => this._resolveClaim(claim.claimId),
+        Math.max(0, claim.expiresAt - Date.now()),
+      );
+    }
     this.onState(this.state, this.myId);
     this._syncHostHeartbeat();
   }
@@ -1383,7 +1544,7 @@ export class GameClient {
     if (!data || typeof data !== 'object' || Array.isArray(data) || typeof data.t !== 'string') return;
     if (data.sender != null && !isValidPlayerId(data.sender)) return;
     if (data.sender === this.myId) return;
-    if (!this._allowIncomingMessage(data.sender)) return;
+    if (data.sender !== 'pserver' && !this._allowIncomingMessage(data.sender)) return;
     if (
       (data.t === 'state' ||
         data.t === 'stateConflict' ||
@@ -1508,6 +1669,7 @@ export class GameClient {
                 }))
             : [],
           disagreeRationaleCounts: data.disagreeRationaleCounts || {},
+          proposedBy: Array.isArray(data.proposedBy) ? data.proposedBy.filter(isValidPlayerId) : [],
           wagerFreed: Array.isArray(data.wagerFreedIds) && data.wagerFreedIds.includes(this.myId),
           missedCalls: Array.isArray(data.missedCalls)
             ? data.missedCalls.filter(
@@ -1523,6 +1685,9 @@ export class GameClient {
             message: typeof data.message === 'string' ? data.message.slice(0, 240) : 'Proposal could not be queued.',
           });
         }
+        break;
+      case 'claimCancelled':
+        this.onEvent({ type: 'claimCancelled', text: data.text });
         break;
       case 'replacementResolved':
         this.onEvent({
@@ -1781,6 +1946,93 @@ export class GameClient {
     const player = Object.hasOwn(state.players, fromId) ? state.players[fromId] : null;
     if (!player || typeof player !== 'object' || !action || typeof action !== 'object') return;
 
+    if (
+      state.pendingBoardRecovery &&
+      [
+        'claim',
+        'challenge',
+        'proposeAccept',
+        'proposeReplace',
+        'proposeCustom',
+        'proposeBoardSwap',
+        'proposeWagerChange',
+        'approveJoin',
+        'denyJoin',
+        'kick',
+        'addHost',
+        'resignHost',
+        'proposeProfileChange',
+        'restoreDisconnectedBoard',
+      ].includes(action.t)
+    ) {
+      const message = 'A player recovery is in progress. Try again after it finishes.';
+      if (fromId === this.myId) this.onEvent({ type: 'proposalRejected', message });
+      else this._send({ t: 'proposalRejected', to: fromId, message });
+      return;
+    }
+
+    if (action.t === 'requestBoardRecovery') {
+      if (!Object.hasOwn(state.players, action.sourceId) || !Object.hasOwn(state.players, action.targetId)) return;
+      const source = state.players[action.sourceId];
+      const target = state.players[action.targetId];
+      if (
+        !this._isActiveHostId(fromId) ||
+        ![0, 10, 30, 300].includes(action.timeoutSeconds) ||
+        !state.started ||
+        state.gameOver ||
+        state.pendingClaim ||
+        state.pendingReplacement ||
+        state.claimQueue?.length ||
+        state.pendingBoardRecovery ||
+        state.pendingJoinRequest ||
+        !source ||
+        !target?.connected ||
+        source.id === target.id ||
+        this._isHostId(source.id) ||
+        state.pendingProfileChanges?.[source.id] ||
+        state.pendingProfileChanges?.[target.id]
+      )
+        return;
+      const createdAt = Date.now();
+      state.pendingBoardRecovery = {
+        id: `${state.code}-recovery-${createdAt}-${Math.random().toString(36).slice(2, 8)}`,
+        byId: fromId,
+        sourceId: source.id,
+        targetId: target.id,
+        expiresAt: createdAt + action.timeoutSeconds * 1000,
+      };
+      if (action.timeoutSeconds === 0) this._completeBoardRecovery();
+      else {
+        this._emitState();
+        this._send({ t: 'state', state });
+      }
+      return;
+    }
+
+    if (action.t === 'respondToBoardRecovery') {
+      const recovery = state.pendingBoardRecovery;
+      if (
+        !recovery ||
+        recovery.sourceId !== fromId ||
+        recovery.id !== action.requestId ||
+        recovery.expiresAt <= Date.now()
+      )
+        return;
+      state.pendingBoardRecovery = null;
+      this._logActivity(`${formatPlayerName(player)} confirmed they are still playing; recovery cancelled.`);
+      this._emitState();
+      this._send({ t: 'state', state });
+      return;
+    }
+
+    if (action.t === 'cancelBoardRecovery') {
+      if (!this._isActiveHostId(fromId) || state.pendingBoardRecovery?.id !== action.requestId) return;
+      state.pendingBoardRecovery = null;
+      this._emitState();
+      this._send({ t: 'state', state });
+      return;
+    }
+
     if (action.t === 'recordTropeView') {
       if (state.gameOver || typeof action.text !== 'string' || !state.tropePool.includes(action.text)) return;
       const stats = this._superlativeStats(fromId);
@@ -1927,6 +2179,7 @@ export class GameClient {
     if (action.t === 'reset') {
       if (!this._isActiveHostId(fromId)) return;
       clearTimeout(this.claimTimeout);
+      state.pendingBoardRecovery = null;
       recordMarathonWatch(state);
       const safe = sanitizeGenreSelection(action.genres, action.subgenreSelections);
       state.genres = safe.genres;
@@ -2025,7 +2278,7 @@ export class GameClient {
       const source = state.players[sourceId];
       const target = state.players[targetId];
       if (
-        !this._isActiveHostId(fromId) ||
+        (!this._isActiveHostId(fromId) && !(this._approvedBoardRecovery && this._isHostId(fromId))) ||
         !state.started ||
         state.gameOver ||
         state.pendingClaim ||
@@ -2034,8 +2287,8 @@ export class GameClient {
         !source ||
         !target ||
         sourceId === targetId ||
-        source.connected ||
-        this._pendingDisconnects.has(sourceId) ||
+        (!this._approvedBoardRecovery && source.connected) ||
+        (!this._approvedBoardRecovery && this._pendingDisconnects.has(sourceId)) ||
         target.connected !== true ||
         this._isHostId(sourceId) ||
         state.pendingProfileChanges?.[sourceId] ||
@@ -2047,6 +2300,10 @@ export class GameClient {
       target.board = [...source.board];
       target.marked = [...source.marked];
       target.wagered = [...source.wagered];
+      if (this._approvedBoardRecovery) {
+        target.name = source.name;
+        target.avatar = source.avatar;
+      }
 
       state.calls ||= {};
       this._finishCall(targetId, 'changed');
@@ -2124,10 +2381,10 @@ export class GameClient {
       }
 
       delete state.players[sourceId];
+      clearTimeout(this._pendingDisconnects.get(sourceId));
+      this._pendingDisconnects.delete(sourceId);
       state.seatOrder = state.seatOrder.filter((id) => id !== sourceId);
-      this._logActivity(
-        `🔄 ${formatPlayerName(target)} restored the board from disconnected player ${formatPlayerName(source)}.`,
-      );
+      this._logActivity(`🔄 ${formatPlayerName(target)} recovered the player seat from ${formatPlayerName(source)}.`);
       this._emitState();
       this._send({ t: 'state', state: this.state });
       return;
@@ -2249,6 +2506,7 @@ export class GameClient {
 
     if (action.t === 'gameOver') {
       if (!this._isActiveHostId(fromId)) return;
+      state.pendingBoardRecovery = null;
       if (!state.started || state.gameOver || state.pendingClaim) return;
       state.gameOver = true;
       state.claimQueue = [];
@@ -2469,7 +2727,8 @@ export class GameClient {
       }
       this._superlativeStats(fromId).submissions += 1;
     }
-    const claimId = `${state.code}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const createdAt = Date.now();
+    const claimId = `${state.code}-${createdAt}-${Math.random().toString(36).slice(2, 6)}`;
     state.pendingClaim = {
       claimId,
       byId: fromId,
@@ -2479,9 +2738,11 @@ export class GameClient {
       ...meta,
       votes: Object.fromEntries((meta.proposedBy || [fromId]).map((id) => [id, true])),
       totalPlayers: this._connectedCount(),
+      expiresAt: createdAt + CLAIM_TIMEOUT_MS,
+      serverManaged: !!this._serverMode,
     };
     clearTimeout(this.claimTimeout);
-    this.claimTimeout = setTimeout(() => this._resolveClaim(claimId), CLAIM_TIMEOUT_MS);
+    if (!this._serverMode) this.claimTimeout = setTimeout(() => this._resolveClaim(claimId), CLAIM_TIMEOUT_MS);
     if (this._maybeAutoResolve()) return;
     this._emitState();
     this._send({ t: 'state', state: this.state });
@@ -2537,6 +2798,9 @@ export class GameClient {
   _resolveClaim(claimId) {
     const pc = this.state.pendingClaim;
     if (!pc || pc.claimId !== claimId) return;
+    if (pc.serverManaged && !this._serverMode) {
+      return this._send({ t: 'action', from: this.myId, action: { t: 'settleClaim' } });
+    }
     clearTimeout(this.claimTimeout);
     const { agree } = this._tally(pc);
     const needed = this._majorityNeeded(pc.totalPlayers);
@@ -2736,6 +3000,59 @@ export class GameClient {
     this._emitState();
     this._send({ t: 'state', state: this.state });
     this._drainClaimQueue();
+  }
+
+  _completeBoardRecovery() {
+    const state = this.state;
+    const recovery = state?.pendingBoardRecovery;
+    if (!recovery || recovery.expiresAt > Date.now()) return;
+    state.pendingBoardRecovery = null;
+    const source = state.players[recovery.sourceId];
+    const target = state.players[recovery.targetId];
+    if (
+      !source ||
+      !target?.connected ||
+      !this._isHostId(recovery.byId) ||
+      this._isHostId(source.id) ||
+      state.gameOver ||
+      !state.started ||
+      state.pendingClaim ||
+      state.pendingReplacement ||
+      state.claimQueue?.length ||
+      state.pendingProfileChanges?.[source.id] ||
+      state.pendingProfileChanges?.[target.id]
+    ) {
+      this._logActivity('Player recovery cancelled because a required seat or host is no longer available.');
+      this._emitState();
+      this._send({ t: 'state', state });
+      return;
+    }
+    for (const key of ['calls', 'callStats', 'callHistory', 'superlativeStats', 'superlativeMilestones']) {
+      if (state[key]) delete state[key][target.id];
+    }
+    for (const callers of Object.values(state.acceptedCalls || {})) {
+      for (let index = callers.length - 1; index >= 0; index--) {
+        if (callers[index].id === target.id) callers.splice(index, 1);
+      }
+    }
+    for (const proposers of Object.values(state.acceptedTropeProposers || {})) {
+      for (let index = proposers.length - 1; index >= 0; index--) {
+        if (proposers[index] === target.id) proposers.splice(index, 1);
+      }
+    }
+    state.bingoEvents = (state.bingoEvents || []).filter((event) => event.playerId !== target.id);
+    for (const watch of state.marathon?.watches || []) {
+      watch.players = watch.players
+        .filter((player) => player.id !== target.id)
+        .map((player) => (player.id === source.id ? { ...player, id: target.id } : player));
+    }
+    state.lastBoardRecovery = { id: recovery.id, sourceId: source.id, targetId: target.id };
+    this._approvedBoardRecovery = true;
+    try {
+      this._applyAction(recovery.byId, { t: 'restoreDisconnectedBoard', targetId: target.id, sourceId: source.id });
+    } finally {
+      this._approvedBoardRecovery = false;
+    }
   }
 
   _finishCall(playerId, status) {

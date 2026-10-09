@@ -21,6 +21,7 @@ export default function Landing({
   onRejoin,
 }) {
   const [hostName, setHostName] = useState('');
+  const [hostRecoveryPassword, setHostRecoveryPassword] = useState('');
   const [hostGenres, setHostGenres] = useState([GENRES[0].id]);
   const [hostSubgenreSelections, setHostSubgenreSelections] = useState([]);
   const [hostFreeSpace, setHostFreeSpace] = useState(false);
@@ -34,6 +35,7 @@ export default function Landing({
   const [hostCustomTropes, setHostCustomTropes] = useState([]);
   const [hostMovie, setHostMovie] = useState(null);
   const [joinName, setJoinName] = useState('');
+  const [hostRecoveryEnabled, setHostRecoveryEnabled] = useState(false);
   const [joinHostRecoveryPassword, setJoinHostRecoveryPassword] = useState('');
   const [joinCode, setJoinCode] = useState(() => {
     const fromUrl = new URLSearchParams(window.location.search).get('code');
@@ -82,6 +84,10 @@ export default function Landing({
   }
 
   function submitHost(name) {
+    if (hostRecoveryPassword && hostRecoveryPassword.length < 2) {
+      setLocalError('Use a host recovery password of at least 2 characters.');
+      return;
+    }
     const resolvedSubgenrePercents = { ...hostSubgenrePercents };
     for (const genre of hostGenres) {
       const keys = ['general', ...hostSubgenreSelections.filter((s) => s.genre === genre).map((s) => s.subgenre)];
@@ -99,7 +105,9 @@ export default function Landing({
       hostGenrePercents,
       resolvedSubgenrePercents,
       hostMovie,
+      hostRecoveryPassword,
     );
+    setHostRecoveryPassword('');
   }
 
   function handleHostClick() {
@@ -135,7 +143,7 @@ export default function Landing({
       return;
     }
     setLocalError('');
-    if (joinHostRecoveryPassword) onJoin(name, normalizedCode, joinHostRecoveryPassword);
+    if (hostRecoveryEnabled && joinHostRecoveryPassword) onJoin(name, normalizedCode, joinHostRecoveryPassword);
     else onJoin(name, normalizedCode);
     setJoinHostRecoveryPassword('');
   }
@@ -148,7 +156,7 @@ export default function Landing({
     setJoinCode(code);
     setJoinSetupIssues(null);
     setLocalError('');
-    if (joinHostRecoveryPassword) onJoin(name, code, joinHostRecoveryPassword);
+    if (hostRecoveryEnabled && joinHostRecoveryPassword) onJoin(name, code, joinHostRecoveryPassword);
     else onJoin(name, code);
     setJoinHostRecoveryPassword('');
   }
@@ -197,18 +205,34 @@ export default function Landing({
           value={joinCode}
           onChange={(e) => setJoinCode(e.target.value.toUpperCase().slice(0, 4))}
         />
-        <label htmlFor="join-host-recovery-password">Host recovery password (optional)</label>
-        <input
-          id="join-host-recovery-password"
-          type="password"
-          autoComplete="current-password"
-          maxLength={128}
-          value={joinHostRecoveryPassword}
-          onChange={(event) => setJoinHostRecoveryPassword(event.target.value)}
-        />
         <button className="btn primary" disabled={busy} onClick={handleJoinClick}>
           Join Game
         </button>
+        <label className="checkbox-label join-host-recovery-toggle" htmlFor="join-host-recovery-enabled">
+          <input
+            id="join-host-recovery-enabled"
+            type="checkbox"
+            checked={hostRecoveryEnabled}
+            onChange={(event) => {
+              setHostRecoveryEnabled(event.target.checked);
+              if (!event.target.checked) setJoinHostRecoveryPassword('');
+            }}
+          />
+          Are you a Host?
+        </label>
+        {hostRecoveryEnabled && (
+          <>
+            <label htmlFor="join-host-recovery-password">Host recovery password</label>
+            <input
+              id="join-host-recovery-password"
+              type="password"
+              autoComplete="current-password"
+              maxLength={128}
+              value={joinHostRecoveryPassword}
+              onChange={(event) => setJoinHostRecoveryPassword(event.target.value)}
+            />
+          </>
+        )}
       </div>
       <div className="card">
         <h2>Host a New Game</h2>
@@ -224,6 +248,16 @@ export default function Landing({
         <button className="btn primary" disabled={busy} onClick={handleHostClick}>
           Host Game
         </button>
+        <label htmlFor="host-recovery-password">Host recovery password (optional)</label>
+        <input
+          id="host-recovery-password"
+          type="password"
+          autoComplete="new-password"
+          maxLength={128}
+          value={hostRecoveryPassword}
+          onChange={(event) => setHostRecoveryPassword(event.target.value)}
+        />
+        <p className="hint">Use at least 2 characters to recover the original host seat on another device.</p>
         <GenreSubgenrePicker
           genres={hostGenres}
           subgenreSelections={hostSubgenreSelections}
@@ -280,7 +314,7 @@ export default function Landing({
             <CustomTropesEditor customTropes={hostCustomTropes} onChange={setHostCustomTropes} />
           </>
         )}
-        <MovieLookup onFound={handleMovieFound} onMovieSelected={setHostMovie} />
+        <MovieLookup onFound={handleMovieFound} onMovieSelected={setHostMovie} allowManualTitle />
       </div>
       <ErrorModal message={localError || error} onClose={() => (localError ? setLocalError('') : onDismissError())} />
       {hostSetupIssues && (

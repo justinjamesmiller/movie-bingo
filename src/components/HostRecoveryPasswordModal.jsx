@@ -4,7 +4,7 @@ import ModalShell from './ModalShell.jsx';
 export default function HostRecoveryPasswordModal({ onConfirm, onCancel }) {
   const [password, setPassword] = useState('');
   const [confirmation, setConfirmation] = useState('');
-  const canSubmit = password.length >= 12 && password.length <= 128 && password === confirmation;
+  const canSubmit = password.length >= 2 && password.length <= 128 && password === confirmation;
 
   return (
     <ModalShell onClose={onCancel}>
@@ -32,9 +32,9 @@ export default function HostRecoveryPasswordModal({ onConfirm, onCancel }) {
           value={confirmation}
           onChange={(event) => setConfirmation(event.target.value)}
         />
-        {password.length > 0 && password.length < 12 && (
+        {password.length > 0 && password.length < 2 && (
           <p className="hint" role="alert">
-            Use at least 12 characters.
+            Use at least 2 characters.
           </p>
         )}
         {confirmation.length > 0 && password !== confirmation && (

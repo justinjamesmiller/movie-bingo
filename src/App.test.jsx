@@ -75,8 +75,9 @@ vi.mock('./net/relay.js', () => {
       latestClient = this;
     }
 
-    async hostGame(name) {
+    async hostGame(name, ...options) {
       if (hostError) throw hostError;
+      this.hostOptions = options;
       clientState.players.p1.name = name;
       this.onState(clientState, 'p1');
       return clientState.code;
@@ -99,6 +100,19 @@ vi.mock('./net/relay.js', () => {
     destroy = vi.fn();
     leaveGame = vi.fn();
     startGame() {}
+    setWager = vi.fn();
+    claim = vi.fn();
+    declareGameOver = vi.fn(() => {
+      clientState.gameOver = true;
+      this.onState(clientState, 'p1');
+      this.onEvent({ type: 'gameOver' });
+    });
+    resumeGame = vi.fn(() => {
+      clientState.gameOver = false;
+      this.onState(clientState, 'p1');
+      this.onEvent({ type: 'gameResumed' });
+    });
+    resetGame = vi.fn();
     setHostRecoveryPassword = vi.fn().mockResolvedValue({ ok: true });
     proposeAccept() {}
     proposeReplace() {}
@@ -114,6 +128,9 @@ vi.mock('./net/relay.js', () => {
       this.onState(clientState, 'p1');
     });
     restoreDisconnectedBoard = vi.fn();
+    requestBoardRecovery = vi.fn();
+    respondToBoardRecovery = vi.fn();
+    cancelBoardRecovery = vi.fn();
     resignHost() {
       clientState.hostIds = clientState.hostIds.filter((id) => id !== 'p1');
       this.onState(clientState, 'p1');
@@ -137,6 +154,142 @@ async function hostTutorialView() {
 }
 
 describe('App', () => {
+  it('keeps wagering optional and forwards a confirmed pregame selection', async () => {
+    await hostTutorialView();
+    fireEvent.click(screen.getByRole('button', { name: '🎯 Optional Wagers' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Skip for Now' }));
+    expect(latestClient.setWager).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: '🎯 Optional Wagers' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add Wagers' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Board space: Trope 1' }));
+    fireEvent.click(screen.getByRole('button', { name: '🎯 Wager this trope' }));
+    expect(latestClient.setWager).toHaveBeenCalledWith([0]);
+  });
+
+  it('does not submit a cancelled trope and forwards a confirmed live claim', async () => {
+    clientState.started = true;
+    await hostTutorialView();
+    fireEvent.click(screen.getByRole('button', { name: 'Board space: Trope 1' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel', exact: true }));
+    expect(latestClient.claim).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Board space: Trope 1' }));
+    fireEvent.click(screen.getByRole('button', { name: /Submit to the group/ }));
+    expect(latestClient.claim).toHaveBeenCalledWith(0, undefined);
+  });
+  it('requires end-game confirmation, opens the recap, and resumes without resetting the board', async () => {
+    clientState.started = true;
+    const board = [...clientState.players.p1.board];
+    await hostTutorialView();
+    fireEvent.click(screen.getByRole('button', { name: 'Menu', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: '🏁 End Game' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel', exact: true }));
+    expect(latestClient.declareGameOver).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Menu', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: '🏁 End Game' }));
+    fireEvent.click(screen.getByRole('button', { name: '🏁 End Game' }));
+    expect(latestClient.declareGameOver).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Close', exact: true })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Close', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Menu', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: '▶️ Resume Game' }));
+    expect(latestClient.resumeGame).toHaveBeenCalledTimes(1);
+    expect(clientState.gameOver).toBe(false);
+    expect(clientState.players.p1.board).toEqual(board);
+  });
+
+  it('cancels reset without mutation and forwards explicitly confirmed setup changes', async () => {
+    clientState.started = true;
+    await hostTutorialView();
+    const openReset = () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Menu', exact: true }));
+      const advanced = screen.queryByRole('button', { name: 'Advanced Options', exact: true });
+      if (advanced) fireEvent.click(advanced);
+      const hostSection = screen.getByRole('button', { name: 'Host Settings' });
+      if (hostSection.getAttribute('aria-expanded') !== 'true') fireEvent.click(hostSection);
+      fireEvent.click(screen.getByRole('button', { name: '🔄 Reset Game' }));
+    };
+    openReset();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel', exact: true }));
+    expect(latestClient.resetGame).not.toHaveBeenCalled();
+    openReset();
+    fireEvent.change(screen.getByLabelText('Total unique tropes in play'), { target: { value: '40' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Reset Game', exact: true }));
+    expect(latestClient.resetGame).toHaveBeenCalledTimes(1);
+    expect(latestClient.resetGame.mock.calls[0][4]).toBe(40);
+    expect(screen.queryByRole('heading', { name: 'Reset the game?' })).toBeNull();
+  });
+  it.each([true, false])('shows a five-minute recovery countdown to the challenged player: %s', async (isSource) => {
+    vi.useFakeTimers();
+    clientState.started = true;
+    clientState.players.p3 = { ...clientState.players.p2, id: 'p3', name: 'New device', seat: 2 };
+    clientState.seatOrder.push('p3');
+    clientState.pendingBoardRecovery = {
+      id: 'recovery-test',
+      sourceId: isSource ? 'p1' : 'p2',
+      targetId: 'p3',
+      byId: isSource ? 'p2' : 'p1',
+      expiresAt: Date.now() + 300_000,
+    };
+    render(<App />);
+    if (isSource) {
+      fireEvent.change(screen.getByPlaceholderText('e.g. Sidney'), { target: { value: 'Ashley' } });
+      fireEvent.change(screen.getByPlaceholderText('ABCD'), { target: { value: 'ABCD' } });
+    } else fireEvent.change(screen.getByPlaceholderText('e.g. Ashley'), { target: { value: 'Ashley' } });
+    await act(async () =>
+      fireEvent.click(screen.getByRole('button', { name: isSource ? 'Join Game' : 'Host Game', exact: true })),
+    );
+    expect(screen.getByRole('timer', { name: 'Recovery countdown' })).toHaveTextContent('5:00');
+    await act(() => vi.advanceTimersByTimeAsync(1000));
+    expect(screen.getByRole('timer')).toHaveTextContent('4:59');
+    fireEvent.click(screen.getByRole('button', { name: isSource ? "I'm still playing" : 'Cancel recovery' }));
+    expect(isSource ? latestClient.respondToBoardRecovery : latestClient.cancelBoardRecovery).toHaveBeenCalledWith(
+      'recovery-test',
+    );
+  });
+  it('shows badge progress before earning a badge and updates it from shared evidence', async () => {
+    render(<App />);
+    fireEvent.change(screen.getByPlaceholderText('e.g. Ashley'), { target: { value: 'Ashley' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Host Game', exact: true }));
+    await screen.findByRole('button', { name: 'Menu', exact: true });
+    fireEvent.click(screen.getByRole('button', { name: 'Your player options' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Badge Progress' }));
+    expect(screen.getByRole('heading', { name: 'Badge Progress' })).toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: 'Team Player progress' })).toHaveAttribute('value', '0');
+    act(() => {
+      clientState.superlativeStats = { p1: { otherApprovalVotes: 2 } };
+      latestClient.onState(clientState, 'p1');
+    });
+    expect(screen.getByRole('heading', { name: 'Team Player' })).toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: 'Consensus Builder progress' })).toHaveAttribute('value', '2');
+    expect(screen.queryByRole('status', { name: 'New badges' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Close', exact: true }));
+    expect(await screen.findByRole('status', { name: 'New badges' })).toHaveTextContent('Ashley earned Team Player');
+  });
+
+  it('announces other players upgrades without replaying initial or repeated badges', async () => {
+    clientState.started = true;
+    clientState.superlativeStats = { p2: { otherApprovalVotes: 1 } };
+    render(<App />);
+    fireEvent.change(screen.getByPlaceholderText('e.g. Ashley'), { target: { value: 'Ashley' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Host Game', exact: true }));
+    await screen.findByRole('button', { name: 'Menu', exact: true });
+    expect(screen.queryByRole('status', { name: 'New badges' })).toBeNull();
+    act(() => {
+      clientState.superlativeStats.p2.otherApprovalVotes = 3;
+      latestClient.onState(clientState, 'p1');
+    });
+    const announcement = await screen.findByRole('status', { name: 'New badges' });
+    expect(announcement).toHaveTextContent('Bob earned Consensus Builder');
+    act(() => latestClient.onState(clientState, 'p1'));
+    expect(screen.getAllByRole('status', { name: 'New badges' })).toHaveLength(1);
+    act(() => {
+      clientState.started = false;
+      clientState.superlativeStats = {};
+      latestClient.onState(clientState, 'p1');
+    });
+    await waitFor(() => expect(screen.queryByRole('status', { name: 'New badges' })).toBeNull());
+  });
+
   afterEach(() => vi.useRealTimers());
 
   beforeEach(() => {
@@ -258,6 +411,8 @@ describe('App', () => {
     localStorage.removeItem('bingo-accessibility');
     const first = await hostTutorialView();
     fireEvent.click(screen.getByRole('button', { name: 'Menu', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced Options', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'My Tools', exact: true }));
     fireEvent.click(screen.getByRole('button', { name: 'Accessibility', exact: true }));
     for (const label of ['Larger text', 'Board as a readable list', 'Show space state labels', 'Reduce animations'])
       fireEvent.click(screen.getByRole('checkbox', { name: label }));
@@ -500,6 +655,20 @@ describe('App', () => {
     expect(screen.queryByRole('button', { name: '👑 Add Host' })).toBeNull();
   });
 
+  it('passes the optional host recovery password to room creation without persisting it', async () => {
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }));
+    render(<App />);
+    fireEvent.change(screen.getByPlaceholderText('e.g. Ashley'), { target: { value: 'Ashley' } });
+    fireEvent.change(screen.getByLabelText('Host recovery password (optional)'), { target: { value: 'xy' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Host Game' }));
+    await screen.findByText('Code: ABCD');
+
+    expect(latestClient.hostOptions.at(-1)).toBe('xy');
+    expect(localStorage.getItem('movie-bingo-session') || '').not.toContain('xy');
+    expect(sessionStorage.getItem('movie-bingo-session') || '').not.toContain('xy');
+  });
+
   it('returns to host setup and destroys the client when game creation fails', async () => {
     vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }));
@@ -639,7 +808,8 @@ describe('App', () => {
     render(<App />);
     fireEvent.change(screen.getByPlaceholderText('e.g. Sidney'), { target: { value: 'Alice' } });
     fireEvent.change(screen.getByPlaceholderText('ABCD'), { target: { value: 'ABCD' } });
-    fireEvent.change(screen.getByLabelText('Host recovery password (optional)'), {
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Are you a Host?' }));
+    fireEvent.change(screen.getByLabelText('Host recovery password'), {
       target: { value: 'long secure phrase' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Join Game' }));
@@ -788,10 +958,11 @@ describe('App', () => {
     await screen.findByText('Code: ABCD');
 
     fireEvent.click(screen.getByRole('button', { name: '🍿 Casey' }));
-    expect(screen.getByLabelText('Restore board from')).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('Restore board from'), { target: { value: 'p3' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Restore board and remove old seat' }));
-    expect(latestClient.restoreDisconnectedBoard).toHaveBeenCalledWith('p2', 'p3');
+    expect(screen.getByLabelText('Recover player from')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Recover player from'), { target: { value: 'p3' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Recover player', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send recovery prompt' }));
+    expect(latestClient.requestBoardRecovery).toHaveBeenCalledWith('p2', 'p3', 30);
   });
 
   it('keeps All Tropes open after proposing a trope from its list', async () => {

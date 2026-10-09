@@ -94,16 +94,6 @@ export default function GameMenu({
               </div>
             </div>
             <div className="game-menu-actions">
-              {onAccessibility && (
-                <button className="btn" onClick={() => pick(onAccessibility)}>
-                  Accessibility
-                </button>
-              )}
-              {started && !gameOver && onShowClaimQueue && (
-                <button className="btn" onClick={() => pick(onShowClaimQueue)}>
-                  Claim Queue ({queueCount})
-                </button>
-              )}
               {(onStartTutorial || onPauseTutorial) && (
                 <button className="btn" onClick={() => pick(tutorialActive ? onPauseTutorial : onStartTutorial)}>
                   📖 {tutorialActive ? 'Pause tutorial' : 'Start tutorial'}
@@ -123,9 +113,19 @@ export default function GameMenu({
               )}
               {advancedGameplay && advancedSection === 'explore' && (
                 <div className="game-menu-section">
+                  {started && (
+                    <button className="btn" onClick={() => pick(onShowAcceptedTropes)}>
+                      Accepted Tropes ({acceptedCount})
+                    </button>
+                  )}
                   <button className="btn" onClick={() => pick(onShowAllTropes)}>
                     All Tropes ({tropePoolCount})
                   </button>
+                  {started && !gameOver && onShowClaimQueue && (
+                    <button className="btn" onClick={() => pick(onShowClaimQueue)}>
+                      Claim Queue ({queueCount})
+                    </button>
+                  )}
                   <button className="btn" onClick={() => pick(onShowAllWagers)}>
                     🎯 All Wagers
                   </button>
@@ -153,6 +153,11 @@ export default function GameMenu({
               )}
               {advancedGameplay && advancedSection === 'personal' && (
                 <div className="game-menu-section">
+                  {onAccessibility && (
+                    <button className="btn" onClick={() => pick(onAccessibility)}>
+                      Accessibility
+                    </button>
+                  )}
                   {started && (
                     <button className="btn" onClick={() => pick(onShowAssignWager)}>
                       🎯 Manage Wagers
@@ -203,11 +208,6 @@ export default function GameMenu({
                     🔄 Reset Game
                   </button>
                 </div>
-              )}
-              {started && (
-                <button className="btn" onClick={() => pick(onShowAcceptedTropes)}>
-                  Accepted Tropes ({acceptedCount})
-                </button>
               )}
               {gameOver && (
                 <button className="btn" onClick={() => pick(onViewRecap)}>

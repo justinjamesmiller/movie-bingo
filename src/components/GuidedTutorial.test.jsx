@@ -63,6 +63,7 @@ describe('GuidedTutorial', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Next' }));
     fireEvent.click(screen.getByRole('button', { name: 'Explore advanced options' }));
     expect(screen.getByRole('heading', { name: 'Optional host controls' })).toBeInTheDocument();
+    expect(screen.getByText(/Only the original host can set or replace the recovery password/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Open advanced tools' }));
     expect(callbacks.onAdvanced).toHaveBeenCalledTimes(1);
   });
@@ -94,6 +95,27 @@ describe('GuidedTutorial', () => {
     expect(screen.getByText(/Advanced actions, then Call it next/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Open a trope' }));
     expect(callbacks.onBrowse).toHaveBeenCalledTimes(1);
+  });
+
+  it('explains where hosts can set or replace a recovery password', () => {
+    render(<GuidedTutorial {...props({ isHost: true })} />);
+    while (!screen.queryByRole('heading', { name: 'Your host essentials' })) {
+      fireEvent.click(screen.getByRole('button', { name: 'Next', exact: true }));
+    }
+    expect(screen.getByText(/set a recovery password during host setup/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Explore advanced options' }));
+    expect(screen.getByRole('heading', { name: 'Optional host controls' })).toBeInTheDocument();
+    expect(screen.getByText(/Only the original host can set or replace the recovery password/)).toBeInTheDocument();
+  });
+
+  it('explains automatic proposer approval and solo acceptance during live play', () => {
+    render(<GuidedTutorial {...props({ started: true })} />);
+    while (!screen.queryByRole('heading', { name: 'Spot it, then claim it' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Next', exact: true }));
+    expect(screen.getByText(/Submitting counts as your approval; playing alone/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Next', exact: true }));
+    expect(screen.getByText(/The proposer already counts as an approval/)).toBeInTheDocument();
+    expect(screen.getByText(/Advanced options reveals queue controls, then disappears/)).toBeInTheDocument();
   });
 
   it.each(['modal', 'game-menu-panel'])(

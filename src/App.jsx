@@ -51,6 +51,7 @@ import InviteQrModal from './components/InviteQrModal.jsx';
 import WagerIntroModal from './components/WagerIntroModal.jsx';
 import HostTransferModal from './components/HostTransferModal.jsx';
 import PlayerManagementModal from './components/PlayerManagementModal.jsx';
+import BoardRecoveryModal from './components/BoardRecoveryModal.jsx';
 import ProfileChangeProposalModal from './components/ProfileChangeProposalModal.jsx';
 import HostPromotionModal from './components/HostPromotionModal.jsx';
 import SessionLifetimeModal from './components/SessionLifetimeModal.jsx';
@@ -58,12 +59,13 @@ import HostRecoveryPasswordModal from './components/HostRecoveryPasswordModal.js
 import MovieIdentityModal from './components/MovieIdentityModal.jsx';
 import ReplacementPickerModal from './components/ReplacementPickerModal.jsx';
 import SuperlativeModal from './components/SuperlativeModal.jsx';
+import BadgeAnnouncement from './components/BadgeAnnouncement.jsx';
 import { formatPlayerName } from './utils/playerName.js';
 import MarathonStandingsModal from './components/MarathonStandingsModal.jsx';
 import PlayerStatsModal from './components/PlayerStatsModal.jsx';
 import StatsDashboardModal from './components/StatsDashboardModal.jsx';
 import TropeAdvancedActionsModal from './components/TropeAdvancedActionsModal.jsx';
-import { getPlayerSuperlatives } from './utils/superlatives.js';
+import { createBadgeAchievementTracker, getBadgeProgress, getPlayerSuperlatives } from './utils/superlatives.js';
 import { getGameTheme } from './utils/gameTheme.js';
 
 const MAX_WAGERS = 5;
@@ -170,7 +172,6 @@ function App() {
   const [gameOverModalOpen, setGameOverModalOpen] = useState(false);
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
   const [hostTransferOpen, setHostTransferOpen] = useState(false);
-  const [hostTransferLeaves, setHostTransferLeaves] = useState(false);
   const [sessionLifetimeModalOpen, setSessionLifetimeModalOpen] = useState(false);
   const [hostRecoveryPasswordOpen, setHostRecoveryPasswordOpen] = useState(false);
   const [movieIdentityModalOpen, setMovieIdentityModalOpen] = useState(false);
@@ -189,6 +190,8 @@ function App() {
   const [finaleBanner, setFinaleBanner] = useState(false);
   const [highlightedCells, setHighlightedCells] = useState(new Set());
   const [superlativeInfo, setSuperlativeInfo] = useState(null);
+  const [badgeProgressOpen, setBadgeProgressOpen] = useState(false);
+  const [badgeAnnouncements, setBadgeAnnouncements] = useState([]);
   const [callInfoPlayer, setCallInfoPlayer] = useState(null);
   const [marathonStandingsOpen, setMarathonStandingsOpen] = useState(false);
   const [playerStatsTargetId, setPlayerStatsTargetId] = useState(null);
@@ -465,7 +468,6 @@ function App() {
       (player) => player.id !== myId && player.connected,
     );
     if (isHost && remainingPlayers.length > 0) {
-      setHostTransferLeaves(true);
       setHostTransferOpen(true);
     } else {
       handleLeaveGame();
@@ -476,11 +478,6 @@ function App() {
     await clientRef.current?.addHost(targetId);
     setHostTransferOpen(false);
     handleLeaveGame();
-  }
-
-  async function handleAssignHost(targetId) {
-    await clientRef.current?.addHost(targetId);
-    setHostTransferOpen(false);
   }
 
   function handleResignHost() {
@@ -499,10 +496,16 @@ function App() {
   }, []);
 
   function makeClient() {
+    const badgeTracker = createBadgeAchievementTracker();
+    setBadgeAnnouncements([]);
     let previousBingoCounts = null;
     let previousBingoCode = null;
     const client = new GameClient({
       onState: (state, id) => {
+        const previousBadgeWatch = badgeTracker.watchVersion;
+        const achievements = badgeTracker.update(state);
+        if (badgeTracker.watchVersion !== previousBadgeWatch) setBadgeAnnouncements([]);
+        if (achievements.length) setBadgeAnnouncements((queue) => [...queue, achievements].slice(-12));
         const nextCounts = Object.fromEntries(
           Object.entries(state.players).map(([playerId, player]) => [
             playerId,
@@ -674,7 +677,7 @@ function App() {
           setGameState(null);
           setMyId(null);
           setSavedSession(null);
-          setError('You were removed from the game by the host.');
+          setError(evt.reason || 'You were removed from the game by the host.');
           setConnectionStatus('connected');
         }
       },
@@ -700,6 +703,7 @@ function App() {
     genrePercents,
     subgenrePercents,
     movie,
+    hostRecoveryPassword,
   ) {
     const requestId = ++loadingRequestRef.current;
     setError('');
@@ -720,6 +724,7 @@ function App() {
         genrePercents,
         subgenrePercents,
         movie,
+        hostRecoveryPassword,
       );
       if (loadingRequestRef.current !== requestId) return;
       blurActiveTextField();
@@ -1129,8 +1134,8 @@ function App() {
     setManagedPlayer(null);
   }
 
-  function handleRestoreDisconnectedBoard(sourceId) {
-    clientRef.current?.restoreDisconnectedBoard(managedPlayer.id, sourceId);
+  function handleRequestBoardRecovery(sourceId, timeoutSeconds) {
+    clientRef.current?.requestBoardRecovery(managedPlayer.id, sourceId, timeoutSeconds);
     setManagedPlayer(null);
   }
 
@@ -1262,6 +1267,7 @@ function App() {
     .join(', ');
   const inviteUrl = `${window.location.origin}${window.location.pathname}?code=${gameState.code}`;
   const playerSuperlatives = getPlayerSuperlatives(players, gameState);
+  const badgePlayer = players.find((player) => player.id === superlativeInfo?.playerId) || me;
 
   return (
     <>
@@ -1398,9 +1404,7 @@ function App() {
                 onCallScoreClick={setCallInfoPlayer}
                 wageringEnabled={wageringEnabled}
                 superlatives={playerSuperlatives}
-                onSuperlativeClick={(player) =>
-                  setSuperlativeInfo({ award: playerSuperlatives[player.id], name: player.name, avatar: player.avatar })
-                }
+                onSuperlativeClick={(player) => setSuperlativeInfo({ playerId: player.id })}
               />
             )}
             <div className="board-wrap" data-tutorial="board">
@@ -1583,13 +1587,20 @@ function App() {
             !gameState.gameOver &&
             !gameState.pendingClaim &&
             !gameState.pendingReplacement &&
-            !gameState.claimQueue?.length
+            !gameState.claimQueue?.length &&
+            !gameState.pendingBoardRecovery &&
+            !gameState.pendingJoinRequest
           }
-          disconnectedPlayers={players.filter(
-            (player) => !player.connected && !hostIds.includes(player.id) && player.id !== managedPlayer.id,
-          )}
           onAddHost={handleAddManagedHost}
-          onRestoreBoard={handleRestoreDisconnectedBoard}
+          onBadgeProgress={() => {
+            setManagedPlayer(null);
+            setSuperlativeInfo(null);
+            setBadgeProgressOpen(true);
+          }}
+          recoverablePlayers={players.filter(
+            (player) => !hostIds.includes(player.id) && player.id !== managedPlayer.id,
+          )}
+          onRequestBoardRecovery={handleRequestBoardRecovery}
           onProposeProfile={handleOpenProfileProposal}
           onEditProfile={() => {
             setManagedPlayer(null);
@@ -1602,6 +1613,19 @@ function App() {
           onCancel={() => setManagedPlayer(null)}
         />
       )}
+
+      {gameState.pendingBoardRecovery &&
+        (gameState.pendingBoardRecovery.sourceId === myId || gameState.pendingBoardRecovery.byId === myId) && (
+          <BoardRecoveryModal
+            key={gameState.pendingBoardRecovery.id}
+            request={gameState.pendingBoardRecovery}
+            source={gameState.players[gameState.pendingBoardRecovery.sourceId]}
+            target={gameState.players[gameState.pendingBoardRecovery.targetId]}
+            isSource={gameState.pendingBoardRecovery.sourceId === myId}
+            onKeepPlaying={() => clientRef.current?.respondToBoardRecovery(gameState.pendingBoardRecovery.id)}
+            onCancel={() => clientRef.current?.cancelBoardRecovery(gameState.pendingBoardRecovery.id)}
+          />
+        )}
 
       {profileProposalTarget && (
         <ChangeNameModal
@@ -1671,9 +1695,7 @@ function App() {
           isHost={isHost}
           onMovieClick={() => setMovieIdentityModalOpen(true)}
           superlatives={playerSuperlatives}
-          onSuperlativeClick={(player) =>
-            setSuperlativeInfo({ award: playerSuperlatives[player.id], name: player.name, avatar: player.avatar })
-          }
+          onSuperlativeClick={(player) => setSuperlativeInfo({ playerId: player.id })}
           onClose={() => setGameOverModalOpen(false)}
         />
       )}
@@ -1724,12 +1746,24 @@ function App() {
         />
       )}
 
-      {superlativeInfo && (
+      {(superlativeInfo || badgeProgressOpen) && (
         <SuperlativeModal
-          award={superlativeInfo.award}
-          playerName={superlativeInfo.name}
-          playerAvatar={superlativeInfo.avatar}
-          onClose={() => setSuperlativeInfo(null)}
+          award={playerSuperlatives[badgePlayer.id]}
+          playerName={badgePlayer.name}
+          playerAvatar={badgePlayer.avatar}
+          progress={getBadgeProgress(badgePlayer, gameState, playerSuperlatives[badgePlayer.id] || null)}
+          onClose={() => {
+            setSuperlativeInfo(null);
+            setBadgeProgressOpen(false);
+          }}
+        />
+      )}
+
+      {badgeAnnouncements[0] && (
+        <BadgeAnnouncement
+          achievements={badgeAnnouncements[0]}
+          suspended={!!toast || !!bingoBanner || finaleBanner || focusMode || connectionLost || tutorialActive}
+          onDismiss={() => setBadgeAnnouncements((queue) => queue.slice(1))}
         />
       )}
 
@@ -1746,8 +1780,8 @@ function App() {
       {hostTransferOpen && (
         <HostTransferModal
           players={players.filter((player) => player.id !== myId && player.connected && !hostIds.includes(player.id))}
-          onAssign={hostTransferLeaves ? handleAssignHostAndLeave : handleAssignHost}
-          onLeaveWithoutAssign={hostTransferLeaves ? handleLeaveWithoutHostAssignment : undefined}
+          onAssign={handleAssignHostAndLeave}
+          onLeaveWithoutAssign={handleLeaveWithoutHostAssignment}
           onCancel={() => setHostTransferOpen(false)}
         />
       )}

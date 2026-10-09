@@ -1308,8 +1308,9 @@ select {
 }
 
 .superlative-badge {
-  display: inline-block;
-  margin-top: 0.35rem;
+  display: inline-flex;
+  align-items: center;
+  margin-top: 0;
   padding: 0.2rem 0.5rem;
   border: 1px solid #d9ad43;
   border-radius: 999px;
@@ -1318,6 +1319,24 @@ select {
   font: inherit;
   font-size: 0.75rem;
   cursor: pointer;
+}
+
+.player-awards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-top: 0.35rem;
+}
+
+.superlative-badge.badge-award {
+  border-color: #4c8b7c;
+  background: rgba(76, 139, 124, 0.12);
+}
+
+.superlative-badge.badge-award:hover,
+.superlative-badge.badge-award:focus-visible {
+  background: rgba(76, 139, 124, 0.24);
+  color: #2e6b5e;
 }
 
 .superlative-badge:hover,

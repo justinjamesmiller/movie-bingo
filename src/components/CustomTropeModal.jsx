@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import ModalShell from './ModalShell.jsx';
-import SceneContextFields, { suppliedSceneContext, validSceneContext } from './SceneContextFields.jsx';
+import SceneContextFields, { suppliedSceneContext } from './SceneContextFields.jsx';
 
 const MAX_LENGTH = 60;
 
@@ -39,7 +39,7 @@ export default function CustomTropeModal({ onSubmit, onCancel, playerCount = 2 }
         <div className="claim-vote-buttons cancel-claim-btn">
           <button
             className="btn agree"
-            disabled={!trimmed || !validSceneContext(sceneContext)}
+            disabled={!trimmed}
             onClick={() =>
               suppliedSceneContext(sceneContext)
                 ? onSubmit(trimmed, suppliedSceneContext(sceneContext))

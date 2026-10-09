@@ -43,17 +43,23 @@ Use the Supabase Auth dashboard/logs to monitor anonymous signups and signup rat
 of relay requests. Confirm the project's anonymous-signup IP limit is configured; shared households should still
 be able to admit ten players. Relay limits do not prevent an attacker from creating Auth users directly.
 For a public launch, enable a supported CAPTCHA with real provider keys and wire its token into anonymous sign-in.
-Do not enable mandatory CAPTCHA until the frontend can supply those tokens. No provider keys or cloud Auth settings
-are changed by this repository-only update.
+Do not enable mandatory CAPTCHA until the frontend can supply those tokens. The linked project's Auth JWT expiry is
+300 seconds (configured 2026-10-09); this live setting is not managed by repository changes. CAPTCHA provider keys and
+mandatory CAPTCHA remain unconfigured.
 
 ## Live Revocation Test
 
 Use an isolated test room and two authenticated browser identities. Subscribe the first identity to the private
 channel, then recover/kick that seat from the second session. Keep the first subscription open using a test client
-that deliberately does not follow the app's disconnect instruction. Verify direct writes and reconnect are denied;
-also verify whether subsequent private broadcasts are still received until token/channel reauthorization.
-Do not count the app closing its own channel as proof of server-side revocation. If stale subscriptions remain,
-rotate the room channel/code or implement supported forced reauthorization before considering this verified.
+that deliberately does not follow the app's disconnect instruction. Verify direct writes and reconnect are denied,
+then attempt a private broadcast. Supabase caches channel authorization for the connection; removing membership does
+not immediately evict an already-subscribed client. It can keep receiving broadcasts until it sends a new JWT or its
+current JWT expires. The live smoke test observed this behavior. The app closes a compliant client's channel after
+its next denied request, but that is not immediate server-side revocation. Set an appropriately short JWT lifetime
+in Supabase Auth to bound stale access. The linked project is configured for 300-second JWTs, but tokens already
+issued retain their original expiry. If immediate confidentiality after seat revocation is required, use an
+architecture with per-session revocable channel credentials or a transport with server-side forced disconnect;
+rotating the room code alone is insufficient if the update is broadcast on the old channel.
 
 ## Retry Semantics
 

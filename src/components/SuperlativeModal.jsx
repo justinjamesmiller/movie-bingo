@@ -5,7 +5,9 @@ export default function SuperlativeModal({ award, playerName, playerAvatar, prog
   return (
     <ModalShell onClose={onClose}>
       <div className="modal-content superlative-modal">
-        <span className="superlative-modal-kicker">PLAYER DISTINCTION</span>
+        <span className="superlative-modal-kicker">
+          {award?.kind === 'superlative' ? 'GAME SUPERLATIVE' : award ? 'BADGE' : 'BADGE PROGRESS'}
+        </span>
         <h3>{award?.name || 'Badge Progress'}</h3>
         <p className="superlative-player">{formatPlayerName({ name: playerName, avatar: playerAvatar })}</p>
         {award && <p className="hint">{award.description}</p>}

@@ -262,9 +262,11 @@ describe('App', () => {
     });
     expect(screen.getByRole('heading', { name: 'Team Player' })).toBeInTheDocument();
     expect(screen.getByRole('progressbar', { name: 'Consensus Builder progress' })).toHaveAttribute('value', '2');
-    expect(screen.queryByRole('status', { name: 'New badges' })).toBeNull();
+    expect(screen.queryByRole('status', { name: 'New awards' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Close', exact: true }));
-    expect(await screen.findByRole('status', { name: 'New badges' })).toHaveTextContent('Ashley earned Team Player');
+    expect(await screen.findByRole('status', { name: 'New awards' })).toHaveTextContent(
+      'Ashley earned the badge Team Player',
+    );
   });
 
   it('announces other players upgrades without replaying initial or repeated badges', async () => {
@@ -274,21 +276,21 @@ describe('App', () => {
     fireEvent.change(screen.getByPlaceholderText('e.g. Ashley'), { target: { value: 'Ashley' } });
     fireEvent.click(screen.getByRole('button', { name: 'Host Game', exact: true }));
     await screen.findByRole('button', { name: 'Menu', exact: true });
-    expect(screen.queryByRole('status', { name: 'New badges' })).toBeNull();
+    expect(screen.queryByRole('status', { name: 'New awards' })).toBeNull();
     act(() => {
       clientState.superlativeStats.p2.otherApprovalVotes = 3;
       latestClient.onState(clientState, 'p1');
     });
-    const announcement = await screen.findByRole('status', { name: 'New badges' });
-    expect(announcement).toHaveTextContent('Bob earned Consensus Builder');
+    const announcement = await screen.findByRole('status', { name: 'New awards' });
+    expect(announcement).toHaveTextContent('Bob earned the badge Consensus Builder');
     act(() => latestClient.onState(clientState, 'p1'));
-    expect(screen.getAllByRole('status', { name: 'New badges' })).toHaveLength(1);
+    expect(screen.getAllByRole('status', { name: 'New awards' })).toHaveLength(1);
     act(() => {
       clientState.started = false;
       clientState.superlativeStats = {};
       latestClient.onState(clientState, 'p1');
     });
-    await waitFor(() => expect(screen.queryByRole('status', { name: 'New badges' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('status', { name: 'New awards' })).toBeNull());
   });
 
   afterEach(() => vi.useRealTimers());
@@ -880,7 +882,7 @@ describe('App', () => {
       clientState.players.p1.wagered = [0, 1, 2, 3, 4];
       latestClient.onState(clientState, 'p1');
     });
-    expect(screen.getByRole('button', { name: '✦ Full House' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Badge: Full House' })).toBeInTheDocument();
     expect(container.querySelectorAll('.superlative-badge')).toHaveLength(1);
     act(() => {
       clientState.players.p1.wagered = [];
@@ -890,7 +892,9 @@ describe('App', () => {
       clientState.superlativeMilestones = { p1: { firstAccepted: true } };
       latestClient.onState(clientState, 'p1');
     });
-    expect(screen.getByRole('button', { name: '✦ First Trope Accepted' }).closest('li')).toHaveTextContent('Ashley');
+    expect(screen.getByRole('button', { name: 'Superlative: First Trope Accepted' }).closest('li')).toHaveTextContent(
+      'Ashley',
+    );
     expect(container.querySelectorAll('.superlative-badge')).toHaveLength(1);
   });
 
@@ -983,6 +987,37 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: '👍 Propose it happened' }));
 
     expect(screen.getByRole('heading', { name: 'All Tropes (25)' })).toBeInTheDocument();
+  });
+
+  it('shows the saved proposal context read-only for an accepted trope', async () => {
+    clientState.started = true;
+    clientState.acceptedTropes = ['Trope 1'];
+    clientState.claimHistory = [
+      {
+        id: 'claim-1',
+        text: 'Trope 1',
+        approved: true,
+        sceneContexts: [
+          { playerId: 'p2', timestamp: 'Around the halfway point', note: 'Kitchen scene' },
+          { playerId: 'p1', timestamp: 'Near the ending', note: '' },
+        ],
+      },
+    ];
+    await hostTutorialView();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced Options' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Explore & Stats' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Accepted Tropes (1)' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Trope 1', exact: true }));
+
+    expect(screen.getByText('Original proposal context')).toBeInTheDocument();
+    expect(screen.getByText('Bob')).toBeInTheDocument();
+    expect(screen.getByText('Ashley')).toBeInTheDocument();
+    expect(screen.getByText('Around the halfway point')).toBeInTheDocument();
+    expect(screen.getByText('Kitchen scene')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Movie timestamp')).toBeNull();
+    expect(screen.queryByLabelText('Scene note')).toBeNull();
   });
 
   it('offers to keep or drop a missed call and preserves the call when kept', async () => {
@@ -1106,11 +1141,11 @@ describe('App', () => {
     fireEvent.change(screen.getByPlaceholderText('e.g. Ashley'), { target: { value: 'Ashley' } });
     fireEvent.click(screen.getByRole('button', { name: 'Host Game' }));
     await screen.findByText('Code: ABCD');
-    expect(screen.getByRole('button', { name: '✦ Most Thoughtful' }).closest('li')).toHaveTextContent('Bob');
+    expect(screen.getByRole('button', { name: 'Superlative: Most Thoughtful' }).closest('li')).toHaveTextContent('Bob');
     fireEvent.click(screen.getByText('Trope 2', { exact: true }));
     expect(latestClient.recordTropeView).toHaveBeenCalledWith('Trope 2');
     fireEvent.click(screen.getByRole('button', { name: 'Cancel', exact: true }));
-    expect(screen.getByRole('button', { name: '✦ Most Thoughtful' }).closest('li')).toHaveTextContent('Bob');
+    expect(screen.getByRole('button', { name: 'Superlative: Most Thoughtful' }).closest('li')).toHaveTextContent('Bob');
   });
 
   it.each([true, false])(

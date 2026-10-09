@@ -1,7 +1,7 @@
 import { useId, useState } from 'react';
 import { useTropeDescription } from '../hooks/useTropeDescription.js';
 import ModalShell from './ModalShell.jsx';
-import SceneContextFields, { suppliedSceneContext, validSceneContext } from './SceneContextFields.jsx';
+import SceneContextFields, { SceneContextSummary, suppliedSceneContext } from './SceneContextFields.jsx';
 
 // Explains what a trope actually means before the player puts it to the group,
 // so everyone is voting on the same interpretation.
@@ -20,6 +20,8 @@ export default function TropeInfoModal({
   callers = [],
   successfulCallers = [],
   allowSceneContext = false,
+  sceneContextReadOnly = false,
+  sceneContexts = [],
 }) {
   const [callersExpanded, setCallersExpanded] = useState(false);
   const [sceneContext, setSceneContext] = useState({ note: '', timestamp: '' });
@@ -42,6 +44,7 @@ export default function TropeInfoModal({
   const primaryLabel =
     confirmLabel ||
     (marked ? (isSolo ? '↩️ Undo it' : '↩️ Ask to undo it') : isSolo ? '✅ Submit' : '✅ Submit to the group');
+  const canEditSceneContext = allowSceneContext && !sceneContextReadOnly;
 
   return (
     <ModalShell onClose={onCancel}>
@@ -63,13 +66,16 @@ export default function TropeInfoModal({
           </p>
         )}
         {hint && <p className="hint">{hint}</p>}
-        {allowSceneContext && onConfirm && <SceneContextFields value={sceneContext} onChange={setSceneContext} />}
+        {sceneContextReadOnly ? (
+          <SceneContextSummary contexts={sceneContexts} />
+        ) : (
+          canEditSceneContext && onConfirm && <SceneContextFields value={sceneContext} onChange={setSceneContext} />
+        )}
         <div className="claim-vote-buttons">
           {onConfirm && (
             <button
               className="btn agree"
-              disabled={allowSceneContext && !validSceneContext(sceneContext)}
-              onClick={() => (allowSceneContext ? onConfirm(suppliedSceneContext(sceneContext)) : onConfirm())}
+              onClick={() => (canEditSceneContext ? onConfirm(suppliedSceneContext(sceneContext)) : onConfirm())}
             >
               {primaryLabel}
             </button>

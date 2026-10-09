@@ -83,8 +83,8 @@ function tutorialSteps(isHost, started) {
       target: 'menu',
       title: isHost ? 'Your host essentials' : 'Keep useful tools close',
       body: isHost
-        ? 'Menu keeps sharing and watch controls together. Accepted Tropes and Claim Queue live in Advanced Options → Explore & Stats; Accessibility is in My Tools. Your name opens badge progress, stats, and profile options. Original hosts can set a recovery password during host setup or change it later in Advanced Options → Host Settings.'
-        : 'Advanced Options → Explore & Stats lets you review accepted tropes and queued proposals. My Tools includes Accessibility. Your name opens badge progress, stats, and profile options. You can reopen this tutorial from Menu anytime.',
+        ? 'Menu keeps sharing and watch controls together. Accepted Tropes and Claim Queue live in Advanced Options → Explore & Stats; Accessibility is in My Tools. Player rows can show several shared badges and multiple superlatives; each superlative has at most one holder at a time. Your name opens badge progress, stats, and profile options. Original hosts can set a recovery password during host setup or change it later in Advanced Options → Host Settings.'
+        : 'Advanced Options → Explore & Stats lets you review accepted tropes and queued proposals. My Tools includes Accessibility. Player rows can show several shared badges and multiple superlatives; each superlative has at most one holder at a time. Your name opens badge progress, stats, and profile options. You can reopen this tutorial from Menu anytime.',
       action: 'menu',
       label: 'Open Menu',
     },

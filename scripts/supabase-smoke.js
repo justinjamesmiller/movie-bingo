@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { loadEnv } from 'vite';
 import { createClient } from '@supabase/supabase-js';
 import { buildPlayerBoard, pickTropePool } from '../src/data/tropes.js';
@@ -33,10 +33,16 @@ let code = Array.from(randomBytes(4), (byte) => alphabet[byte % alphabet.length]
 const password = randomBytes(1).toString('hex');
 let roomCreated = false;
 let checks = 0;
+let failedChecks = 0;
 
 function passed(name) {
   checks += 1;
   console.log(`PASS ${name}`);
+}
+
+function failed(name) {
+  failedChecks += 1;
+  console.error(`FAIL ${name}`);
 }
 
 async function newUser() {
@@ -82,9 +88,10 @@ async function movieLookup(user, body) {
   return { status: response.status, data: await response.json() };
 }
 
-async function subscribe(user, privateChannel = true, topic = `bingo-${code}`) {
+async function subscribe(user, privateChannel = true, topic = `bingo-${code}`, onBroadcast = null) {
   await user.client.realtime.setAuth(user.token);
   const channel = user.client.channel(topic, { config: { private: privateChannel, broadcast: { ack: true } } });
+  if (onBroadcast) channel.on('broadcast', { event: 'msg' }, ({ payload }) => onBroadcast(payload));
   channels.push({ client: user.client, channel });
   const status = await new Promise((resolve) => {
     const timeout = setTimeout(() => resolve('NO_STATUS'), 12000);
@@ -187,17 +194,18 @@ try {
   assert(!Object.hasOwn(createRecoveryRow.state, 'password'));
   passed('two-character create-time recovery password is stored only as a verifier');
 
-  const sameIdentityPlayerId = `p${randomBytes(6).toString('hex')}`;
+  const requestedSecondTabId = `p${randomBytes(6).toString('hex')}`;
   const sameIdentityJoin = await relay(host, {
     operation: 'join',
     code,
-    requestedPlayerId: sameIdentityPlayerId,
+    requestedPlayerId: requestedSecondTabId,
     name: 'Second Auth tab',
   });
   assert.equal(sameIdentityJoin.status, 200);
-  assert.notEqual(sameIdentityJoin.data.playerId, hostId);
-  state.players[sameIdentityJoin.data.playerId] = makePlayer(sameIdentityJoin.data.playerId, 'Second Auth tab', 1);
-  state.seatOrder.push(sameIdentityJoin.data.playerId);
+  const sameIdentityPlayerId = sameIdentityJoin.data.playerId;
+  assert.notEqual(sameIdentityPlayerId, hostId);
+  state.players[sameIdentityPlayerId] = makePlayer(sameIdentityPlayerId, 'Second Auth tab', 1);
+  state.seatOrder.push(sameIdentityPlayerId);
   passed('same Auth identity can create a distinct seat for a second tab');
 
   const duplicate = await relay(host, { operation: 'create', code, playerId: hostId, state });
@@ -209,7 +217,12 @@ try {
   const guestId = joined.data.playerId;
   state.players[guestId] = makePlayer(guestId, 'Smoke Guest', 2);
   state.seatOrder.push(guestId);
-  const hostChannel = await subscribe(host);
+  const oldHostBroadcasts = [];
+  let oldHostBroadcastWaiter = null;
+  const hostChannel = await subscribe(host, true, undefined, (payload) => {
+    oldHostBroadcasts.push(payload);
+    oldHostBroadcastWaiter?.();
+  });
   assert.equal(hostChannel.status, 'SUBSCRIBED', 'Authorized private channel subscription failed.');
   let response = await publishState(host, code, hostId, state);
   assert.equal(response.status, 200, `Host state publish failed: ${response.data.error || response.status}`);
@@ -225,7 +238,7 @@ try {
     operation: 'publish',
     code,
     playerId: guestId,
-    message: { t: 'action', from: hostId, sender: hostId, action: { t: 'reset' } },
+    message: { t: 'gameOverAnnounced', from: hostId, sender: hostId },
   });
   assert.equal(response.status, 403);
   response = await relay(guest, {
@@ -240,6 +253,7 @@ try {
     operation: 'publish',
     code,
     playerId: guestId,
+    expectedRevision: state.serverRevision,
     message: { t: 'state', state: { ...state, rev: Number.MAX_SAFE_INTEGER, hostIds: [guestId] } },
   });
   assert.equal(response.status, 403);
@@ -267,6 +281,24 @@ try {
   assert.deepEqual(response.data.state.players[hostId].wagered, []);
   Object.assign(state, response.data.state);
   passed('server executes gameplay for the authenticated seat instead of trusting payload identity');
+
+  const noOpRequest = {
+    operation: 'publish',
+    code,
+    playerId: guestId,
+    requestId: randomUUID(),
+    message: { t: 'action', action: { t: 'flushViews' } },
+  };
+  const revisionBeforeNoOp = state.serverRevision;
+  const noOp = await relay(guest, noOpRequest);
+  assert.equal(noOp.status, 200, `No-op gameplay failed: ${noOp.data.error || noOp.status}`);
+  assert.equal(noOp.data.unchanged, true);
+  assert.equal(noOp.data.state.serverRevision, revisionBeforeNoOp);
+  const replay = await relay(guest, noOpRequest);
+  assert.equal(replay.status, 200, `No-op retry failed: ${replay.data.error || replay.status}`);
+  assert.equal(replay.data.replayed, true);
+  assert.equal(replay.data.state.serverRevision, revisionBeforeNoOp);
+  passed('no-op gameplay records a receipt and safely replays without advancing revision');
 
   state.hostIds.push(guestId);
   response = await publishState(host, code, hostId, state);
@@ -362,7 +394,7 @@ try {
     playerId: guestId,
     message: { t: 'action', action: { t: 'claim', index: 0 } },
   });
-  assert.equal(response.status, 200);
+  assert.equal(response.status, 200, `Hostless claim failed: ${response.data.error || response.status}`);
   assert.equal(response.data.state.players[hostId].connected, false);
   const hostlessClaim = response.data.state.pendingClaim;
   assert(hostlessClaim);
@@ -372,7 +404,7 @@ try {
     playerId: sameIdentityPlayerId,
     message: { t: 'action', action: { t: 'vote', claimId: hostlessClaim.claimId, agree: true } },
   });
-  assert.equal(response.status, 200);
+  assert.equal(response.status, 200, `Hostless vote failed: ${response.data.error || response.status}`);
   assert(response.data.state.acceptedTropes.includes(hostlessClaim.text));
   assert.deepEqual(response.data.state.hostIds, [hostId]);
   Object.assign(state, response.data.state);
@@ -464,9 +496,27 @@ try {
   let newCode = Array.from(randomBytes(4), (byte) => alphabet[byte % alphabet.length]).join('');
   while (newCode === code) newCode = Array.from(randomBytes(4), (byte) => alphabet[byte % alphabet.length]).join('');
   const migratedState = { ...state, code: newCode };
+  const oldHostBroadcastCount = oldHostBroadcasts.length;
   const migration = await publishState(returning, code, hostId, migratedState, newCode);
   assert.equal(migration.status, 200, `Atomic room migration failed: ${migration.data.error || migration.status}`);
   assert.equal(migration.data.code, newCode);
+  const oldHostReceivedMigration = await new Promise((resolve) => {
+    if (oldHostBroadcasts.length > oldHostBroadcastCount) return resolve(true);
+    const timeout = setTimeout(() => {
+      oldHostBroadcastWaiter = null;
+      resolve(false);
+    }, 1200);
+    oldHostBroadcastWaiter = () => {
+      clearTimeout(timeout);
+      oldHostBroadcastWaiter = null;
+      resolve(true);
+    };
+  });
+  if (oldHostReceivedMigration) {
+    failed('recovered host still receives private broadcasts through its old open subscription');
+  } else {
+    passed('recovered host cannot receive broadcasts through its old open subscription');
+  }
   const { data: migratedRoom, error: migrationReadError } = await admin
     .from('bingo_rooms')
     .select('state, revision')
@@ -476,10 +526,16 @@ try {
   assert.equal(migratedRoom.state.serverRevision, migration.data.revision);
   const { data: movedMembers, error: memberReadError } = await admin
     .from('bingo_room_members')
-    .select('player_id')
+    .select('player_id, status')
     .eq('room_code', newCode);
   assert(!memberReadError);
-  assert.equal(movedMembers.length, Object.keys(migratedRoom.state.players).length);
+  assert.deepEqual(
+    movedMembers
+      .filter((member) => member.status === 'active')
+      .map((member) => member.player_id)
+      .sort(),
+    Object.keys(migratedRoom.state.players).sort(),
+  );
   code = newCode;
   passed('room code, snapshot revision, and memberships migrate atomically');
 
@@ -505,7 +561,8 @@ try {
   });
   assert(deniedBudgetAccess.error, 'A browser role could alter relay request budgets.');
   passed('malformed payloads are rejected, counted, and rate-limited with retry information');
-  console.log(`Live smoke checks passed: ${checks}`);
+  console.log(`Live smoke checks passed: ${checks}; failed: ${failedChecks}`);
+  if (failedChecks) process.exitCode = 1;
 } catch (error) {
   console.error(`SMOKE FAILED: ${error.message}`);
   process.exitCode = 1;

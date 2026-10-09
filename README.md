@@ -40,8 +40,9 @@ and an Edge Function that authenticates and authorizes every state/action relay.
   Open Advanced Options → Explore & Stats → Claim Queue, or expand those options in a vote, to withdraw your own participation. Limits are
   30 waiting entries per game and five new waiting entries per player. Disconnected proposals wait for a proposer to
   return; obsolete proposals are skipped. Ending or resetting clears the queue.
-- **Scene context:** optionally add a note (240 characters) and movie timestamp (`M:SS` or `H:MM:SS`) to a trope proposal.
-  Context appears with the vote and is retained in its activity entry and recap history.
+- **Scene context:** optionally add a note (240 characters) and a free-form movie timestamp (up to 120 characters) to a
+  trope proposal. Context appears with the vote and is retained in its activity entry and recap history. Accepted trope
+  details show the original proposal's context as read-only.
 - **Trope search:** All Tropes and Accepted Tropes support case-insensitive search combined with filters for accepted
   status, your board, your wagers, and active or successful calls.
 - **Accessibility:** Advanced Options → My Tools → Accessibility offers larger text, a readable single-column board, visible space-state labels, and
@@ -78,8 +79,10 @@ and an Edge Function that authenticates and authorizes every state/action relay.
   wagers, calls, stats, and marathon history; its temporary progress is replaced and the old seat is retired.
   Immediate skips the prompt. Finish votes/replacements/queued claims first; board-changing proposals pause during
   the check. The receiving session retains its own authenticated identity; the retired membership can no longer
-  perform actions or reconnect. Revocation of an already-open Realtime subscription still needs the non-cooperative
-  live test described in Security Operations. Host seats remain protected and use the host recovery password path.
+  perform relay actions or reconnect. A live non-cooperative test confirmed that an already-open Realtime
+  subscription can still receive broadcasts until it sends a new JWT or its current JWT expires. The linked project
+  uses a 300-second JWT lifetime for newly issued tokens; tokens already issued keep their original expiry. Immediate
+  server-side revocation is not guaranteed. Host seats remain protected and use the host recovery password path.
 - **Invite sharing:** the in-game menu can copy a join link with the code pre-filled or show the same link as a QR
   code. Both reflect the current code after a rotation.
 - **Movie details:** any player can tap the selected title to view its saved poster, year, director, cast, genres,
@@ -96,23 +99,23 @@ and an Edge Function that authenticates and authorizes every state/action relay.
   view their current metrics; hosts get the same read-only view from player management. Tapping your own name opens
   player options with Badge Progress, View Stats, and Edit Name & Avatar, available to hosts and non-hosts alike.
 - **Player distinctions:** explanation opens, trope proposals, outcomes, approval votes, and first-event milestones
-  are tracked in replicated game state. All players see the same evidence-based badges; comparative distinctions
-  require an untied leader, simultaneous firsts are not singled out, and resets clear the watch's tracking.
-  There is no blanket first-acceptance unlock or participation fallback: each badge needs its own evidence.
-  Full House can appear after five wagers during setup; reading badges count distinct tropes rather than repeated
-  clicks; most-bingo recognition needs at least two lines and an untied lead; Trophy Hunter needs three lines;
-  end-of-watch badges wait until the watch ends. Stronger achievements supersede lighter ones. Players can have no
-  badge, while multiple players may share a genuinely earned non-comparative achievement.
-  The 51-badge lineup includes attainable milestones such as Trope Scout (one accepted proposal), Team Player
-  (helping approve another player's claim), and Trope Explorer (two different explanations). Earned progress
-  automatically upgrades badges: Team Player → Consensus Builder → Watch Party MVP → Consensus Captain, or
-  Bingo Buddy → Double Feature → Trophy Hunter. Successful calls can earn Right on Cue, Prediction Pro, and
-  Crystal Ball; failed or merely attempted predictions do not count. The highest earned tier always takes precedence.
-  Your own name → Badge Progress is available before earning a badge and shows up to three stronger milestone goals with
-  live evidence counts. Clicking a badge shows the same player's progress. New displayed badges and upgrades are
-  announced to every connected viewer in grouped, queued notifications that wait behind menus, modals, toasts,
-  tutorials, and celebrations. Initial/reconnected snapshots are silent; repeated snapshots and badge reappearance
-  do not replay announcements. Resetting a watch clears old notifications and starts fresh achievement tracking.
+  are tracked in replicated game state. All players see the same evidence-based awards: 40 shareable badges and 11
+  exclusive superlatives. Multiple players can earn a badge such as Blackout Bound or Pattern Hunter at once, and
+  badges from different tracks can coexist on one player. Within a badge progression, only the highest earned tier
+  is shown, such as Team Player → Consensus Builder → Watch Party MVP → Consensus Captain or Bingo Buddy → Double
+  Feature → Trophy Hunter. Wager Architect and Pattern Hunter can still appear alongside those awards.
+  Superlatives such as First Trope Accepted have at most one holder for the watch; simultaneous firsts are not
+  singled out. Competitive superlatives such as Most Thoughtful or Most Almost-Bingos require a sole leader and can
+  change holders as evidence changes. Ties have no holder. There is no blanket first-acceptance unlock or
+  participation fallback; every award requires its own evidence. Full House can appear after five wagers during setup;
+  reading awards count distinct tropes, and end-of-watch badges wait until the watch ends. Successful calls can earn
+  Right on Cue, Prediction Pro, and Crystal Ball; failed or merely attempted predictions do not count. Your own name
+  → Badge Progress is available before earning a badge and shows up to three upcoming badge milestones with live
+  evidence counts. Clicking an award shows its details and badge progress. Newly earned badges and changed
+  superlatives are announced to every connected viewer in grouped, queued notifications that wait behind menus,
+  modals, toasts, tutorials, and celebrations. Initial/reconnected snapshots are silent; repeated snapshots and
+  previously earned badges do not replay announcements. Resetting a watch clears old notifications and starts fresh
+  achievement tracking.
 - **Calls:** during a game, a trope's `Advanced actions` menu lets any player call one trope they expect next. A
   player's score appears only after making a call. Live player-list and final recap scores are clickable, explaining
   correct calls / calls made (including changed or withdrawn predictions) and how to make a call from a board trope.
@@ -244,14 +247,15 @@ failure, and supports replay-safe UUID action IDs through atomic receipts retain
 uses a single database transaction. Apply `202610080003_reliable_game_actions.sql` after the earlier migrations
 before deploying this function revision. Updated clients reuse IDs for uncertain retries; older clients without
 IDs remain compatible but do not receive deduplication. See [Security Operations](docs/security-operations.md)
-for privacy-safe log events, quota/signup monitoring, and the required non-cooperative revocation test.
+for privacy-safe log events, quota/signup monitoring, and the confirmed non-cooperative revocation limitation.
 
 After deployment, run `node scripts/supabase-smoke.js` from the repository root. It uses local Supabase
 configuration and your deployment login (macOS CLI keychain, or `SUPABASE_ACCESS_TOKEN` on other systems).
 Credentials are used only in memory and are not printed. This is a live test: it creates temporary anonymous
 users and a room, checks private Realtime access, forged identity/state denial, membership permissions,
-pending joins, active/expired reconnect status, concurrent co-host snapshot conflicts, code rotation, and password lockout/recovery, then
-deletes its own room and users.
+pending joins, active/expired reconnect status, no-op receipt replay, concurrent co-host snapshot conflicts, code
+rotation, and password lockout/recovery, then deletes its own room and users. It also tests stale Realtime
+subscriptions; the known continued-delivery behavior is reported as a security failure, not a passing revocation.
 It also verifies the authenticated movie lookup proxy with a real search and IMDb detail request.
 
 The test requires a deployment account with access to project API keys for cleanup. Run it only against

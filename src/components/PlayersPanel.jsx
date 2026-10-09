@@ -16,8 +16,8 @@ export default function PlayersPanel({
   callStats = {},
   onCallScoreClick,
   wageringEnabled,
-  superlatives = {},
-  onSuperlativeClick,
+  awards = {},
+  onAwardClick,
 }) {
   return (
     <aside className="players-panel" data-tutorial="players">
@@ -27,6 +27,8 @@ export default function PlayersPanel({
           const wagerLocked = p.wagered.length === 5;
           const wageredMarked = p.wagered.filter((i) => p.marked.includes(i)).length;
           const calls = callStats[p.id] || {};
+          const playerAwards = awards[p.id] || { badges: [], superlatives: [] };
+          const distinctions = [...playerAwards.superlatives, ...playerAwards.badges];
           return (
             <li key={p.id}>
               <div className="player-row">
@@ -75,8 +77,12 @@ export default function PlayersPanel({
                   </>
                 )}
               </div>
-              {superlatives[p.id] && (
-                <SuperlativeBadge award={superlatives[p.id]} onClick={() => onSuperlativeClick?.(p)} />
+              {distinctions.length > 0 && (
+                <div className="player-awards" aria-label={`${p.name} awards`}>
+                  {distinctions.map((award) => (
+                    <SuperlativeBadge key={award.id} award={award} onClick={() => onAwardClick?.(p, award)} />
+                  ))}
+                </div>
               )}
             </li>
           );

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { GENRES, SUBGENRES_BY_GENRE } from '../data/tropes.js';
 import ModalShell from './ModalShell.jsx';
-import SceneContextFields, { suppliedSceneContext, validSceneContext } from './SceneContextFields.jsx';
+import SceneContextFields, { suppliedSceneContext } from './SceneContextFields.jsx';
 
 export default function ProposeReplaceModal({
   text,
@@ -51,7 +51,6 @@ export default function ProposeReplaceModal({
         <div className="claim-vote-buttons cancel-claim-btn">
           <button
             className="btn agree"
-            disabled={!validSceneContext(sceneContext)}
             onClick={() =>
               suppliedSceneContext(sceneContext)
                 ? onConfirm(genre, subgenre, suppliedSceneContext(sceneContext))

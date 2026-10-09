@@ -3,7 +3,7 @@ import { chromium } from 'playwright';
 import { createServer } from 'vite';
 import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { getPlayerSuperlatives } from '../src/utils/superlatives.js';
+import { getPlayerAwards } from '../src/utils/superlatives.js';
 import { readRelayPayload, validateRelayPayload, RelayPayloadError } from '../supabase/functions/game-relay/payload.js';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -541,18 +541,29 @@ try {
     );
     await closeModal(pages[5]);
     const evidence = await state(host);
-    const expectedBadge = getPlayerSuperlatives(Object.values(evidence.players), evidence)[session.myId];
-    assert(expectedBadge);
-    report.hostBadge = { name: expectedBadge.name, stats: evidence.superlativeStats[session.myId] };
-    await host
+    const expectedAwards = getPlayerAwards(Object.values(evidence.players), evidence)[session.myId];
+    const hostAwards = [...expectedAwards.superlatives, ...expectedAwards.badges];
+    assert(hostAwards.length > 0);
+    report.hostAwards = {
+      superlatives: expectedAwards.superlatives.map((award) => award.name),
+      badges: expectedAwards.badges.map((award) => award.name),
+      stats: evidence.superlativeStats[session.myId],
+    };
+    const hostRow = host
       .locator('.players-list > li')
-      .filter({ has: host.getByRole('button', { name: 'Your player options', exact: true }) })
-      .getByRole('button', { name: new RegExp(expectedBadge.name) })
-      .waitFor();
+      .filter({ has: host.getByRole('button', { name: 'Your player options', exact: true }) });
+    for (const award of hostAwards) {
+      await hostRow
+        .getByRole('button', {
+          name: `${award.kind === 'badge' ? 'Badge' : 'Superlative'}: ${award.name}`,
+          exact: true,
+        })
+        .waitFor();
+    }
     await pages[5].screenshot({ path: output + '/mobile-badge-upgrade.png', fullPage: true });
     await host.screenshot({ path: output + '/desktop-badge-upgrade.png', fullPage: true });
     report.checks.push({
-      name: 'Team Player upgrades to Consensus Builder on all ten screens; host shows highest-ranked earned badge',
+      name: 'Team Player upgrades to Consensus Builder while all earned badges and superlatives remain visible',
       outcome: 'PASS',
     });
     await Promise.all(

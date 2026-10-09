@@ -80,6 +80,23 @@ describe('PlayersPanel', () => {
     expect(onEditSelf).toHaveBeenCalledTimes(1);
   });
 
+  it('shows multiple badges alongside a current superlative and opens the selected award', () => {
+    const onAwardClick = vi.fn();
+    const patternHunter = { id: 'pattern-hunter', kind: 'badge', name: 'Pattern Hunter' };
+    const wagerArchitect = { id: 'wager-architect', kind: 'badge', name: 'Wager Architect' };
+    const almostBingos = { id: 'most-almost-bingos', kind: 'superlative', name: 'Most Almost-Bingos' };
+    renderPanel({
+      onAwardClick,
+      awards: { p1: { superlatives: [almostBingos], badges: [wagerArchitect, patternHunter] } },
+    });
+
+    expect(screen.getByRole('button', { name: 'Superlative: Most Almost-Bingos' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Badge: Wager Architect' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Badge: Pattern Hunter' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Badge: Wager Architect' }));
+    expect(onAwardClick).toHaveBeenCalledWith(players[0], wagerArchitect);
+  });
+
   it('hides host-only remove controls and pre-game copy when appropriate', () => {
     renderPanel({ isHost: false, started: true });
 

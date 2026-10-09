@@ -19,15 +19,18 @@ export default function BadgeAnnouncement({ achievements, suspended, onDismiss }
   if (blocked || suspended) return null;
   const groups = new Map();
   for (const achievement of achievements) {
-    if (!groups.has(achievement.badgeName)) groups.set(achievement.badgeName, []);
-    groups.get(achievement.badgeName).push(formatPlayerName(achievement));
+    const kind = achievement.awardKind || 'badge';
+    const key = `${kind}:${achievement.badgeName}`;
+    if (!groups.has(key)) groups.set(key, { kind, name: achievement.badgeName, players: [] });
+    groups.get(key).players.push(formatPlayerName(achievement));
   }
   return (
-    <aside className="badge-announcement" role="status" aria-live="polite" aria-label="New badges">
-      <strong>New badges</strong>
-      {[...groups].map(([badge, names]) => (
-        <p key={badge}>
-          {names.join(', ')} earned <strong>{badge}</strong>
+    <aside className="badge-announcement" role="status" aria-live="polite" aria-label="New awards">
+      <strong>New badges and superlatives</strong>
+      {[...groups.values()].map(({ kind, name, players }) => (
+        <p key={`${kind}:${name}`}>
+          {players.join(', ')} {kind === 'superlative' ? 'now holds the superlative' : 'earned the badge'}{' '}
+          <strong>{name}</strong>
         </p>
       ))}
     </aside>

@@ -10,11 +10,11 @@ export default function GameOverModal({
   players,
   bingoCounts = {},
   callStats = {},
-  superlatives = {},
+  awards = {},
   movie,
   isHost = false,
   onMovieClick,
-  onSuperlativeClick,
+  onAwardClick,
   onCallScoreClick,
   onClose,
   watchState = {},
@@ -159,8 +159,12 @@ export default function GameOverModal({
                     </>
                   )}
                 </div>
-                {superlatives[p.id] && (
-                  <SuperlativeBadge award={superlatives[p.id]} onClick={() => onSuperlativeClick?.(p)} />
+                {awards[p.id] && (
+                  <div className="player-awards" aria-label={`${p.name} awards`}>
+                    {[...awards[p.id].superlatives, ...awards[p.id].badges].map((award) => (
+                      <SuperlativeBadge key={award.id} award={award} onClick={() => onAwardClick?.(p, award)} />
+                    ))}
+                  </div>
                 )}
               </li>
             ))}

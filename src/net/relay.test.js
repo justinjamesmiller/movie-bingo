@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetFakeSupabase, setFakePlayerLastSeen, setFakeServerGameplayEnabled } from '../test/fakeSupabase.js';
-import { getPlayerSuperlatives, getSuperlativeMetrics } from '../utils/superlatives.js';
+import { getPlayerAwards, getPlayerSuperlatives, getSuperlativeMetrics } from '../utils/superlatives.js';
 
 vi.mock('@supabase/supabase-js', async () => {
   const fake = await import('../test/fakeSupabase.js');
@@ -1182,9 +1182,9 @@ describe('GameClient', () => {
     expect(guest.state.superlativeMilestones).toEqual(host.state.superlativeMilestones);
     const names = (state) =>
       Object.fromEntries(
-        Object.entries(getPlayerSuperlatives(Object.values(state.players), state)).map(([id, award]) => [
+        Object.entries(getPlayerSuperlatives(Object.values(state.players), state)).map(([id, awards]) => [
           id,
-          award.name,
+          awards.map((award) => award.name),
         ]),
       );
     expect(names(host.state)).toEqual(names(guest.state));
@@ -1225,11 +1225,13 @@ describe('GameClient', () => {
       expect(metrics.firstBingo).toBe(false);
       expect(metrics.firstWagerHit).toBe(false);
     }
-    expect(
-      Object.values(getPlayerSuperlatives(Object.values(host.state.players), host.state)).some((award) =>
-        ['First Bingo', 'First Wager Achieved', 'Pattern Hunter'].includes(award.name),
-      ),
-    ).toBe(false);
+    const awards = getPlayerAwards(Object.values(host.state.players), host.state);
+    for (const playerAwards of Object.values(awards)) {
+      expect(playerAwards.superlatives.map((award) => award.name)).not.toEqual(
+        expect.arrayContaining(['First Bingo', 'First Wager Achieved']),
+      );
+      expect(playerAwards.badges.map((award) => award.name)).not.toContain('Pattern Hunter');
+    }
     expect(guest.state.superlativeMilestones).toEqual(host.state.superlativeMilestones);
   });
 
@@ -1301,7 +1303,7 @@ describe('GameClient', () => {
     expect(guest.state.tropePool).not.toContain('A woman is called a bitch');
   });
 
-  it('queues different observations, merges duplicates and keeps sanitized scene context', async () => {
+  it('queues different observations, merges duplicates and keeps free-form scene context', async () => {
     const host = makeTrackedClient();
     const code = await host.client.hostGame('Alice', ['horror'], [], false, { horror: 50 }, 25);
     const guest = makeTrackedClient();
@@ -1321,7 +1323,7 @@ describe('GameClient', () => {
     expect(guest.state.claimQueue).toHaveLength(2);
     expect(host.state.claimQueue[0].proposedBy).toEqual([guest.myId, host.myId]);
     expect(host.state.claimQueue[0].sceneContexts[0].note).toHaveLength(240);
-    expect(host.state.claimQueue[0].sceneContexts[0].timestamp).toBe('');
+    expect(host.state.claimQueue[0].sceneContexts[0].timestamp).toBe('wrong');
     guest.client.withdrawQueuedClaim(host.state.claimQueue[1].id);
     await flush();
     expect(host.state.claimQueue).toHaveLength(1);

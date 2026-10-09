@@ -66,7 +66,7 @@ const MarathonStandingsModal = lazyTool(() => import('./components/MarathonStand
 const PlayerStatsModal = lazyTool(() => import('./components/PlayerStatsModal.jsx'));
 const StatsDashboardModal = lazyTool(() => import('./components/StatsDashboardModal.jsx'));
 import TropeAdvancedActionsModal from './components/TropeAdvancedActionsModal.jsx';
-import { createBadgeAchievementTracker, getBadgeProgress, getPlayerSuperlatives } from './utils/superlatives.js';
+import { createBadgeAchievementTracker, getBadgeProgress, getPlayerAwards } from './utils/superlatives.js';
 import { getGameTheme } from './utils/gameTheme.js';
 
 const MAX_WAGERS = 5;
@@ -955,6 +955,20 @@ function App() {
     });
   }
 
+  function acceptedSceneContexts(text) {
+    const proposal = [...(gameState?.claimHistory || [])]
+      .reverse()
+      .find((entry) => entry.text === text && entry.approved);
+    return (Array.isArray(proposal?.sceneContexts) ? proposal.sceneContexts : [])
+      .filter((context) => context && typeof context === 'object')
+      .map((context) => ({
+        playerId: typeof context.playerId === 'string' ? context.playerId : '',
+        playerName: gameState.players[context.playerId]?.name || 'A player',
+        timestamp: typeof context.timestamp === 'string' ? context.timestamp : '',
+        note: typeof context.note === 'string' ? context.note : '',
+      }));
+  }
+
   function handlePoolTropeInfo(text, accepted) {
     recordTropeView(text);
     setTropeInfo({
@@ -1267,8 +1281,17 @@ function App() {
     .map((id) => `${GENRES.find((g) => g.id === id)?.label || id} ${gameState.generalPercents[id]}%`)
     .join(', ');
   const inviteUrl = `${window.location.origin}${window.location.pathname}?code=${gameState.code}`;
-  const playerSuperlatives = getPlayerSuperlatives(players, gameState);
+  const playerAwards = getPlayerAwards(players, gameState);
   const badgePlayer = players.find((player) => player.id === superlativeInfo?.playerId) || me;
+  const badgePlayerAwards = playerAwards[badgePlayer.id] || { badges: [], superlatives: [] };
+  const focusedAward = superlativeInfo?.awardId
+    ? [...badgePlayerAwards.superlatives, ...badgePlayerAwards.badges].find(
+        (award) => award.id === superlativeInfo.awardId,
+      )
+    : null;
+  const selectedAward =
+    focusedAward ||
+    (superlativeInfo || badgeProgressOpen ? badgePlayerAwards.superlatives[0] || badgePlayerAwards.badges[0] : null);
 
   return (
     <>
@@ -1404,8 +1427,8 @@ function App() {
                 callStats={gameState.callStats}
                 onCallScoreClick={setCallInfoPlayer}
                 wageringEnabled={wageringEnabled}
-                superlatives={playerSuperlatives}
-                onSuperlativeClick={(player) => setSuperlativeInfo({ playerId: player.id })}
+                awards={playerAwards}
+                onAwardClick={(player, award) => setSuperlativeInfo({ playerId: player.id, awardId: award.id })}
               />
             )}
             <div className="board-wrap" data-tutorial="board">
@@ -1695,8 +1718,8 @@ function App() {
           movie={gameState.movie}
           isHost={isHost}
           onMovieClick={() => setMovieIdentityModalOpen(true)}
-          superlatives={playerSuperlatives}
-          onSuperlativeClick={(player) => setSuperlativeInfo({ playerId: player.id })}
+          awards={playerAwards}
+          onAwardClick={(player, award) => setSuperlativeInfo({ playerId: player.id, awardId: award.id })}
           onClose={() => setGameOverModalOpen(false)}
         />
       )}
@@ -1749,10 +1772,10 @@ function App() {
 
       {(superlativeInfo || badgeProgressOpen) && (
         <SuperlativeModal
-          award={playerSuperlatives[badgePlayer.id]}
+          award={selectedAward}
           playerName={badgePlayer.name}
           playerAvatar={badgePlayer.avatar}
-          progress={getBadgeProgress(badgePlayer, gameState, playerSuperlatives[badgePlayer.id] || null)}
+          progress={getBadgeProgress(badgePlayer, gameState)}
           onClose={() => {
             setSuperlativeInfo(null);
             setBadgeProgressOpen(false);
@@ -1830,6 +1853,8 @@ function App() {
           onAdvancedActions={tropeInfo.onAdvancedActions}
           actionsAvailable={!gameState.acceptedTropes.includes(tropeInfo.text)}
           allowSceneContext={gameState.started && !gameState.gameOver}
+          sceneContextReadOnly={gameState.acceptedTropes.includes(tropeInfo.text)}
+          sceneContexts={gameState.acceptedTropes.includes(tropeInfo.text) ? acceptedSceneContexts(tropeInfo.text) : []}
         />
       )}
 

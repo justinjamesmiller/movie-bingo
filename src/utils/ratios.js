@@ -1,5 +1,3 @@
-export const RATIO_OPTIONS = Array.from({ length: 11 }, (_, index) => index * 10);
-
 // Creates the closest balanced 10-percent split that still totals exactly 100.
 export function balancedRatios(keys) {
   if (keys.length === 0) return {};

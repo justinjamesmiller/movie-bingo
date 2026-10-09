@@ -4,16 +4,50 @@ import TropeInfoModal from './TropeInfoModal.jsx';
 import { loadTropeDescriptions } from '../data/tropeDescriptions.js';
 
 describe('TropeInfoModal', () => {
-  it('submits optional scene context and prevents malformed movie timestamps', () => {
+  it('submits optional scene context with a free-form movie timestamp', () => {
     const onConfirm = vi.fn();
     render(<TropeInfoModal text="Jump Scare" allowSceneContext onConfirm={onConfirm} onCancel={vi.fn()} />);
     fireEvent.click(screen.getByText('Optional scene context'));
-    fireEvent.change(screen.getByLabelText('Movie timestamp'), { target: { value: '12:99' } });
-    expect(screen.getByRole('button', { name: /Submit to the group/ })).toBeDisabled();
-    fireEvent.change(screen.getByLabelText('Movie timestamp'), { target: { value: '12:34' } });
+    fireEvent.change(screen.getByLabelText('Movie timestamp'), { target: { value: 'Around the halfway point' } });
+    expect(screen.getByRole('button', { name: /Submit to the group/ })).toBeEnabled();
     fireEvent.change(screen.getByLabelText('Scene note'), { target: { value: '  Kitchen scene  ' } });
     fireEvent.click(screen.getByRole('button', { name: /Submit to the group/ }));
-    expect(onConfirm).toHaveBeenCalledWith({ note: 'Kitchen scene', timestamp: '12:34' });
+    expect(onConfirm).toHaveBeenCalledWith({ note: 'Kitchen scene', timestamp: 'Around the halfway point' });
+  });
+
+  it('shows accepted proposal context read-only when challenging the trope', () => {
+    const onConfirm = vi.fn();
+    render(
+      <TropeInfoModal
+        text="Jump Scare"
+        title="Challenge this trope?"
+        confirmLabel="👍 Challenge it"
+        allowSceneContext
+        sceneContextReadOnly
+        sceneContexts={[
+          { playerName: 'Alice', timestamp: 'Around the halfway point', note: 'Kitchen scene' },
+          { playerName: 'Bob', timestamp: 'Near the ending', note: '' },
+        ]}
+        onConfirm={onConfirm}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('Original proposal context')).toBeInTheDocument();
+    expect(screen.getByText('Around the halfway point')).toBeInTheDocument();
+    expect(screen.getByText('Kitchen scene')).toBeInTheDocument();
+    expect(screen.getByText('Near the ending')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Movie timestamp')).toBeNull();
+    expect(screen.queryByLabelText('Scene note')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '👍 Challenge it' }));
+    expect(onConfirm).toHaveBeenCalledWith();
+  });
+
+  it('explains when an older accepted proposal has no saved context', () => {
+    render(<TropeInfoModal text="Jump Scare" sceneContextReadOnly sceneContexts={[]} onCancel={vi.fn()} />);
+
+    expect(screen.getByText('No scene context was recorded with the original proposal.')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Movie timestamp')).toBeNull();
   });
 
   // Warm the lazy chunk once so the synchronous assertions below are stable.

@@ -2676,9 +2676,8 @@ export class GameClient {
 
   _sceneContext(fromId, value) {
     const note = typeof value?.note === 'string' ? value.note.trim().slice(0, 240) : '';
-    const timestamp = typeof value?.timestamp === 'string' ? value.timestamp.trim().slice(0, 16) : '';
-    const validTime = /^(?:\d{1,2}:[0-5]\d|\d{1,3}):[0-5]\d$/.test(timestamp);
-    return note || validTime ? { playerId: fromId, note, timestamp: validTime ? timestamp : '' } : null;
+    const timestamp = typeof value?.timestamp === 'string' ? value.timestamp.trim().slice(0, 120) : '';
+    return note || timestamp ? { playerId: fromId, note, timestamp } : null;
   }
 
   _submitTropeProposal(fromId, text, kind, meta = {}, context) {

@@ -1,8 +1,6 @@
 import { useId } from 'react';
 
-export function validSceneContext(value) {
-  return !value.timestamp || /^(?:\d{1,2}:[0-5]\d|\d{1,3}):[0-5]\d$/.test(value.timestamp.trim());
-}
+const MAX_TIMESTAMP_LENGTH = 120;
 
 export function suppliedSceneContext(value) {
   return value.note.trim() || value.timestamp.trim()
@@ -19,17 +17,11 @@ export default function SceneContextFields({ value, onChange }) {
       <input
         id={`${id}-time`}
         type="text"
-        inputMode="numeric"
-        maxLength={16}
-        placeholder="12:34 or 1:12:34"
+        maxLength={MAX_TIMESTAMP_LENGTH}
+        placeholder="e.g. 12:34, near the end, after the credits"
         value={value.timestamp}
         onChange={(event) => onChange({ ...value, timestamp: event.target.value })}
       />
-      {!validSceneContext(value) && (
-        <p className="hint" role="alert">
-          Use M:SS or H:MM:SS.
-        </p>
-      )}
       <label htmlFor={`${id}-note`}>Scene note</label>
       <textarea
         id={`${id}-note`}
@@ -40,5 +32,28 @@ export default function SceneContextFields({ value, onChange }) {
         onChange={(event) => onChange({ ...value, note: event.target.value })}
       />
     </details>
+  );
+}
+
+export function SceneContextSummary({ contexts = [] }) {
+  return (
+    <section className="claim-scene-context scene-context-summary">
+      <h4>Original proposal context</h4>
+      {contexts.length ? (
+        contexts.map((context, index) => (
+          <div key={`${context.playerId || context.playerName || 'proposal'}-${index}`}>
+            {context.playerName && <strong>{context.playerName}</strong>}
+            <p>
+              <strong>Movie timestamp:</strong> {context.timestamp || 'Not provided'}
+            </p>
+            <p>
+              <strong>Scene note:</strong> {context.note || 'Not provided'}
+            </p>
+          </div>
+        ))
+      ) : (
+        <p className="hint">No scene context was recorded with the original proposal.</p>
+      )}
+    </section>
   );
 }

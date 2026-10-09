@@ -103,7 +103,7 @@ const genres = schema.array(genre).min(1).max(GENRES.length);
 const selections = schema.array(selection).max(80);
 const percentages = schema.record(genre, schema.number().min(0).max(100).optional());
 const scene = schema
-  .object({ note: schema.string().max(240).optional(), timestamp: schema.string().max(16).optional() })
+  .object({ note: schema.string().max(240).optional(), timestamp: schema.string().max(120).optional() })
   .strict();
 const movie = schema
   .object({
@@ -200,7 +200,7 @@ const player = schema
   })
   .passthrough();
 const contexts = schema
-  .array(schema.object({ playerId, note: schema.string().max(240), timestamp: schema.string().max(16) }).strict())
+  .array(schema.object({ playerId, note: schema.string().max(240), timestamp: schema.string().max(120) }).strict())
   .max(32);
 const reasons = schema.record(schema.string().max(100), schema.number().int().min(0).max(32));
 const state = schema

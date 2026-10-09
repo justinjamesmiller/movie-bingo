@@ -111,7 +111,8 @@ export default function HelpModal({ onClose }) {
             &amp; Stats, or View waiting proposals, shows waiting proposals and lets you withdraw your own. Matching
             proposals merge; connected proposers vote automatically when their turn starts. Replacement choices finish
             before the next vote. A game allows 30 waiting entries, with five new entries per player. You can optionally
-            add a scene note and a movie timestamp such as 12:34 or 1:12:34 to a trope proposal.
+            add a scene note and a free-form movie timestamp to a trope proposal. Accepted trope details show the
+            original proposal context without allowing edits.
           </p>
           <h4>👎 Vote Reasons</h4>
           <p className="hint">
@@ -162,19 +163,22 @@ export default function HelpModal({ onClose }) {
             In Advanced Options, Game Stats summarizes the current watch for everyone. Tap another player's name to see
             their current tropes, bingos, and wager hits without adding extra numbers to the player list. Tap your own
             name for player options and choose View Stats to see your own record. Player distinctions use shared
-            activity and board data, so everyone sees the same badges. "Most" and exclusive "first" distinctions require
-            an untied lead; other badges describe recorded achievements. Badges appear individually when earned, not
-            automatically after the first acceptance. Filling five wagers can earn Full House before play; exploring
-            three different tropes can earn Board Cartographer. Trophy Hunter needs three bingos. Later achievements
-            take precedence over lighter early badges, and a player may have no badge yet. Genuine shared achievements
-            can be earned by more than one player. One accepted proposal can earn Trope Scout, helping approve another
-            player's claim can earn Team Player, and exploring two different explanations can earn Trope Explorer. More
-            progress automatically replaces lighter badges: Bingo Buddy grows into Double Feature and Trophy Hunter;
-            successful predictions can earn Right on Cue, Prediction Pro, and Crystal Ball. Failed predictions do not
-            earn prediction badges. Tap your own name → Badge Progress to see up to three higher badge milestones with
-            their current counts, even before you earn a badge. Opening a player's badge also shows their progress. New
-            badges and upgrades are announced to the group without interrupting votes or replaying old achievements on
-            reconnect.
+            activity and board data, so everyone sees the same awards: 40 shareable badges and 11 exclusive
+            superlatives. Each superlative has at most one holder at a time, but a player may hold several different
+            superlatives. Multiple players can earn a badge such as Blackout Bound or Pattern Hunter, and different
+            badge tracks can coexist on one player. Within a progression track, the highest earned tier replaces its
+            earlier tiers: Team Player grows into Consensus Builder, Watch Party MVP, and Consensus Captain; Bingo Buddy
+            grows into Double Feature and Trophy Hunter. Wager Architect can appear alongside Pattern Hunter and a
+            superlative. First Trope Accepted is an exclusive first-event superlative; simultaneous firsts are not
+            singled out. Competitive superlatives such as Most Thoughtful or Most Almost-Bingos require a sole leader,
+            may change holders as the game progresses, and are hidden on ties. Every award needs its own evidence; no
+            first-acceptance or participation fallback exists. One accepted proposal can earn Trope Scout, helping
+            approve another player's claim can earn Team Player, and exploring two different explanations can earn Trope
+            Explorer. Full House can be earned before play after filling five wager slots. Trophy Hunter needs three
+            bingos; successful predictions can earn Right on Cue, Prediction Pro, and Crystal Ball, while failed
+            predictions do not count. Tap your own name → Badge Progress to see up to three upcoming badge milestones
+            with current counts, even before earning one. Opening any award shows its details. New badges and changed
+            superlatives are announced to the group without interrupting votes or replaying awards on reconnect.
           </p>
 
           <h4>🎬 Marathon History</h4>

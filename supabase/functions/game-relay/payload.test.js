@@ -87,7 +87,7 @@ const published = (action) => ({
 
 describe('relay payload schemas', () => {
   it.each([
-    { t: 'claim', index: 0, sceneContext: { note: 'A scene', timestamp: '01:23' } },
+    { t: 'claim', index: 0, sceneContext: { note: 'A scene', timestamp: 'around the halfway point' } },
     { t: 'vote', claimId: 'claim-1', agree: true },
     { t: 'setWager', indices: [0, 1, 2, 3, 4] },
     { t: 'requestBoardRecovery', sourceId: 'p2', targetId: 'p3', timeoutSeconds: 300 },
@@ -100,6 +100,7 @@ describe('relay payload schemas', () => {
   it.each([
     { t: 'claim', index: 25 },
     { t: 'claim', index: -1 },
+    { t: 'claim', index: 0, sceneContext: { timestamp: 'x'.repeat(121) } },
     { t: 'vote', claimId: 'claim-1', agree: 'yes' },
     { t: 'setWager', indices: Array(100).fill(0) },
     { t: 'proposeCustom', text: 'x'.repeat(61) },

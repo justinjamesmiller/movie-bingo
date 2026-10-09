@@ -1,6 +1,6 @@
 import { getAlmostCompletedLines, getCompletedLines } from './bingoLines.js';
 
-export const SUPERLATIVE_DEFINITIONS = [
+const SUPERLATIVE_DEFINITIONS = [
   [
     'Most Thoughtful',
     'Has the highest distinct-explanation-to-proposal ratio among players with at least two proposals and five different tropes explored, exploring at least twice as many different tropes as proposals.',
@@ -36,11 +36,7 @@ export const SUPERLATIVE_DEFINITIONS = [
     'Has at least three accepted tropes and an incomplete line just one space away from bingo.',
     (m) => m.accepted >= 3 && m.nearestLineMissing === 1,
   ],
-  [
-    'Pattern Hunter',
-    'Completed more bingo lines than anyone else, with at least two completed lines.',
-    (m) => m.bingos >= 2,
-  ],
+  ['Pattern Hunter', 'Completed at least two bingo lines.', (m) => m.bingos >= 2],
   [
     'Acceptance Magnet',
     'Has the most accepted tropes on their board, with at least six accepted spaces.',
@@ -168,12 +164,25 @@ const leaderScores = {
   'First Wager Achieved': (metrics) => Number(metrics.firstWagerHit),
   'Most Almost-Bingos': (metrics) => metrics.almostBingos,
   'Most Scattered Board': (metrics) => metrics.nearestLineMissing,
-  'Pattern Hunter': (metrics) => metrics.bingos,
   'Acceptance Magnet': (metrics) => metrics.accepted,
   'Most Decisive': (metrics) => metrics.submissions,
   'Marking Momentum': (metrics) => metrics.accepted,
   'First Mover': (metrics) => Number(metrics.firstProposal),
 };
+
+const superlativeNames = new Set([
+  'Most Thoughtful',
+  'Definition Detective',
+  'First Bingo',
+  'First Trope Accepted',
+  'First Wager Achieved',
+  'Most Almost-Bingos',
+  'Most Scattered Board',
+  'Acceptance Magnet',
+  'Most Decisive',
+  'Marking Momentum',
+  'First Mover',
+]);
 
 const awardStages = {
   Blackout: 8,
@@ -227,6 +236,7 @@ const definitions = SUPERLATIVE_DEFINITIONS.map(([name, description, qualifies, 
   qualifies,
   score: score || (() => 1),
   leaderScore: leaderScores[name],
+  kind: superlativeNames.has(name) ? 'superlative' : 'badge',
   stage: awardStages[name] || 1,
   priority: SUPERLATIVE_DEFINITIONS.length - index,
 }));
@@ -312,7 +322,7 @@ export function getSuperlativeMetrics(
 export function getPlayerSuperlative(player, gameState, personalStats, milestones) {
   const metrics = getSuperlativeMetrics(player, gameState, personalStats, milestones);
   const award = definitions
-    .filter((definition) => definition.qualifies(metrics))
+    .filter((definition) => definition.kind === 'superlative' && definition.qualifies(metrics))
     .sort((a, b) => b.stage - a.stage || b.score(metrics) - a.score(metrics) || b.priority - a.priority)[0];
   return award ? { ...award, metrics } : null;
 }
@@ -324,7 +334,7 @@ function superlativeCandidates(players, gameState) {
       player,
       metrics,
       eligible: definitions
-        .filter((definition) => definition.qualifies(metrics))
+        .filter((definition) => definition.kind === 'superlative' && definition.qualifies(metrics))
         .sort((a, b) => b.stage - a.stage || b.score(metrics) - a.score(metrics) || b.priority - a.priority),
     };
   });
@@ -345,33 +355,40 @@ function superlativeCandidates(players, gameState) {
 
 export function getPlayerSuperlatives(players, gameState) {
   const candidates = superlativeCandidates(players, gameState);
-  const assignments = {};
-  const used = new Set();
+  return Object.fromEntries(
+    candidates
+      .filter(({ eligible }) => eligible.length)
+      .map(({ player, metrics, eligible }) => [player.id, eligible.map((award) => ({ ...award, metrics }))]),
+  );
+}
 
-  // Reserve rare/earned distinctions first, so a later player cannot consume
-  // the only fitting award for someone with a stronger claim to it.
-  candidates
-    .sort(
-      (a, b) =>
-        a.eligible.length - b.eligible.length ||
-        (a.player.seat || 0) - (b.player.seat || 0) ||
-        (a.player.id < b.player.id ? -1 : a.player.id > b.player.id ? 1 : 0),
-    )
-    .forEach(({ player, metrics, eligible }) => {
-      const strongest = eligible[0];
-      const award =
-        eligible.find(
-          (definition) =>
-            definition.stage === strongest?.stage &&
-            definition.score(metrics) === strongest.score(metrics) &&
-            !used.has(definition.id),
-        ) || strongest;
-      if (!award) return;
-      used.add(award.id);
-      assignments[player.id] = { ...award, metrics };
-    });
-
-  return assignments;
+export function getPlayerAwards(players, gameState) {
+  const superlatives = getPlayerSuperlatives(players, gameState);
+  const progressionNames = new Set(progressTracks.flatMap((track) => track.goals.map(([name]) => name)));
+  return Object.fromEntries(
+    players.map((player) => {
+      const metrics = getSuperlativeMetrics(player, gameState);
+      const badges = progressTracks.flatMap((track) => {
+        const qualified = track.goals.filter(([name, , available]) => {
+          const definition = definitions.find((entry) => entry.name === name);
+          return definition.qualifies(metrics) && (!available || available(metrics));
+        });
+        const highest = qualified[qualified.length - 1];
+        const definition = highest && definitions.find((entry) => entry.name === highest[0]);
+        return definition ? [{ ...definition, metrics }] : [];
+      });
+      badges.push(
+        ...definitions
+          .filter(
+            (definition) =>
+              definition.kind === 'badge' && !progressionNames.has(definition.name) && definition.qualifies(metrics),
+          )
+          .map((badge) => ({ ...badge, metrics })),
+      );
+      badges.sort((a, b) => b.stage - a.stage || b.score(metrics) - a.score(metrics) || b.priority - a.priority);
+      return [player.id, { badges, superlatives: superlatives[player.id] || [] }];
+    }),
+  );
 }
 
 const progressTracks = [
@@ -447,26 +464,13 @@ const progressTracks = [
   },
 ];
 
-export function getBadgeProgress(player, gameState, currentAward) {
+export function getBadgeProgress(player, gameState) {
   const metrics = getSuperlativeMetrics(player, gameState);
-  const current =
-    currentAward === undefined
-      ? getPlayerSuperlatives(
-          Object.values(gameState.players || {}).length ? Object.values(gameState.players) : [player],
-          gameState,
-        )[player.id]
-      : currentAward;
   return progressTracks
     .flatMap((track, index) => {
       const goal = track.goals.find(([name, , available]) => {
         const definition = definitions.find((entry) => entry.name === name);
-        const stronger =
-          !current ||
-          definition.stage > current.stage ||
-          (definition.stage === current.stage &&
-            definition.score(metrics) >= current.score(metrics) &&
-            definition.priority > current.priority);
-        return stronger && (!available || available(metrics)) && !definition.qualifies(metrics);
+        return definition.kind === 'badge' && (!available || available(metrics)) && !definition.qualifies(metrics);
       });
       if (!goal) return [];
       const [name, threshold] = goal;
@@ -479,6 +483,7 @@ export function getBadgeProgress(player, gameState, currentAward) {
           id: definition.id,
           name,
           description: definition.description,
+          kind: definition.kind,
           stage: definition.stage,
           label: track.label,
           value,
@@ -499,6 +504,7 @@ export function createBadgeAchievementTracker() {
   let previousStarted = false;
   let previousWatch = 0;
   let seen = new Map();
+  let previousSuperlativeOwners = new Map();
   let watchVersion = 0;
   let previousRevision;
   return {
@@ -508,6 +514,7 @@ export function createBadgeAchievementTracker() {
     reset() {
       initialized = false;
       seen = new Map();
+      previousSuperlativeOwners = new Map();
     },
     update(state) {
       if (
@@ -522,29 +529,52 @@ export function createBadgeAchievementTracker() {
       const reset = initialized && (watch !== previousWatch || (previousStarted && !state.started));
       if (reset) {
         seen = new Map();
+        previousSuperlativeOwners = new Map();
         watchVersion += 1;
       }
       const players = Object.values(state.players);
-      const candidates = superlativeCandidates(players, state);
-      const awards = getPlayerSuperlatives(players, state);
+      const awards = getPlayerAwards(players, state);
       const achievements = [];
-      for (const { player, eligible } of candidates) {
+      const currentSuperlativeOwners = new Map();
+      for (const player of players) {
         const previous = seen.get(player.id);
-        const award = awards[player.id];
-        if (initialized && !reset && previous && award && !previous.has(award.id)) {
+        const remembered = previous || new Set();
+        for (const award of awards[player.id].badges) {
+          if (initialized && !reset && previous && !previous.has(award.id)) {
+            achievements.push({
+              playerId: player.id,
+              name: player.name,
+              avatar: player.avatar,
+              badgeId: award.id,
+              badgeName: award.name,
+              awardKind: 'badge',
+              stage: award.stage,
+            });
+          }
+          remembered.add(award.id);
+        }
+        seen.set(player.id, remembered);
+        for (const award of awards[player.id].superlatives) {
+          currentSuperlativeOwners.set(award.id, player);
+        }
+      }
+      for (const [awardId, player] of currentSuperlativeOwners) {
+        if (initialized && !reset && previousSuperlativeOwners.get(awardId) !== player.id) {
+          const award = awards[player.id].superlatives.find((entry) => entry.id === awardId);
           achievements.push({
             playerId: player.id,
             name: player.name,
             avatar: player.avatar,
             badgeId: award.id,
             badgeName: award.name,
+            awardKind: 'superlative',
             stage: award.stage,
           });
         }
-        const remembered = previous || new Set();
-        for (const definition of eligible) remembered.add(definition.id);
-        seen.set(player.id, remembered);
       }
+      previousSuperlativeOwners = new Map(
+        [...currentSuperlativeOwners].map(([awardId, player]) => [awardId, player.id]),
+      );
       initialized = true;
       previousWatch = watch;
       previousStarted = !!state.started;

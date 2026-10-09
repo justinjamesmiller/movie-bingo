@@ -3,8 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import BadgeAnnouncement from './BadgeAnnouncement.jsx';
 
 const achievements = [
-  { playerId: 'p1', name: 'Ashley', avatar: '🎬', badgeName: 'Team Player' },
-  { playerId: 'p2', name: 'Bob', avatar: '🍿', badgeName: 'Team Player' },
+  { playerId: 'p1', name: 'Ashley', avatar: '🎬', badgeName: 'Team Player', awardKind: 'badge' },
+  { playerId: 'p2', name: 'Bob', avatar: '🍿', badgeName: 'Team Player', awardKind: 'badge' },
 ];
 
 describe('BadgeAnnouncement', () => {
@@ -14,7 +14,9 @@ describe('BadgeAnnouncement', () => {
     vi.useFakeTimers();
     const onDismiss = vi.fn();
     render(<BadgeAnnouncement achievements={achievements} suspended={false} onDismiss={onDismiss} />);
-    expect(screen.getByRole('status', { name: 'New badges' })).toHaveTextContent('Ashley, 🍿 Bob earned Team Player');
+    expect(screen.getByRole('status', { name: 'New awards' })).toHaveTextContent(
+      'Ashley, 🍿 Bob earned the badge Team Player',
+    );
     await act(() => vi.advanceTimersByTimeAsync(4999));
     expect(onDismiss).not.toHaveBeenCalled();
     await act(() => vi.advanceTimersByTimeAsync(1));
@@ -30,12 +32,32 @@ describe('BadgeAnnouncement', () => {
         <BadgeAnnouncement achievements={achievements} suspended={false} onDismiss={onDismiss} />
       </>,
     );
-    expect(screen.queryByRole('status', { name: 'New badges' })).toBeNull();
+    expect(screen.queryByRole('status', { name: 'New awards' })).toBeNull();
     await act(() => vi.advanceTimersByTimeAsync(10_000));
     expect(onDismiss).not.toHaveBeenCalled();
     view.rerender(<BadgeAnnouncement achievements={achievements} suspended={false} onDismiss={onDismiss} />);
-    expect(screen.getByRole('status', { name: 'New badges' })).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'New awards' })).toBeInTheDocument();
     await act(() => vi.advanceTimersByTimeAsync(5000));
     expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it('announces a changed exclusive superlative separately from earned badges', () => {
+    render(
+      <BadgeAnnouncement
+        achievements={[
+          { playerId: 'p1', name: 'Ashley', badgeName: 'Pattern Hunter', awardKind: 'badge' },
+          { playerId: 'p2', name: 'Bob', badgeName: 'Most Thoughtful', awardKind: 'superlative' },
+        ]}
+        suspended={false}
+        onDismiss={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole('status', { name: 'New awards' })).toHaveTextContent(
+      'Ashley earned the badge Pattern Hunter',
+    );
+    expect(screen.getByRole('status', { name: 'New awards' })).toHaveTextContent(
+      'Bob now holds the superlative Most Thoughtful',
+    );
   });
 });

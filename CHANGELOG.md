@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/justinjamesmiller/movie-bingo/compare/v0.1.0...v0.1.1) (2026-10-09)
+
+
+### Performance Improvements
+
+* streamline gameplay and defer secondary tools ([5f1ca16](https://github.com/justinjamesmiller/movie-bingo/commit/5f1ca16ad7afe2990ed228e8634424d0ca0b167d))
+
 ## 0.1.0 (2026-10-09)
 
 

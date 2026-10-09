@@ -358,6 +358,56 @@ describe('GameClient', () => {
     }
   });
 
+  it.each([false, true])(
+    'keeps a joining guest alive before subscription acknowledgment with server gameplay %s',
+    async (serverGameplay) => {
+      setFakeServerGameplayEnabled(serverGameplay);
+      const host = makeTrackedClient();
+      const guest = makeTrackedClient();
+      try {
+        const code = await host.client.hostGame('Host', ['horror'], [], false, {}, 25);
+        const channel = guest.client.supabase.channel.bind(guest.client.supabase);
+        vi.spyOn(guest.client.supabase, 'channel').mockImplementation((...args) => {
+          const subscription = channel(...args);
+          const subscribe = subscription.subscribe.bind(subscription);
+          subscription.subscribe = (callback) =>
+            subscribe(async (status, error) => {
+              if (status === 'SUBSCRIBED') {
+                await host.client._send({ t: 'state', state: host.client.state });
+                await flush();
+              }
+              callback(status, error);
+            });
+          return subscription;
+        });
+        await guest.client.joinGame(code, 'Guest');
+        await flush();
+        expect(guest.events.some((event) => event.type === 'kicked')).toBe(false);
+        expect(guest.client._destroyed).toBeFalsy();
+        expect(guest.state.players[guest.myId].name).toBe('Guest');
+        expect(Object.keys(host.state.players)).toHaveLength(2);
+        expect(guest.client._pendingJoin).toBeNull();
+      } finally {
+        host.client.destroy();
+        guest.client.destroy();
+      }
+    },
+  );
+
+  it('clears the pending join when subscription fails', async () => {
+    const host = makeTrackedClient();
+    const guest = makeTrackedClient();
+    try {
+      const code = await host.client.hostGame('Host', ['horror'], [], false, {}, 25);
+      vi.spyOn(guest.client, '_connectChannel').mockRejectedValue(new Error('Subscription failed'));
+      await expect(guest.client.joinGame(code, 'Guest')).rejects.toThrow('Subscription failed');
+      expect(guest.client._pendingJoin).toBeNull();
+    } finally {
+      host.client.destroy();
+      guest.client.destroy();
+    }
+  });
+
   it.each([
     [false, 'host'],
     [false, 'guest'],

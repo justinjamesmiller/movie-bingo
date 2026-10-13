@@ -3,6 +3,7 @@ import { GENRES, SUBGENRES_BY_GENRE } from '../data/tropes.js';
 import { getDisagreeRationales } from '../data/disagreeRationales.js';
 import { useTropeDescription } from '../hooks/useTropeDescription.js';
 import { formatPlayerName } from '../utils/playerName.js';
+import ModalShell from './ModalShell.jsx';
 
 export default function ClaimModal({
   pendingClaim,
@@ -11,6 +12,7 @@ export default function ClaimModal({
   onAgree,
   onDisagree,
   onCancel,
+  onClose,
   onBrowseQueue,
   onShowQueue,
 }) {
@@ -58,8 +60,13 @@ export default function ClaimModal({
   const rationaleCounts = pendingClaim.disagreeRationaleCounts || {};
 
   return (
-    <div className="modal">
+    <ModalShell onClose={onClose}>
       <div className={`modal-content${isReplace ? ' swap-claim-modal' : ''}`}>
+        {onClose && (
+          <button className="btn claim-dismiss" aria-label="Close vote" onClick={onClose}>
+            Close
+          </button>
+        )}
         {isReplace && <p className="swap-claim-kicker">TROPE SWAP</p>}
         <h3>
           {claimantLabel}
@@ -235,6 +242,6 @@ export default function ClaimModal({
           {majorityReached ? 'majority reached' : allVoted ? 'all votes in' : `${majorityNeeded} needed for majority`}).
         </p>
       </div>
-    </div>
+    </ModalShell>
   );
 }

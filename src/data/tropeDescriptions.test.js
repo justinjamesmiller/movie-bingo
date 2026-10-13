@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { areTropeDescriptionsLoaded, getTropeDescription, loadTropeDescriptions } from './tropeDescriptions.js';
 import { TROPES } from './tropes.js';
-import { SHARED_TROPE_DESCRIPTIONS } from './sharedTropes.js';
+import { LEGACY_TROPE_DESCRIPTION_ALIASES, SHARED_TROPE_DESCRIPTIONS } from './sharedTropes.js';
 
 describe('trope descriptions', () => {
   let descriptions;
@@ -167,6 +167,43 @@ describe('trope descriptions', () => {
   });
 
   it.each([
+    ['A cry for help is ignored', 'horror', 'general', false],
+    ['Obvious plot armor', 'action', 'general', true],
+    ['Killer survives seemingly fatal harm', 'horror', 'slasher', false],
+    ['Dies before finishing a revelation', 'thriller', 'mystery-whodunit', false],
+    ['Self-sacrifice saves others', 'fantasy', 'general', false],
+  ])('defines reviewed candidate "%s" with description and placement', (text, genre, subgenre, optional) => {
+    const entries = TROPES.filter((trope) => trope.text === text);
+    expect(entries).toHaveLength(1);
+    expect(entries[0].optional).toBe(optional);
+    expect(entries[0].subgenresByGenre[genre]).toContain(subgenre);
+    expect(getTropeDescription(text)).toMatchObject({
+      what: expect.any(String),
+      example: expect.any(String),
+    });
+  });
+
+  it('preserves explanations for labels stored on existing boards after broadening', () => {
+    expect(TROPES.some((trope) => trope.text === 'Killer presumed dead')).toBe(false);
+    expect(TROPES.some((trope) => trope.text === 'A sacrifice saves the realm')).toBe(false);
+    expect(getTropeDescription('Killer presumed dead')).toMatchObject({
+      what: expect.any(String),
+      example: expect.any(String),
+    });
+    expect(getTropeDescription('A sacrifice saves the realm')).toMatchObject({
+      what: expect.any(String),
+      example: expect.any(String),
+    });
+  });
+
+  it('keeps the bad-pun trope as one broadened shared entry', () => {
+    expect(TROPES.filter((trope) => trope.text === 'A groan-worthy pun')).toHaveLength(1);
+    expect(TROPES.find((trope) => trope.text === 'A groan-worthy pun').genres).toEqual(
+      expect.arrayContaining(['comedy', 'action', 'family', 'animation']),
+    );
+  });
+
+  it.each([
     ['Product placement', true, 'tv', 'lifestyle'],
     ['A fictional business is named', false, 'sci-fi', 'dystopian'],
     ['A montage', false, 'sport', 'underdog-story'],
@@ -207,7 +244,8 @@ describe('trope descriptions', () => {
 
   it('only describes tropes that actually exist in the trope list', () => {
     const known = new Set(TROPES.map((t) => t.text));
-    const orphans = Object.keys(descriptions).filter((text) => !known.has(text));
+    const legacyAliases = new Set(Object.keys(LEGACY_TROPE_DESCRIPTION_ALIASES));
+    const orphans = Object.keys(descriptions).filter((text) => !known.has(text) && !legacyAliases.has(text));
     expect(orphans).toEqual([]);
   });
 

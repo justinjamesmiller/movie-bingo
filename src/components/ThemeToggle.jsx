@@ -1,13 +1,8 @@
 export default function ThemeToggle({ theme, onToggle }) {
   return (
-    <button
-      className="theme-toggle"
-      data-tutorial="theme"
-      onClick={onToggle}
-      aria-label="Toggle dark mode"
-      title="Toggle light/dark mode"
-    >
-      {theme === 'dark' ? '☀️' : '🌙'}
-    </button>
+    <label className="accessibility-choice" data-tutorial="theme">
+      <input type="checkbox" checked={theme === 'light'} onChange={onToggle} />
+      <span>Light mode</span>
+    </label>
   );
 }

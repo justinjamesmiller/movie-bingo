@@ -481,8 +481,7 @@ describe('App', () => {
     try {
       render(<App />);
       expect(screen.getByRole('heading', { name: /Movie\/TV Trope Bingo/ })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Toggle dark mode' })).toBeInTheDocument();
-      fireEvent.click(screen.getByRole('button', { name: 'Toggle dark mode' }));
+      expect(screen.queryByRole('button', { name: 'Toggle dark mode' })).not.toBeInTheDocument();
       expect(document.body).toHaveClass('dark');
     } finally {
       vi.restoreAllMocks();
@@ -491,9 +490,9 @@ describe('App', () => {
     }
   });
 
-  it('ignores an invalid saved theme and falls back to the system preference', () => {
-    localStorage.setItem('bingo-theme', 'sepia');
-    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: true }));
+  it.each(['light', 'dark', 'sepia'])('ignores the saved %s preference and starts dark', (savedTheme) => {
+    localStorage.setItem('bingo-theme', savedTheme);
+    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }));
     try {
       render(<App />);
       expect(document.body).toHaveClass('dark');
@@ -504,15 +503,67 @@ describe('App', () => {
     }
   });
 
-  it('shows the package version on the home screen and in the game', async () => {
+  it('requires advanced personal tools to override dark mode only for the current session', async () => {
+    localStorage.removeItem('bingo-theme');
+    const view = await hostTutorialView();
+    expect(document.body).toHaveClass('dark');
+    expect(screen.queryByRole('button', { name: 'Toggle dark mode' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: 'Light mode' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Menu', exact: true }));
+    expect(screen.queryByRole('checkbox', { name: 'Light mode' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced Options', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'My Tools', exact: true }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Light mode' }));
+    expect(document.body).not.toHaveClass('dark');
+    expect(localStorage.getItem('bingo-theme')).toBeNull();
+    view.unmount();
+    render(<App />);
+    expect(document.body).toHaveClass('dark');
+    expect(screen.queryByRole('button', { name: 'Toggle dark mode' })).not.toBeInTheDocument();
+    localStorage.removeItem('bingo-theme');
+  });
+
+  it('omits the package version on the home screen and in the game', async () => {
     vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }));
     render(<App />);
-    expect(screen.getByText(`v${appVersion}`, { exact: true })).toBeInTheDocument();
+    expect(screen.queryByText(`v${appVersion}`, { exact: true })).not.toBeInTheDocument();
     fireEvent.change(screen.getByPlaceholderText('e.g. Ashley'), { target: { value: 'Ashley' } });
     fireEvent.click(screen.getByRole('button', { name: 'Host Game' }));
     await screen.findByText('Code: ABCD');
-    expect(screen.getByText(`v${appVersion}`, { exact: true })).toBeInTheDocument();
+    expect(screen.queryByText(`v${appVersion}`, { exact: true })).not.toBeInTheDocument();
+  });
+
+  it('shows the UTC Pages build date and commit details on both screens', async () => {
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }));
+    vi.stubEnv('VITE_BUILD_DATE', '2026-10-13T23:58:00Z');
+    vi.stubEnv('VITE_BUILD_SHA', 'abcdef1234567890');
+    try {
+      render(<App />);
+      const label = 'Built Oct 13, 2026';
+      expect(screen.getByText(label)).toHaveAttribute(
+        'title',
+        'Built 2026-10-13T23:58:00.000Z (UTC) | Commit abcdef1234567890',
+      );
+      fireEvent.change(screen.getByPlaceholderText('e.g. Ashley'), { target: { value: 'Ashley' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Host Game' }));
+      await screen.findByText('Code: ABCD');
+      expect(screen.getByText(label)).toBeInTheDocument();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('omits the build label if build metadata is invalid', () => {
+    vi.stubEnv('VITE_BUILD_DATE', 'not-a-date');
+    try {
+      render(<App />);
+      expect(screen.queryByText(`v${appVersion}`, { exact: true })).not.toBeInTheDocument();
+      expect(screen.queryByText(/Built /)).not.toBeInTheDocument();
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it.each([false, true])(
@@ -684,6 +735,8 @@ describe('App', () => {
     fireEvent.change(nameInput, { target: { value: 'Ashley' } });
     fireEvent.click(screen.getByRole('button', { name: 'Host Game' }));
 
+    expect(blur).toHaveBeenCalledTimes(1);
+    expect(nameInput).not.toHaveFocus();
     expect(await screen.findByText('Code: ABCD')).toBeInTheDocument();
     expect(blur).toHaveBeenCalledTimes(1);
     expect(screen.getByRole('button', { name: 'Start Game' })).toBeInTheDocument();
@@ -807,7 +860,7 @@ describe('App', () => {
     expect(screen.getByText('Only an authorized host can publish state.')).toHaveClass('toast');
   });
 
-  it('shows a retry notice when a concurrent host update wins', async () => {
+  it('shows a retry notice only for the writer of a conflicting update', async () => {
     vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }));
     render(<App />);
@@ -817,7 +870,9 @@ describe('App', () => {
 
     act(() => latestClient.onEvent({ type: 'stateConflict' }));
 
-    expect(screen.getByText(/Your change was not saved; please retry/)).toHaveClass('toast');
+    expect(
+      screen.getByText('A newer game update was saved first. Your change was not saved; please retry.'),
+    ).toHaveClass('toast');
   });
 
   it('lets a host save a recovery password from Host Settings', async () => {
@@ -853,7 +908,7 @@ describe('App', () => {
     await screen.findByText('Code: ABCD');
 
     expect(latestClient.joinOptions.hostRecoveryPassword).toBe('long secure phrase');
-    expect(localStorage.getItem('bingo-theme')).not.toContain('long secure phrase');
+    expect(localStorage.getItem('bingo-theme') || '').not.toContain('long secure phrase');
     expect(sessionStorage.getItem('movie-bingo-session') || '').not.toContain('long secure phrase');
   });
 
@@ -1322,17 +1377,86 @@ describe('App', () => {
     expect(screen.getByText(/Some earlier calls were not recorded individually/)).toBeInTheDocument();
   });
 
-  it('switches the page theme from the guided theme step', async () => {
+  it.each(['button', 'outside'])('dismisses a toast from the %s', async (target) => {
+    await hostTutorialView();
+    act(() => latestClient.onEvent({ type: 'relayError', message: 'Temporary test notice' }));
+    expect(screen.getByText('Temporary test notice')).toBeInTheDocument();
+    if (target === 'button') fireEvent.click(screen.getByRole('button', { name: 'Close notification' }));
+    else fireEvent.pointerDown(document.body);
+    expect(screen.queryByText('Temporary test notice')).not.toBeInTheDocument();
+  });
+
+  it('lets a player hide a vote, open the invite QR, and restore the pending vote', async () => {
+    await hostTutorialView();
+    const vote = vi.fn();
+    const cancel = vi.fn();
+    latestClient.vote = vote;
+    latestClient.cancelClaim = cancel;
+    act(() => {
+      clientState.pendingClaim = {
+        claimId: 'dismissible-vote',
+        byId: 'p2',
+        text: 'Trope 2',
+        kind: 'mark',
+        votes: { p2: true },
+        totalPlayers: 2,
+        expiresAt: Date.now() + 20_000,
+      };
+      latestClient.onState(clientState, 'p1');
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Close vote' }));
+    expect(screen.queryByRole('button', { name: /Agree, it happened/ })).not.toBeInTheDocument();
+    expect(vote).not.toHaveBeenCalled();
+    expect(cancel).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Menu', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'QR Code', exact: true }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Close', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Restore vote' }));
+    fireEvent.click(screen.getByRole('button', { name: /Agree, it happened/ }));
+    expect(vote).toHaveBeenCalledWith('dismissible-vote', true);
+  });
+
+  it('removes vote restoration at the deadline and opens a new claim normally', async () => {
+    await hostTutorialView();
+    vi.useFakeTimers();
+    act(() => {
+      clientState.pendingClaim = {
+        claimId: 'expiring-vote',
+        byId: 'p2',
+        text: 'Trope 2',
+        kind: 'mark',
+        votes: { p2: true },
+        totalPlayers: 2,
+        expiresAt: Date.now() + 1000,
+      };
+      latestClient.onState(clientState, 'p1');
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Close vote' }));
+    expect(screen.getByRole('button', { name: 'Restore vote' })).toBeInTheDocument();
+    await act(() => vi.advanceTimersByTimeAsync(1000));
+    expect(screen.queryByRole('button', { name: 'Restore vote' })).not.toBeInTheDocument();
+    act(() => {
+      clientState.pendingClaim = { ...clientState.pendingClaim, claimId: 'next-vote', expiresAt: Date.now() + 20_000 };
+      latestClient.onState(clientState, 'p1');
+    });
+    expect(screen.getByRole('button', { name: 'Close vote' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Close vote' }));
+    act(() => {
+      clientState.pendingClaim = null;
+      latestClient.onState(clientState, 'p1');
+    });
+    expect(screen.queryByRole('button', { name: 'Restore vote' })).not.toBeInTheDocument();
+  });
+
+  it('does not offer a quick theme override in the main tutorial', async () => {
     localStorage.setItem('bingo-tutorial-enabled', 'true');
     await hostTutorialView();
     await screen.findByRole('dialog');
-    while (!screen.queryByRole('heading', { name: 'Choose light or dark' })) {
+    while (!screen.queryByRole('heading', { name: 'Your host essentials' })) {
+      expect(screen.queryByRole('button', { name: 'Toggle light/dark mode' })).not.toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: 'Next', exact: true }));
     }
-    expect(document.querySelector('[data-tutorial="theme"]')).toBeInTheDocument();
-    const wasDark = document.body.classList.contains('dark');
-    fireEvent.click(screen.getByRole('button', { name: 'Toggle light/dark mode' }));
-    expect(document.body.classList.contains('dark')).toBe(!wasDark);
-    expect(localStorage.getItem('bingo-theme')).toBe(wasDark ? 'light' : 'dark');
+    expect(document.querySelector('.app-header [data-tutorial="theme"]')).not.toBeInTheDocument();
+    expect(document.body).toHaveClass('dark');
   });
 });

@@ -58,6 +58,19 @@ export const SHARED_TROPES = [
     ],
   ),
   sharedTrope(
+    'A groan-worthy pun',
+    'Someone makes a deliberately corny wordplay joke, signaled by the line or another character reacting to it as a pun. Players need not agree that the joke is bad.',
+    'During a power outage, someone says, "That was an enlightening experience," and their companion groans.',
+    [
+      ['comedy', ['general']],
+      ['action', ['general']],
+      ['family', ['general', 'family-comedy']],
+      ['animation', ['general']],
+      ['musical', ['musical-comedy']],
+      ['tv', ['general']],
+    ],
+  ),
+  sharedTrope(
     'A slur is used',
     'Spoken or written language clearly demeans someone because of their identity or group membership. General profanity does not count, and no player needs to repeat the wording.',
     'A character directs a discriminatory insult at another character.',
@@ -415,6 +428,16 @@ export const SHARED_TROPES = [
     [['horror', ['slasher']]],
   ),
   sharedTrope(
+    'A cry for help is ignored',
+    'Someone clearly asks or cries for help, and a person who hears or acknowledges the plea dismisses it or deliberately does not respond. Nobody being nearby or simply not hearing does not count.',
+    'Neighbors hear someone shouting for help but assume it is an argument and close their windows.',
+    [
+      ['horror', ['general', 'slasher', 'psychological']],
+      ['thriller', ['general', 'noir-crime']],
+      ['drama', ['general']],
+    ],
+  ),
+  sharedTrope(
     'Someone returns after being presumed dead',
     'A character believed dead or permanently gone unexpectedly comes back.',
     'The missing friend walks into the room just after the memorial.',
@@ -422,6 +445,59 @@ export const SHARED_TROPES = [
       ['action', ['general']],
       ['horror', ['general']],
       ['thriller', ['general']],
+    ],
+  ),
+  sharedTrope(
+    'Killer survives seemingly fatal harm',
+    'A killer remains active or returns after an attack is presented as likely to have killed them. A missed attack, minor injury, or escape from capture alone does not count; an established supernatural explanation is allowed.',
+    'After being apparently defeated, the killer gets back up and resumes pursuing the characters.',
+    [
+      ['horror', ['slasher', 'supernatural', 'zombie', 'creature']],
+      ['thriller', ['general']],
+      ['action', ['general']],
+      ['sci-fi', ['general']],
+    ],
+  ),
+  sharedTrope(
+    'Obvious plot armor',
+    'A character survives danger through conspicuously implausible protection or luck, without a credible explanation established by the story. Explained powers, protective equipment, or a narrow but plausible escape do not count.',
+    'An unprotected character walks away unharmed from an explosion that devastates everything immediately around them.',
+    [
+      ['action', ['general']],
+      ['adventure', ['general']],
+      ['thriller', ['general']],
+      ['sci-fi', ['general', 'space-opera']],
+      ['fantasy', ['epic-fantasy']],
+      ['horror', ['slasher']],
+      ['comedy', ['spoof-parody']],
+    ],
+    true,
+  ),
+  sharedTrope(
+    'Dies before finishing a revelation',
+    'A character dies while trying to share an important secret, warning, identity, or instruction, leaving the key information unfinished. Completing the revelation before dying does not count.',
+    'A witness begins, "The person behind it all is..." but dies before giving the name.',
+    [
+      ['thriller', ['general', 'mystery-whodunit', 'noir-crime']],
+      ['drama', ['general']],
+      ['horror', ['general']],
+      ['action', ['general', 'spy-espionage']],
+      ['sci-fi', ['general']],
+      ['fantasy', ['general', 'epic-fantasy']],
+    ],
+  ),
+  sharedTrope(
+    'Self-sacrifice saves others',
+    'Someone knowingly accepts death or an apparently fatal outcome to protect another person or group. Giving up status, money, or an opportunity does not count; a later rescue does not undo the choice.',
+    'Someone stays behind to hold a collapsing passage open while the others escape.',
+    [
+      ['action', ['general', 'disaster']],
+      ['adventure', ['general', 'survival']],
+      ['sci-fi', ['general', 'space-opera']],
+      ['fantasy', ['general', 'epic-fantasy']],
+      ['horror', ['general']],
+      ['war', ['combat', 'war-drama']],
+      ['drama', ['general']],
     ],
   ),
   sharedTrope(
@@ -545,3 +621,14 @@ export const SHARED_TROPE_ROWS = SHARED_TROPES.flatMap(({ text, memberships, opt
 export const SHARED_TROPE_DESCRIPTIONS = Object.fromEntries(
   SHARED_TROPES.map(({ text, what, example }) => [text, { what, example }]),
 );
+
+export const LEGACY_TROPE_DESCRIPTION_ALIASES = {
+  'Killer presumed dead': {
+    what: 'The threat is knocked out, stabbed or shot, and everyone treats it as over. It is not.',
+    example: 'They stand over the body catching their breath, and it is gone when they look back.',
+  },
+  'A sacrifice saves the realm': {
+    what: 'Someone gives their life to save everyone.',
+    example: 'One person stays behind to close the way.',
+  },
+};

@@ -23,7 +23,7 @@ import { EXPANDED_GENRES, EXPANDED_TROPES } from './expandedGenres.js';
 describe('GENRES / SUBGENRES_BY_GENRE data integrity', () => {
   it('keeps optional judgments and language tropes documented but out of automatic game and replacement draws', () => {
     const optional = TROPES.filter((trope) => trope.optional);
-    expect(optional).toHaveLength(10);
+    expect(optional).toHaveLength(11);
     const texts = new Set(optional.map((trope) => trope.text));
     for (const genre of GENRES) {
       for (const subgenre of SUBGENRES_BY_GENRE[genre.id]) {

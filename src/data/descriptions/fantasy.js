@@ -129,10 +129,6 @@ export default {
     what: 'The decisive confrontation with the great evil.',
     example: 'Everyone who is left, on one field.',
   },
-  'A sacrifice saves the realm': {
-    what: 'Someone gives their life to save everyone.',
-    example: 'One person stays behind to close the way.',
-  },
   'A blessing from a deity': {
     what: 'A god or higher power grants aid.',
     example: 'A light that arrives when it is needed.',

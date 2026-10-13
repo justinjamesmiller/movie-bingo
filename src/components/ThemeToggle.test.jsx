@@ -3,12 +3,14 @@ import { describe, expect, it, vi } from 'vitest';
 import ThemeToggle from './ThemeToggle.jsx';
 
 describe('ThemeToggle', () => {
-  it('shows the opposite-theme icon and calls onToggle', () => {
+  it('shows a manual light-mode checkbox and calls onToggle', () => {
     const onToggle = vi.fn();
-    render(<ThemeToggle theme="dark" onToggle={onToggle} />);
+    const view = render(<ThemeToggle theme="dark" onToggle={onToggle} />);
 
-    expect(screen.getByRole('button', { name: 'Toggle dark mode' })).toHaveTextContent('☀️');
-    fireEvent.click(screen.getByRole('button', { name: 'Toggle dark mode' }));
+    expect(screen.getByRole('checkbox', { name: 'Light mode' })).not.toBeChecked();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Light mode' }));
     expect(onToggle).toHaveBeenCalledTimes(1);
+    view.rerender(<ThemeToggle theme="light" onToggle={onToggle} />);
+    expect(screen.getByRole('checkbox', { name: 'Light mode' })).toBeChecked();
   });
 });

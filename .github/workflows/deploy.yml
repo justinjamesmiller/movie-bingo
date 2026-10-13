@@ -37,7 +37,11 @@ jobs:
           name: pages-browser-regression-results
           path: test-results/browser
           if-no-files-found: ignore
-      - run: npm run build
+      - name: Build Pages app with deployment metadata
+        run: |
+          export VITE_BUILD_DATE="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+          export VITE_BUILD_SHA="$GITHUB_SHA"
+          npm run build
         env:
           VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}

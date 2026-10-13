@@ -142,7 +142,6 @@ const RAW_TROPES = [
 
   // ---------- Slasher ----------
   t('Final girl moment', 'horror', ['slasher']),
-  t('Killer presumed dead', 'horror', ['slasher']),
   t('A call from inside', 'horror', ['slasher']),
   t('A close-up of a weapon', 'horror', ['slasher']),
   t('Killer wears a mask', 'horror', ['slasher']),
@@ -426,7 +425,6 @@ const RAW_TROPES = [
   t('An exaggerated double-take', 'comedy', ['general']),
   t('A prank goes too far', 'comedy', ['general']),
   t('Drunk confession at a party', 'comedy', ['general']),
-  t('A groan-worthy pun', 'comedy', ['general']),
   t('Awkward silence at dinner', 'comedy', ['general']),
   t('A slapstick fall down stairs', 'comedy', ['general']),
   t("Someone's pants fall down", 'comedy', ['general']),
@@ -997,7 +995,6 @@ const RAW_TROPES = [
   t('A magic ring or amulet', 'fantasy', ['general']),
   t("A wizard's tower", 'fantasy', ['general']),
   t('A final battle against darkness', 'fantasy', ['general']),
-  t('A sacrifice saves the realm', 'fantasy', ['general']),
   t('A blessing from a deity', 'fantasy', ['general']),
   t('A cursed kingdom is freed', 'fantasy', ['general']),
   t('A legendary weapon reforged', 'fantasy', ['general']),

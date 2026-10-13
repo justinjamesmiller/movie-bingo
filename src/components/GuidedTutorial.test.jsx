@@ -8,7 +8,6 @@ function props(overrides = {}) {
     started: false,
     soundMuted: true,
     onEnableSound: vi.fn(),
-    onToggleTheme: vi.fn(),
     onBrowse: vi.fn(),
     onWagers: vi.fn(),
     onMenu: vi.fn(),
@@ -57,10 +56,7 @@ describe('GuidedTutorial', () => {
     for (let index = 0; index < 4; index++) fireEvent.click(screen.getByRole('button', { name: 'Next' }));
     expect(screen.getByRole('heading', { name: 'Start when everyone is ready' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Next' }));
-    expect(screen.getByRole('heading', { name: 'Choose light or dark' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Toggle light/dark mode' }));
-    expect(callbacks.onToggleTheme).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    expect(screen.queryByRole('button', { name: 'Toggle light/dark mode' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Explore advanced options' }));
     expect(screen.getByRole('heading', { name: 'Optional host controls' })).toBeInTheDocument();
     expect(screen.getByText(/Only the original host can set or replace the recovery password/)).toBeInTheDocument();
@@ -70,7 +66,7 @@ describe('GuidedTutorial', () => {
 
   it('lists current menu groups in the optional advanced branch', () => {
     render(<GuidedTutorial {...props()} />);
-    for (let index = 0; index < 5; index++) fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    for (let index = 0; index < 4; index++) fireEvent.click(screen.getByRole('button', { name: 'Next' }));
     fireEvent.click(screen.getByRole('button', { name: 'Explore advanced options' }));
 
     expect(

@@ -68,6 +68,12 @@ export default function HelpModal({ onClose }) {
               majority; playing alone, submitting accepts the trope immediately.
             </li>
             <li>
+              Close vote or tap outside the voting window to navigate without voting or cancelling the proposal. Restore
+              vote returns to the same pending vote until its deadline or resolution. Closing does not pause the
+              deadline. Notifications also have a close button and dismiss when you tap outside; dismissed notifications
+              do not have a restore button.
+            </li>
+            <li>
               During play, open <strong>⋯ Advanced actions</strong>, then choose{' '}
               <strong>🔁 Propose swapping it out</strong>. Pick the replacement genre/sub-genre; the group votes on the
               proposal. Before play starts, the trope description offers the swap action directly.
@@ -129,7 +135,9 @@ export default function HelpModal({ onClose }) {
           <p className="hint">
             The menu begins in Simple Options mode. Open Advanced Options when you want access to tools such as all
             tropes, wager management, activity history, board swapping, and session lifetime. Those tools are grouped
-            into Explore &amp; Stats, My Tools, and Host Settings so only one group is open at a time.
+            into Explore &amp; Stats, My Tools, and Host Settings so only one group is open at a time. Dark mode starts
+            on every app load. Advanced Options → My Tools → Light mode overrides it for the current app session only;
+            saved preferences are ignored and reloading returns to dark mode.
           </p>
 
           <h4>🎯 Managing wagers mid-game</h4>

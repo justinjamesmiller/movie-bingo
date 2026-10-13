@@ -24,6 +24,30 @@ function pendingClaim(overrides = {}) {
 }
 
 describe('ClaimModal', () => {
+  it.each(['button', 'backdrop'])('dismisses from the %s without voting or cancelling', (target) => {
+    const onClose = vi.fn();
+    const onAgree = vi.fn();
+    const onDisagree = vi.fn();
+    const onCancel = vi.fn();
+    render(
+      <ClaimModal
+        pendingClaim={pendingClaim()}
+        myId="p2"
+        players={players}
+        onClose={onClose}
+        onAgree={onAgree}
+        onDisagree={onDisagree}
+        onCancel={onCancel}
+      />,
+    );
+    if (target === 'button') fireEvent.click(screen.getByRole('button', { name: 'Close vote' }));
+    else fireEvent.mouseDown(document.querySelector('.modal'));
+    expect(onClose).toHaveBeenCalledOnce();
+    expect(onAgree).not.toHaveBeenCalled();
+    expect(onDisagree).not.toHaveBeenCalled();
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+
   it.each(['p1', 'p2'])('hides queue controls behind advanced options for %s', (myId) => {
     const onBrowseQueue = vi.fn();
     const onShowQueue = vi.fn();

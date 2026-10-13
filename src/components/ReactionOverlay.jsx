@@ -4,7 +4,7 @@
 export default function ReactionOverlay({ reactions }) {
   if (!reactions.length) return null;
   return (
-    <div className="reaction-overlay">
+    <div className="reaction-overlay" inert>
       {reactions.map((r) => (
         <div key={r.id} className="reaction-bubble" style={{ left: `${r.offset}%` }}>
           <span className="reaction-emoji">{r.emoji}</span>

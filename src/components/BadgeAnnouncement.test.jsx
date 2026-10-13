@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import BadgeAnnouncement from './BadgeAnnouncement.jsx';
 
@@ -9,6 +9,57 @@ const achievements = [
 
 describe('BadgeAnnouncement', () => {
   afterEach(() => vi.useRealTimers());
+
+  it.each(['button', 'outside'])('dismisses the compact notification from the %s', (target) => {
+    const onDismiss = vi.fn();
+    render(<BadgeAnnouncement achievements={achievements} suspended={false} onDismiss={onDismiss} />);
+    if (target === 'button') fireEvent.click(screen.getByRole('button', { name: 'Close notification' }));
+    else fireEvent.pointerDown(document.body);
+    expect(onDismiss).toHaveBeenCalledOnce();
+  });
+
+  it('opens all awards from the compact preview and waits while the player reads', async () => {
+    vi.useFakeTimers();
+    const onDismiss = vi.fn();
+    render(
+      <BadgeAnnouncement
+        achievements={[
+          ...achievements,
+          { playerId: 'p1', name: 'Ashley', badgeName: 'Pattern Hunter', awardKind: 'badge' },
+          { playerId: 'p2', name: 'Bob', badgeName: 'Most Almost-Bingos', awardKind: 'superlative' },
+        ]}
+        suspended={false}
+        onDismiss={onDismiss}
+      />,
+    );
+
+    const preview = screen.getByRole('status', { name: 'New awards' });
+    expect(preview.querySelector('.badge-announcement-preview')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Show all new awards' }));
+    const dialog = screen.getByRole('dialog', { name: 'New badges and superlatives' });
+    expect(dialog).toHaveTextContent('Ashley, 🍿 Bob earned the badge Team Player');
+    expect(dialog).toHaveTextContent('Ashley earned the badge Pattern Hunter');
+    expect(dialog).toHaveTextContent('Bob now holds the superlative Most Almost-Bingos');
+    expect(screen.queryByRole('status', { name: 'New awards' })).not.toBeInTheDocument();
+    await act(() => vi.advanceTimersByTimeAsync(10_000));
+    expect(onDismiss).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(onDismiss).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('focuses the details dialog and dismisses it with Escape', () => {
+    const onDismiss = vi.fn();
+    render(<BadgeAnnouncement achievements={achievements} suspended={false} onDismiss={onDismiss} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Show all new awards' }));
+    const close = screen.getByRole('button', { name: 'Close' });
+    expect(close).toHaveFocus();
+    fireEvent.keyDown(close, { key: 'Tab', shiftKey: true });
+    expect(close).toHaveFocus();
+    fireEvent.keyDown(close, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(onDismiss).toHaveBeenCalledOnce();
+  });
 
   it('groups shared badges and expires after five visible seconds', async () => {
     vi.useFakeTimers();

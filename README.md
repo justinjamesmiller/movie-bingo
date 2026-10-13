@@ -18,6 +18,9 @@ and an Edge Function that authenticates and authorizes every state/action relay.
 - Before starting, each player can optionally enable **wagers** and pick up to 5 spaces they think are extra likely.
   Tapping a trope always shows its description; opting in also adds an action to add or remove that wager.
 - During the game, tapping a space shows the trope description, then lets the player claim that trope happened; other players vote to confirm.
+- Voting windows can be closed with Close vote or by tapping outside, without voting or cancelling the proposal.
+  Restore vote is available while that vote is still pending and before its deadline; hiding it does not pause time.
+  Ordinary toasts and award notifications can also be closed or dismissed by tapping outside, without a restore action.
   A majority is required to mark it — and it marks that same trope on every board that has it.
   Submitting counts as your approval. Solo submissions resolve immediately; with two players, the other player's
   approval completes the majority.
@@ -57,11 +60,14 @@ and an Edge Function that authenticates and authorizes every state/action relay.
   and replacement draws. Selecting a preset adds it through the existing custom pool and respects its 20-entry cap.
 - **Guided tutorial:** a spotlight overlay starts after hosting, joining, or reconnecting, adapting to host/player
   role and pre-game/live play. It covers browsing trope explanations, optional wagers, approval votes, sound
-  notifications, and the light/dark-mode toggle. Calls are covered in the optional advanced-tools branch.
+  notifications. Calls are covered in the optional advanced-tools branch.
   Its actions open real controls, and it yields to
   votes, modals, menus, and bingo/game-ending celebrations. Pause with the close control or Escape; skip disables
   automatic guidance on that device
   (`bingo-tutorial-enabled` in localStorage). Menu's Start tutorial re-enables it. Sound is only enabled explicitly.
+- **Appearance:** every fresh app load starts in dark mode, ignoring older saved preferences. There is no header
+  theme shortcut. Menu → Advanced Options → My Tools → Light mode overrides it only for the current app session;
+  reloading returns to dark mode.
 - **Reconnect:** use the Reconnect card in the tab that has the saved session to restore that player ID with its
   authenticated identity. The Join Game form always requests a new seat, even if another tab shares the same browser
   Auth identity; after play starts, the host must approve it. The home-page card appears only while the server confirms
@@ -121,7 +127,8 @@ and an Edge Function that authenticates and authorizes every state/action relay.
   evidence counts. Each player row and recap shows their latest currently-held badge and latest superlative; opening
   either shows the player's full current award list and badge progress. Newly earned badges and changed
   superlatives are announced to every connected viewer in grouped, queued notifications that wait behind menus,
-  modals, toasts, tutorials, and celebrations. Initial/reconnected snapshots are silent; repeated snapshots and
+  modals, toasts, tutorials, and celebrations. Award notifications show at most two lines; the `...` button opens
+  the complete list and pauses dismissal while it is open. Initial/reconnected snapshots are silent; repeated snapshots and
   previously earned badges do not replay announcements. Resetting a watch clears old notifications and starts fresh
   achievement tracking.
 - **Calls:** during a game, a trope's `Advanced actions` menu lets any player call one trope they expect next. A
@@ -340,9 +347,13 @@ workflow builds and publishes automatically whenever changes are pushed to `main
 
 ## Versions & official releases
 
-The home and game headers display the version from `package.json`. Release Please updates that file,
+Release versions remain in `package.json`, but are not shown in the app UI. Release Please updates that file,
 `package-lock.json`, `.release-please-manifest.json`, and `CHANGELOG.md` together in a reviewable release PR.
-Normal feature commits do not directly change the displayed version; merging the release PR does.
+Normal feature commits do not directly change the release version; merging the release PR does.
+GitHub Pages builds display only their UTC build date in the home and game headers, such as
+`Built Oct 13, 2026`. The label's tooltip includes the exact UTC timestamp and source commit.
+The Pages workflow injects this metadata at build time; it does not use the player's clock. Local builds and
+downloadable releases omit the label unless build metadata is explicitly supplied.
 The generated changelog is excluded from Prettier checks because Release Please owns its formatting; source,
 configuration, and handwritten documentation remain checked normally.
 
@@ -440,13 +451,18 @@ The displayed version and the downloadable release build both follow the committ
   hold a live copy. Ordinary player actions continue without a connected host. The server enforces vote deadlines;
   connected clients request settlement at the deadline and on periodic heartbeats. If everyone disconnects, due
   votes settle on the next authenticated request. Presence retains a short grace period for backgrounded phones.
+- In server gameplay mode, routine presence recovery uses heartbeats rather than publishing client snapshots,
+  avoiding unnecessary contention with votes and claims. A rejected snapshot is replaced by the committed state;
+  only its writer receives a retry notice, not uninvolved players. Conflicting snapshots are never blindly replayed.
 - Host permissions can be held by multiple players. Ordinary players do not become hosts when all designated hosts
   disconnect. A host who deliberately leaves while others remain can add a host before departing.
 - Ending a game clears its reconnect data. Deliberately leaving also clears that player's reconnect data, so a game
   cannot be restored after every player has chosen Leave Game.
-- Mobile browsers and installed web apps can suspend realtime connections when backgrounded. The app
-  attempts to reconnect and surfaces connection failures, but a live game still depends on Supabase
-  Realtime being reachable.
+- Mobile browsers and installed web apps can suspend realtime connections when backgrounded. On returning,
+  the app reloads authenticated server state and replaces the subscription, even if the old connection still
+  reports itself joined. Existing players can reconnect from server state without a connected host. Recovery
+  requests have a 20-second network timeout; temporary failures preserve the saved seat for another attempt.
+  A live game still depends on Supabase Realtime being reachable.
 - Multiplayer requires a Supabase project (see setup above). Optional movie lookup uses the OMDb proxy, and optional
   sub-genre suggestions query Wikidata.
 - Supabase quotas depend on the current plan and workload. Review Realtime connections/messages, database storage,

@@ -2433,6 +2433,87 @@ describe('GameClient connection stability', () => {
     expect(host.client.channel).toBe(channel);
   });
 
+  it('replaces a silently dead joined channel and restores state missed while backgrounded', async () => {
+    const { host, guest } = await twoPlayerGame();
+    const oldChannel = guest.client.channel;
+    oldChannel.simulateDrop();
+    oldChannel.state = 'joined';
+    host.client.changeName('Alice updated');
+    await flush();
+    expect(guest.state.players[host.myId].name).toBe('Alice');
+
+    await guest.client._checkConnection();
+    await flush();
+
+    expect(guest.client.channel).not.toBe(oldChannel);
+    expect(guest.state.players[host.myId].name).toBe('Alice updated');
+    host.client.changeName('Alice online');
+    await flush();
+    expect(guest.state.players[host.myId].name).toBe('Alice online');
+  });
+
+  it('uses server presence instead of publishing full snapshots for modern reconnect announcements', async () => {
+    const { host, guest } = await twoPlayerGame();
+    const requests = vi.spyOn(host.client.supabase.functions, 'invoke');
+    await host.client._announceSelf();
+    await flush();
+
+    expect(requests.mock.calls.some(([, options]) => options.body.operation === 'heartbeat')).toBe(true);
+    expect(requests.mock.calls.some(([, options]) => options.body.message?.t === 'state')).toBe(false);
+    const text = guest.state.players[guest.myId].board[0];
+    await guest.client.claim(0);
+    await flush();
+    await host.client.vote(host.state.pendingClaim.claimId, true);
+    await flush();
+    expect(host.state.acceptedTropes).toContain(text);
+    expect(guest.state.acceptedTropes).toContain(text);
+    expect(host.events).not.toContainEqual({ type: 'stateConflict' });
+    expect(guest.events).not.toContainEqual({ type: 'stateConflict' });
+  });
+
+  it('does not publish client presence snapshots when modern players disconnect or return', async () => {
+    const { host, guest } = await twoPlayerGame();
+    const requests = vi.spyOn(host.client.supabase.functions, 'invoke');
+    guest.client.channel.simulateDrop();
+    host.client._markDisconnected(guest.myId);
+    await flush();
+    host.client._notePeerAlive(guest.myId);
+    await flush();
+
+    expect(requests.mock.calls.some(([, options]) => options.body.message?.t === 'state')).toBe(false);
+    expect(host.events).not.toContainEqual({ type: 'stateConflict' });
+  });
+
+  it('coalesces overlapping foreground recovery attempts', async () => {
+    const { guest } = await twoPlayerGame();
+    const createChannel = vi.spyOn(guest.client.supabase, 'channel');
+    await Promise.all([
+      guest.client._checkConnection(),
+      guest.client._checkConnection(),
+      guest.client._checkConnection(),
+    ]);
+    expect(createChannel).toHaveBeenCalledOnce();
+  });
+
+  it('does not resubscribe when destroyed during foreground recovery', async () => {
+    const { guest } = await twoPlayerGame();
+    let releaseRequest;
+    const invoke = guest.client.supabase.functions.invoke.bind(guest.client.supabase.functions);
+    vi.spyOn(guest.client.supabase.functions, 'invoke').mockImplementationOnce(
+      (...args) =>
+        new Promise((resolve) => {
+          releaseRequest = () => resolve(invoke(...args));
+        }),
+    );
+    const createChannel = vi.spyOn(guest.client.supabase, 'channel');
+    const recovery = guest.client._checkConnection();
+    await flush();
+    guest.client.destroy();
+    releaseRequest();
+    await recovery;
+    expect(createChannel).not.toHaveBeenCalled();
+  });
+
   it('can pause automatic reconnect attempts and resume them on demand', async () => {
     const host = makeTrackedClient();
     host.client.state = { players: { [host.client.myId]: { id: host.client.myId } } };
@@ -2643,7 +2724,7 @@ describe('GameClient connection stability', () => {
     expect(stale).toBeNull();
     expect(observerMessages).toHaveBeenCalledWith(expect.objectContaining({ t: 'stateConflict' }));
     expect(guest.events.some((event) => event.type === 'stateConflict')).toBe(true);
-    expect(observer.events).toContainEqual({ type: 'stateConflict' });
+    expect(observer.events).not.toContainEqual({ type: 'stateConflict' });
     expect(host.state.players[host.myId].name).toBe('Winning host snapshot');
     expect(host.state.players[guest.myId].name).toBe('Bob');
     expect(guest.state).toEqual(host.state);
@@ -2932,6 +3013,61 @@ describe('GameClient session recovery', () => {
     expect(returning.events.some((e) => e.type === 'gameRestored')).toBe(true);
   });
 
+  it('restores a guest from server state without a connected host', async () => {
+    const host = makeTrackedClient();
+    const code = await host.client.hostGame('Alice', ['horror'], [], false, { horror: 50 }, 25);
+    const guest = makeTrackedClient();
+    await guest.client.joinGame(code, 'Bob');
+    await flush();
+    const guestId = guest.myId;
+    const board = [...guest.state.players[guestId].board];
+    host.client.destroy();
+    guest.client.destroy();
+
+    const returning = makeTrackedClient();
+    returning.setAuthUserId(guest.authUserId);
+    await expect(returning.client.rejoinGame()).resolves.toBeUndefined();
+
+    expect(returning.myId).toBe(guestId);
+    expect(returning.state.players[guestId].board).toEqual(board);
+    expect(returning.client.isHost()).toBe(false);
+  });
+
+  it('preserves the saved seat after a temporary relay failure and allows retry', async () => {
+    const host = makeTrackedClient();
+    await host.client.hostGame('Alice', ['horror'], [], false, { horror: 50 }, 25);
+    host.client.destroy();
+    const saved = GameClient.getSavedSession();
+    const returning = makeTrackedClient();
+    returning.setAuthUserId(host.authUserId);
+    vi.spyOn(returning.client.supabase.functions, 'invoke').mockResolvedValueOnce({
+      data: null,
+      error: new Error('Network unavailable.'),
+    });
+
+    await expect(returning.client.rejoinGame()).rejects.toThrow(/network unavailable/i);
+    expect(GameClient.getSavedSession()).toEqual(saved);
+    await expect(returning.client.rejoinGame()).resolves.toBeUndefined();
+    expect(returning.myId).toBe(saved.myId);
+  });
+
+  it.each([404, 410])('clears saved recovery only when the server confirms terminal status %s', async (httpStatus) => {
+    const host = makeTrackedClient();
+    await host.client.hostGame('Alice', ['horror'], [], false, { horror: 50 }, 25);
+    host.client.destroy();
+    const returning = makeTrackedClient();
+    returning.setAuthUserId(host.authUserId);
+    const error = new Error('Non-2xx response.');
+    error.context = { status: httpStatus };
+    vi.spyOn(returning.client.supabase.functions, 'invoke').mockResolvedValueOnce({ data: null, error });
+
+    await expect(returning.client.rejoinGame()).rejects.toThrow(
+      httpStatus === 410 ? /game has ended/i : /no game was found/i,
+    );
+    expect(GameClient.getSavedSession()).toBeNull();
+    returning.client.destroy();
+  });
+
   it('still reports the game as gone when there is no snapshot to revive', async () => {
     vi.useFakeTimers();
     const host = makeTrackedClient();
@@ -2943,10 +3079,10 @@ describe('GameClient session recovery', () => {
     const returning = makeTrackedClient();
     // Attach the rejection expectation before advancing timers so it's never
     // momentarily an unhandled rejection.
-    const assertion = expect(returning.client.rejoinGame()).rejects.toThrow(/may have ended/i);
+    const assertion = expect(returning.client.rejoinGame()).rejects.toThrow(/game not found/i);
     await vi.advanceTimersByTimeAsync(11000);
     await assertion;
-    expect(GameClient.getSavedSession()).toBeNull();
+    expect(GameClient.getSavedSession()).not.toBeNull();
   });
 
   it('lets a stale returning client be corrected by the live game instead of rolling it back', async () => {

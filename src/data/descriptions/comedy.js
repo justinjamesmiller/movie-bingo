@@ -85,10 +85,6 @@ export default {
     what: 'Someone reveals too much under the influence.',
     example: 'Announcing his true feelings over the music, twice.',
   },
-  'A groan-worthy pun': {
-    what: 'A deliberately terrible wordplay joke.',
-    example: 'A line so bad another character physically leaves.',
-  },
   'Awkward silence at dinner': {
     what: 'Conversation dies completely at a table.',
     example: 'Nothing but cutlery for a full fifteen seconds.',

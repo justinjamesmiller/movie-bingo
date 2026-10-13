@@ -438,6 +438,42 @@ try {
       await page.locator('.reaction-bar').waitFor({ state: 'visible' });
     }
   });
+  await feature('heart reactions stay click-through above menu and board controls', async () => {
+    const sender = pages[2];
+    for (const receiver of [host, pages[5]]) {
+      const coverTarget = async (target) => {
+        for (let index = 0; index < 12; index++) await sender.locator('.reaction-bar button').last().click();
+        await receiver.locator('.reaction-bubble').first().waitFor();
+        await target.scrollIntoViewIfNeeded();
+        const bounds = await target.boundingBox();
+        const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+        await receiver.locator('.reaction-bubble').evaluateAll((bubbles, point) => {
+          for (const bubble of bubbles) {
+            Object.assign(bubble.style, {
+              left: `${point.x}px`,
+              top: `${point.y}px`,
+              bottom: 'auto',
+              animation: 'none',
+              transform: 'translate(-50%, -50%)',
+            });
+          }
+        }, center);
+        assert(
+          await target.evaluate(
+            (element, point) => element.contains(document.elementFromPoint(point.x, point.y)),
+            center,
+          ),
+        );
+        await target.click();
+      };
+      await coverTarget(receiver.getByRole('button', { name: 'Menu', exact: true }));
+      await receiver.locator('.game-menu-panel').waitFor();
+      await receiver.locator('.game-menu-overlay').click({ position: { x: 1, y: 1 } });
+      await coverTarget(receiver.locator('.bingo-cell').first());
+      await receiver.getByRole('button', { name: /Submit to the group/ }).waitFor();
+      await closeModal(receiver);
+    }
+  });
   await feature('secondary menu tools are grouped under Advanced Options on desktop and mobile', async () => {
     for (const [page, label] of [
       [host, 'desktop'],
@@ -493,6 +529,18 @@ try {
     const text = await cell.innerText();
     await cell.click();
     await host.getByRole('button', { name: /Submit to the group/ }).click();
+    const originalVotes = (await state(host)).pendingClaim.votes;
+    await pages[5].getByRole('button', { name: 'Close vote' }).click();
+    await menu(pages[5], 'QR Code');
+    await closeModal(pages[5]);
+    assert.deepEqual((await state(host)).pendingClaim.votes, originalVotes);
+    await pages[5].getByRole('button', { name: 'Restore vote' }).click();
+    await pages[5].getByRole('button', { name: /Agree, it happened/ }).waitFor();
+    assert(await pages[5].evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    report.checks.push({
+      name: 'pending vote can be hidden for invite QR and restored without casting a vote',
+      outcome: 'PASS',
+    });
     await Promise.all(
       pages.slice(1, 5).map((page) => page.getByRole('button', { name: /Agree, it happened/ }).click()),
     );
@@ -633,7 +681,10 @@ try {
     for (let index = 0; index < (await boxes.count()); index++) await boxes.nth(index).check();
     await closeModal(pages[4]);
     assert(await pages[4].evaluate(() => document.documentElement.scrollWidth <= innerWidth));
-    await pages[4].getByRole('button', { name: /Toggle .* mode/ }).click();
+    await pages[4].getByRole('button', { name: 'Menu', exact: true }).click();
+    await pages[4].getByRole('checkbox', { name: 'Light mode' }).check();
+    assert(await pages[4].evaluate(() => !document.body.classList.contains('dark')));
+    await pages[4].locator('.game-menu-overlay').click({ position: { x: 1, y: 1 } });
     await pages[4].getByRole('button', { name: /Unmute sound/ }).click();
     await pages[4].getByRole('button', { name: /Mute sound/ }).click();
     await menu(pages[4], /Start tutorial/);

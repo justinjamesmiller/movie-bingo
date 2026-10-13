@@ -12,6 +12,7 @@ describe('ReactionOverlay', () => {
     render(<ReactionOverlay reactions={[{ id: '1', emoji: '👏', name: 'Alice', offset: 42 }]} />);
     expect(screen.getByText('👏')).toBeInTheDocument();
     expect(screen.getByText('Alice')).toBeInTheDocument();
+    expect(document.querySelector('.reaction-overlay')).toHaveAttribute('inert');
     expect(document.querySelector('.reaction-bubble')).toHaveStyle({ left: '42%' });
   });
 });

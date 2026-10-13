@@ -33,6 +33,7 @@ const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I
 const CLAIM_TIMEOUT_MS = 20000;
 const CONNECT_TIMEOUT_MS = 10000;
 const JOIN_TIMEOUT_MS = 10000;
+const RECOVERY_REQUEST_TIMEOUT_MS = 20000;
 // A phone that backgrounds for a moment (answering a text, locking the screen)
 // drops its websocket almost immediately, so presence "leave" alone is far too
 // trigger-happy to treat as someone having actually left the game.
@@ -392,12 +393,14 @@ export class GameClient {
     return user.id;
   }
 
-  async _relayRequest(operation, values = {}) {
+  async _relayRequest(operation, values = {}, options = {}) {
     const { data, error } = await this.supabase.functions.invoke('game-relay', {
       body: { operation, ...values },
+      ...options,
     });
     if (error) {
       const failure = new Error(error.message || 'Could not reach the secure game relay.');
+      failure.status = error.context?.status;
       failure.retryable = !error.context?.status || error.context.status >= 500;
       throw failure;
     }
@@ -414,16 +417,24 @@ export class GameClient {
     }
     if (this._hostHeartbeatTimer) return;
     this._hostHeartbeatTimer = setInterval(() => {
-      this._relayRequest('heartbeat', { code: this.code, playerId: this.myId })
-        .then((result) => {
-          if (isValidReplicatedState(result?.state) && result.state.serverRevision > this.state.serverRevision) {
-            this.state = result.state;
-            this._emitState();
-          }
-        })
-        .catch(() => {});
+      this._heartbeat().catch(() => {});
     }, HOST_HEARTBEAT_INTERVAL_MS);
     this._hostHeartbeatTimer.unref?.();
+  }
+
+  async _heartbeat() {
+    const code = this.code;
+    const result = await this._relayRequest('heartbeat', { code, playerId: this.myId });
+    if (
+      !this._destroyed &&
+      this.code === code &&
+      isValidReplicatedState(result?.state) &&
+      result.state.serverRevision > this.state?.serverRevision
+    ) {
+      this.state = result.state;
+      this._emitState();
+    }
+    return result;
   }
 
   // Returning to the tab or regaining network are the two moments when a
@@ -439,6 +450,7 @@ export class GameClient {
     document.addEventListener('visibilitychange', this._onWake);
     window.addEventListener('online', this._onWake);
     window.addEventListener('focus', this._onWake);
+    window.addEventListener('pageshow', this._onWake);
   }
 
   _removeLifecycleListeners() {
@@ -446,6 +458,7 @@ export class GameClient {
     document.removeEventListener('visibilitychange', this._onWake);
     window.removeEventListener('online', this._onWake);
     window.removeEventListener('focus', this._onWake);
+    window.removeEventListener('pageshow', this._onWake);
     this._onWake = null;
   }
 
@@ -795,27 +808,34 @@ export class GameClient {
     await this._ensureAuthenticated();
     let membership;
     try {
-      membership = await this._relayRequest('join', { code: saved.code, requestedPlayerId: saved.myId });
-    } catch {
-      GameClient.clearSavedSession();
-      throw new Error('No response from that game. It may have ended.');
+      membership = await this._relayRequest(
+        'join',
+        { code: saved.code, requestedPlayerId: saved.myId },
+        { timeout: RECOVERY_REQUEST_TIMEOUT_MS },
+      );
+    } catch (error) {
+      if (error.status === 404 || error.status === 410) {
+        GameClient.clearSavedSession();
+        throw new Error(error.status === 410 ? 'That game has ended.' : 'No game was found with that code.');
+      }
+      throw error;
     }
     if (membership.playerId !== saved.myId) throw new Error('This browser is not authorized to reclaim that seat.');
     this.myId = saved.myId;
     this.code = saved.code;
-    if (membership.isHost && isValidReplicatedState(membership.state)) {
+    if (membership.status === 'active' && isValidReplicatedState(membership.state)) {
       this.state = membership.state;
       const me = this.state.players[this.myId];
+      if (!me) throw new Error('That player seat is no longer available.');
       const noOtherConnectedPlayers = Object.values(this.state.players).every(
         (player) => player.id === this.myId || !player.connected,
       );
       me.connected = true;
-      if (saved.name) me.name = saved.name;
       await this._connectChannel(saved.code);
       this._saveSession(saved.code, me.name);
       this._emitState();
-      await this._send({ t: 'state', state: this.state });
-      if (noOtherConnectedPlayers) this.onEvent({ type: 'gameRestored' });
+      this._announceSelf();
+      if (membership.isHost && noOtherConnectedPlayers) this.onEvent({ type: 'gameRestored' });
       return;
     }
     return new Promise((resolve, reject) => {
@@ -823,8 +843,7 @@ export class GameClient {
         .then(() => {
           const timeout = setTimeout(() => {
             this._pendingJoin = null;
-            GameClient.clearSavedSession();
-            reject(new Error('No response from that game. It may have ended.'));
+            reject(new Error('Could not reconnect to the game. Your saved seat is preserved; please try again.'));
           }, JOIN_TIMEOUT_MS);
 
           this._pendingJoin = {
@@ -837,7 +856,6 @@ export class GameClient {
             reject: (err) => {
               clearTimeout(timeout);
               this._pendingJoin = null;
-              GameClient.clearSavedSession();
               reject(err);
             },
           };
@@ -1171,22 +1189,53 @@ export class GameClient {
     }, delay);
   }
 
-  async _reconnect() {
+  _reconnect() {
     if (this._destroyed || this._reconnectPaused || !this.state || !this.code) return;
+    if (this._reconnectPromise) return this._reconnectPromise;
+    this._reconnectPromise = this._performReconnect().finally(() => {
+      this._reconnectPromise = null;
+    });
+    return this._reconnectPromise;
+  }
+
+  async _performReconnect() {
     const oldChannel = this.channel;
+    const code = this.code;
+    let membership;
     try {
-      await this._connectChannel(this.code);
+      await this._ensureAuthenticated();
+      membership = await this._relayRequest(
+        'join',
+        { code, requestedPlayerId: this.myId },
+        { timeout: RECOVERY_REQUEST_TIMEOUT_MS },
+      );
+      if (this._destroyed || this._reconnectPaused || this.code !== code) return;
+      if (
+        membership.playerId !== this.myId ||
+        membership.status !== 'active' ||
+        !isValidReplicatedState(membership.state) ||
+        !membership.state.players[this.myId]
+      ) {
+        throw new Error('Could not restore your authenticated player seat.');
+      }
+      await this._connectChannel(code);
     } catch {
       // Drop the failed attempt and fall back to the previous channel, which
       // realtime-js may still rejoin on its own -- otherwise both end up
       // subscribed to the same topic and every broadcast arrives twice.
       if (this.channel && this.channel !== oldChannel) this.supabase.removeChannel(this.channel);
-      this.channel = oldChannel;
-      if (!this._reconnectPaused) this._scheduleReconnect();
+      if (!this._destroyed) {
+        this.channel = oldChannel;
+        this.onEvent({ type: 'connectionStatus', status: 'disconnected' });
+        if (!this._reconnectPaused) this._scheduleReconnect();
+      }
       return;
     }
-    if (this._reconnectPaused) return;
+    if (this._destroyed || this._reconnectPaused || this.code !== code) return;
     if (oldChannel && oldChannel !== this.channel) this.supabase.removeChannel(oldChannel);
+    if (membership.state.serverRevision >= this.state.serverRevision) this.state = membership.state;
+    this.state.players[this.myId].connected = true;
+    this._emitState();
     this._announceSelf();
     this._flushQueuedActions();
   }
@@ -1194,16 +1243,10 @@ export class GameClient {
   // Checks the subscription is genuinely still live and repairs it if not.
   _checkConnection() {
     if (this._destroyed || this._reconnectPaused || !this.state || !this.code) return;
-    if (this.channel?.state === 'joined') {
-      this.channel.track({ id: this.myId });
-      this._announceSelf();
-      this._flushQueuedActions();
-      return;
-    }
     clearTimeout(this._reconnectTimer);
     this._reconnectTimer = null;
     this._reconnectAttempts = 0;
-    this._reconnect();
+    return this._reconnect();
   }
 
   // Tells the rest of the table we're here, so a stale disconnected flag on our
@@ -1211,6 +1254,7 @@ export class GameClient {
   _announceSelf() {
     const me = this.state?.players?.[this.myId];
     if (!me) return;
+    if (this._serverGameplayEnabled) return this._heartbeat().catch(() => {});
     if (me.connected && this._currentHostId() === this.myId) {
       this._send({ t: 'state', state: this.state });
       return;
@@ -1505,7 +1549,8 @@ export class GameClient {
     if (!player || player.connected) return;
     player.connected = true;
     this._emitState();
-    if (this._currentHostId() === this.myId) this._send({ t: 'state', state: this.state });
+    if (!this._serverGameplayEnabled && this._currentHostId() === this.myId)
+      this._send({ t: 'state', state: this.state });
   }
 
   _markDisconnected(peerId) {
@@ -1522,7 +1567,7 @@ export class GameClient {
       this.onEvent({ type: 'promotedToHost' });
     }
     this._emitState();
-    if (nowHost === this.myId) this._send({ t: 'state', state: this.state });
+    if (!this._serverGameplayEnabled && nowHost === this.myId) this._send({ t: 'state', state: this.state });
   }
 
   // Decides whether an incoming full-state broadcast should replace ours. A
@@ -1542,6 +1587,7 @@ export class GameClient {
     ) {
       return incomingServerRevision > currentServerRevision;
     }
+    if (this._serverGameplayEnabled && Number.isSafeInteger(incomingServerRevision)) return true;
     const incomingRev = data.state?.rev || 0;
     const myRev = this.state.rev || 0;
     if (data.sender === this.myId && incomingRev <= myRev) return false;
@@ -1566,6 +1612,10 @@ export class GameClient {
     if (!me || me.connected) return;
     me.connected = true;
     this._emitState();
+    if (this._serverGameplayEnabled) {
+      this._announceSelf();
+      return;
+    }
     if (this._authorityId(this.myId)) {
       this._send({ t: 'rejoin', from: this.myId, name: me.name });
     } else if (this.isHost()) {
@@ -1699,7 +1749,6 @@ export class GameClient {
           this._emitState();
           this._ensureSeatConnected();
         }
-        this.onEvent({ type: 'stateConflict' });
         break;
       }
       case 'resolved':

@@ -71,14 +71,6 @@ function tutorialSteps(isHost, started) {
               ]),
         ]),
     {
-      id: 'theme',
-      target: 'theme',
-      title: 'Choose light or dark',
-      body: "The sun or moon button switches between light and dark mode. Your choice stays on this device and does not change anyone else's view.",
-      action: 'theme',
-      label: 'Toggle light/dark mode',
-    },
-    {
       id: 'menu',
       target: 'menu',
       title: isHost ? 'Your host essentials' : 'Keep useful tools close',
@@ -97,7 +89,6 @@ function TutorialFlow({
   soundMuted,
   suspended = false,
   onEnableSound,
-  onToggleTheme,
   onBrowse,
   onWagers,
   onMenu,
@@ -121,8 +112,8 @@ function TutorialFlow({
       target: 'menu',
       title: isHost ? 'Optional host controls' : 'Make the game your own',
       body: isHost
-        ? 'Open Menu → Advanced Options → Host Settings for session controls. Only the original host can set or replace the recovery password. For a lost player session, open the receiving player\'s options → Recover player from. Choose Immediate, 10 seconds, 30 seconds, or 5 minutes. Timed recovery shows a countdown to you and the old player, who can stop it with "I\'m still playing". You can cancel too. Reset Game starts a new watch.'
-        : 'Advanced Options groups tools into Explore & Stats and My Tools. Explore & Stats includes the trope pool, accepted tropes, claim queue, game stats, and marathon history. My Tools includes Accessibility, wager management, custom tropes, board swapping, and Board Focus. Proposals still go to the group for approval.',
+        ? 'Open Menu → Advanced Options → Host Settings for session controls. Only the original host can set or replace the recovery password. For a lost player session, open the receiving player\'s options → Recover player from. Choose Immediate, 10 seconds, 30 seconds, or 5 minutes. Timed recovery shows a countdown to you and the old player, who can stop it with "I\'m still playing". You can cancel too. Reset Game starts a new watch. Dark mode starts on every app load. My Tools → Light mode is a manual override for the current session only.'
+        : 'Advanced Options groups tools into Explore & Stats and My Tools. Explore & Stats includes the trope pool, accepted tropes, claim queue, game stats, and marathon history. My Tools includes Accessibility, wager management, custom tropes, board swapping, and Board Focus. Proposals still go to the group for approval. Dark mode starts on every app load. My Tools → Light mode is a manual override for the current session only.',
       action: 'advanced',
       label: 'Open advanced tools',
     });
@@ -214,7 +205,6 @@ function TutorialFlow({
   if (blocked || suspended) return null;
   const actions = {
     sound: onEnableSound,
-    theme: onToggleTheme,
     browse: onBrowse,
     wagers: onWagers,
     menu: onMenu,

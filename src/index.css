@@ -1910,6 +1910,22 @@ body.reduce-motion .bingo-cell.call-hit-flash::before {
   text-align: center;
 }
 
+.notification-close,
+.claim-dismiss {
+  float: right;
+  margin: 0 0 0.5rem 0.75rem;
+}
+
+.notification-close {
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+}
+
+.vote-restore {
+  margin-bottom: 0.75rem;
+}
+
 .submission-status {
   position: fixed;
   left: 50%;
@@ -1944,9 +1960,11 @@ body.reduce-motion .bingo-cell.call-hit-flash::before {
   transform: translateX(-50%);
   z-index: 30;
   width: min(32rem, calc(100% - 2rem));
-  max-height: 35vh;
-  overflow-y: auto;
-  padding: 0.75rem 1rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) repeat(2, 2.5rem);
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
   background: var(--surface);
   color: var(--text);
   border: 1px solid var(--wagered);
@@ -1955,8 +1973,30 @@ body.reduce-motion .bingo-cell.call-hit-flash::before {
   overflow-wrap: anywhere;
 }
 
-.badge-announcement p {
-  margin: 0.4rem 0 0;
+.badge-announcement-preview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  line-height: 1.4;
+  max-height: 2.8em;
+}
+
+.badge-announcement-preview .badge-announcement-entry + .badge-announcement-entry::before {
+  content: '; ';
+}
+
+.badge-announcement-more {
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+}
+
+.badge-announcement-details .badge-announcement-entry {
+  display: block;
+  margin: 0.75rem 0;
+  overflow-wrap: anywhere;
 }
 .badge-progress h4 {
   margin: 1rem 0 0.5rem;

@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { version as appVersion } from '../package.json';
 import { GameClient } from './net/relay.js';
 import { GENRES, SUBGENRES_BY_GENRE, CENTER_INDEX } from './data/tropes.js';
 import { getCompletedLines, getCompletedLineCells } from './utils/bingoLines.js';
@@ -15,8 +14,8 @@ import {
 } from './utils/sound.js';
 import { vibrate, VIBRATE_PATTERN_MARK, VIBRATE_PATTERN_BINGO, VIBRATE_PATTERN_VOTE_NEEDED } from './utils/haptics.js';
 import { clearTabAlert, setTabAlert } from './utils/tabAlert.js';
+import { blurActiveTextField } from './utils/focus.js';
 import { loadTropeDescriptions } from './data/tropeDescriptions.js';
-import ThemeToggle from './components/ThemeToggle.jsx';
 import Landing from './components/Landing.jsx';
 import PlayersPanel from './components/PlayersPanel.jsx';
 import BingoBoard from './components/BingoBoard.jsx';
@@ -79,22 +78,6 @@ const CONNECTION_LOST_GRACE_MS = 4000;
 const TUTORIAL_PREFERENCE_KEY = 'bingo-tutorial-enabled';
 const ACCESSIBILITY_KEY = 'bingo-accessibility';
 
-function initialTheme() {
-  try {
-    const saved = localStorage.getItem('bingo-theme');
-    if (saved === 'dark' || saved === 'light') return saved;
-  } catch {
-    // Theme preference is optional; blocked storage should not prevent startup.
-  }
-  try {
-    return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-color-scheme: dark)').matches
-      ? 'dark'
-      : 'light';
-  } catch {
-    return 'light';
-  }
-}
-
 function initialAccessibility() {
   let saved = {};
   try {
@@ -115,15 +98,28 @@ function initialTutorialPreference() {
   }
 }
 
+function VersionLabel() {
+  const buildDate = new Date(import.meta.env.VITE_BUILD_DATE || '');
+  if (!Number.isFinite(buildDate.getTime())) return null;
+  const dateLabel = new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(buildDate);
+  const commit = import.meta.env.VITE_BUILD_SHA;
+  const details = `Built ${buildDate.toISOString()} (UTC)${commit ? ` | Commit ${commit}` : ''}`;
+  return (
+    <span className="app-version" title={details}>
+      {`Built ${dateLabel}`}
+    </span>
+  );
+}
+
 function formatNameList(names) {
   if (names.length <= 1) return names[0] || '';
   if (names.length === 2) return `${names[0]} and ${names[1]}`;
   return `${names.slice(0, -1).join(', ')}, and ${names[names.length - 1]}`;
-}
-
-function blurActiveTextField() {
-  const activeElement = document.activeElement;
-  if (activeElement?.tagName === 'INPUT' || activeElement?.tagName === 'TEXTAREA') activeElement.blur();
 }
 
 function formatApprovedBy(approvedBy) {
@@ -145,6 +141,8 @@ function App() {
   const [gameState, setGameState] = useState(null);
   const [myId, setMyId] = useState(null);
   const [toast, setToast] = useState('');
+  const [dismissedClaimId, setDismissedClaimId] = useState(null);
+  const [expiredClaimId, setExpiredClaimId] = useState(null);
   const [pendingSubmissions, setPendingSubmissions] = useState(0);
   const [resetModalOpen, setResetModalOpen] = useState(false);
   const [tropesModalOpen, setTropesModalOpen] = useState(false);
@@ -215,7 +213,7 @@ function App() {
   const bingoBannerTimeoutRef = useRef(null);
   const bingoBannerIdRef = useRef(0);
   const finaleBannerTimeoutRef = useRef(null);
-  const [theme, setTheme] = useState(initialTheme);
+  const [theme, setTheme] = useState('dark');
 
   function dispatchWithPendingStatus(send) {
     setPendingSubmissions((count) => count + 1);
@@ -229,11 +227,6 @@ function App() {
 
   useEffect(() => {
     document.body.classList.toggle('dark', theme === 'dark');
-    try {
-      localStorage.setItem('bingo-theme', theme);
-    } catch {
-      // Theme preference is optional; blocked storage should not break toggling.
-    }
   }, [theme]);
 
   useEffect(() => {
@@ -368,18 +361,41 @@ function App() {
     setHighlightedCells(getCompletedLineCells(me.marked));
   }, [gameState, myId]);
 
-  // Alerts a player, on their device, that the group is waiting on their vote.
+  useEffect(() => {
+    if (!toast) return;
+    const dismissOutside = (event) => {
+      if (!event.target.closest?.('.toast')) setToast('');
+    };
+    document.addEventListener('pointerdown', dismissOutside);
+    return () => document.removeEventListener('pointerdown', dismissOutside);
+  }, [toast]);
+
+  useEffect(() => {
+    const pending = gameState?.pendingClaim;
+    if (!pending || !Number.isFinite(pending.expiresAt)) return;
+    const remaining = pending.expiresAt - Date.now();
+    if (remaining <= 0) {
+      setExpiredClaimId(pending.claimId);
+      return;
+    }
+    const timer = setTimeout(() => setExpiredClaimId(pending.claimId), remaining);
+    return () => clearTimeout(timer);
+  }, [gameState?.pendingClaim?.claimId, gameState?.pendingClaim?.expiresAt]);
+
   useEffect(() => {
     const pending = gameState?.pendingClaim || null;
     const claimId = pending?.claimId || null;
     const needsMyVote =
-      !!pending && pending.byId !== myId && !Object.prototype.hasOwnProperty.call(pending.votes, myId);
+      !!pending &&
+      pending.claimId !== expiredClaimId &&
+      pending.byId !== myId &&
+      !Object.prototype.hasOwnProperty.call(pending.votes, myId);
     if (claimId && claimId !== prevClaimIdRef.current && needsMyVote) {
       playNewClaimSound();
       vibrate(VIBRATE_PATTERN_VOTE_NEEDED);
     }
     prevClaimIdRef.current = claimId;
-  }, [gameState?.pendingClaim?.claimId, myId]);
+  }, [gameState?.pendingClaim?.claimId, myId, expiredClaimId]);
 
   // Same alert for the host, who is the one deciding on a mid-game join.
   useEffect(() => {
@@ -398,13 +414,16 @@ function App() {
     const state = gameState;
     const pending = state?.pendingClaim || null;
     const needsMyVote =
-      !!pending && pending.byId !== myId && !Object.prototype.hasOwnProperty.call(pending.votes, myId);
+      !!pending &&
+      pending.claimId !== expiredClaimId &&
+      pending.byId !== myId &&
+      !Object.prototype.hasOwnProperty.call(pending.votes, myId);
     const amHost = !!state && state.seatOrder.find((id) => state.players[id]?.connected) === myId;
     const needsMyApproval = amHost && !!state?.pendingJoinRequest;
     if (needsMyVote || needsMyApproval) setTabAlert('🔔 Your answer is needed!');
     else clearTabAlert();
     return clearTabAlert;
-  }, [gameState, myId]);
+  }, [gameState, myId, expiredClaimId]);
 
   // Fetch the explanations in the background once a game exists, so tapping a
   // space doesn't wait on a network round trip.
@@ -639,7 +658,7 @@ function App() {
         } else if (evt.type === 'proposalRejected') {
           showToast(evt.message);
         } else if (evt.type === 'stateConflict') {
-          showToast('Another host saved newer game state. Your change was not saved; please retry.');
+          showToast('A newer game update was saved first. Your change was not saved; please retry.');
         } else if (evt.type === 'relayError') {
           showToast(evt.message || 'The secure game relay rejected an update.');
         } else if (evt.type === 'reaction') {
@@ -745,6 +764,7 @@ function App() {
     movie,
     hostRecoveryPassword,
   ) {
+    blurActiveTextField();
     const requestId = ++loadingRequestRef.current;
     setError('');
     setWageringEnabled(false);
@@ -789,6 +809,7 @@ function App() {
       setError('Enter the 4-character game code.');
       return;
     }
+    blurActiveTextField();
     const requestId = ++loadingRequestRef.current;
     setLoadingMessage('Joining game...');
     setBusy(true);
@@ -1261,7 +1282,7 @@ function App() {
         <header className="app-header">
           <div className="app-brand">
             <h1>🎬 Movie/TV Trope Bingo</h1>
-            <span className="app-version">v{appVersion}</span>
+            <VersionLabel />
           </div>
           <div className="header-actions">
             <button
@@ -1276,7 +1297,6 @@ function App() {
             <button className="icon-btn" onClick={() => setHelpModalOpen(true)} aria-label="Help" title="Help">
               ❓
             </button>
-            <ThemeToggle theme={theme} onToggle={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
           </div>
         </header>
         <main id="app">
@@ -1371,7 +1391,7 @@ function App() {
         <header className="app-header">
           <div className="app-brand">
             <h1>🎬 Movie/TV Trope Bingo</h1>
-            <span className="app-version">v{appVersion}</span>
+            <VersionLabel />
           </div>
           <div className="header-actions">
             <button
@@ -1386,7 +1406,6 @@ function App() {
             <button className="icon-btn" onClick={() => setHelpModalOpen(true)} aria-label="Help" title="Help">
               ❓
             </button>
-            <ThemeToggle theme={theme} onToggle={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
           </div>
         </header>
       )}
@@ -1395,6 +1414,13 @@ function App() {
       <ReactionOverlay reactions={reactions} />
       <main id="app" className={focusMode ? 'focus-mode' : ''}>
         <section className="screen-game">
+          {gameState.pendingClaim?.claimId === dismissedClaimId &&
+            gameState.pendingClaim.claimId !== expiredClaimId &&
+            !gameState.gameOver && (
+              <button className="btn primary vote-restore" onClick={() => setDismissedClaimId(null)}>
+                Restore vote
+              </button>
+            )}
           {focusMode ? (
             <button className="btn focus-toggle-btn" onClick={() => setFocusMode(false)}>
               ✕ Unfocus
@@ -1467,6 +1493,8 @@ function App() {
                 queueCount={gameState.claimQueue?.length || 0}
                 onShowClaimQueue={() => setClaimQueueOpen(true)}
                 onAccessibility={() => setAccessibilityOpen(true)}
+                theme={theme}
+                onToggleTheme={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))}
                 tutorialActive={tutorialActive}
                 onStartTutorial={startTutorial}
                 onPauseTutorial={pauseTutorial}
@@ -1541,12 +1569,19 @@ function App() {
       </main>
 
       <ClaimModal
-        pendingClaim={gameState.pendingClaim}
+        pendingClaim={
+          gameState.pendingClaim?.claimId !== dismissedClaimId &&
+          gameState.pendingClaim?.claimId !== expiredClaimId &&
+          !gameState.gameOver
+            ? gameState.pendingClaim
+            : null
+        }
         myId={myId}
         players={players}
         onAgree={() => clientRef.current.vote(gameState.pendingClaim.claimId, true)}
         onDisagree={(rationale) => clientRef.current.vote(gameState.pendingClaim.claimId, false, rationale)}
         onCancel={() => clientRef.current.cancelClaim(gameState.pendingClaim.claimId)}
+        onClose={() => setDismissedClaimId(gameState.pendingClaim.claimId)}
         onBrowseQueue={() => setAllTropesModalOpen(true)}
         onShowQueue={() => setClaimQueueOpen(true)}
       />
@@ -1965,7 +2000,6 @@ function App() {
             setSoundMuted(false);
             setSoundMutedState(false);
           }}
-          onToggleTheme={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))}
           onBrowse={() => {
             const index = me.board.findIndex(
               (text, position) => !me.marked.includes(position) && !(gameState.freeSpace && position === CENTER_INDEX),
@@ -2002,7 +2036,14 @@ function App() {
           />
         )}
 
-      {toast && <div className="toast">{toast}</div>}
+      {toast && (
+        <div className="toast" role="status">
+          <button className="btn notification-close" aria-label="Close notification" onClick={() => setToast('')}>
+            X
+          </button>
+          {toast}
+        </div>
+      )}
       {pendingSubmissions > 0 && (
         <div className="submission-status" role="status" aria-live="polite">
           <span className="loading-spinner" aria-hidden="true" />

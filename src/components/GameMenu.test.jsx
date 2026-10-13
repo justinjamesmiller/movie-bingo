@@ -43,6 +43,18 @@ function renderMenu(overrides = {}) {
 }
 
 describe('GameMenu', () => {
+  it('keeps the light-mode override inside advanced personal tools', () => {
+    const onToggleTheme = vi.fn();
+    const props = renderMenu({ theme: 'dark', onToggleTheme });
+    expect(screen.queryByRole('checkbox', { name: 'Light mode' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'My Tools' }));
+    const toggle = screen.getByRole('checkbox', { name: 'Light mode' });
+    expect(toggle).not.toBeChecked();
+    fireEvent.click(toggle);
+    expect(onToggleTheme).toHaveBeenCalledOnce();
+    expect(props.onClose).not.toHaveBeenCalled();
+  });
+
   it('keeps secondary tools and accepted tropes out of simple options', () => {
     renderMenu({ advancedGameplay: false, onAccessibility: vi.fn(), onShowClaimQueue: vi.fn(), queueCount: 3 });
     expect(screen.queryByRole('button', { name: 'Badge Progress' })).toBeNull();

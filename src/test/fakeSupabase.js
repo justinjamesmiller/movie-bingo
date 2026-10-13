@@ -330,7 +330,10 @@ export function createClient() {
           member.lastSeenAt = Date.now();
           const room = rooms.get(code);
           if (room && member.isHost) room.hostSeenAt = Date.now();
+          const presenceChanged = serverGameplayEnabled && room?.state.players[playerId]?.connected === false;
+          if (presenceChanged) room.state.players[playerId].connected = true;
           if (
+            presenceChanged ||
             room?.state.pendingClaim?.expiresAt <= Date.now() ||
             room?.state.pendingBoardRecovery?.expiresAt <= Date.now()
           ) {
@@ -346,7 +349,10 @@ export function createClient() {
             deliver(`bingo-${code}`, { t: 'state', state: room.state, sender: 'pserver' }, null);
             for (const message of result.messages) deliver(`bingo-${code}`, { ...message, sender: 'pserver' }, null);
           }
-          return { data: { ok: true }, error: null };
+          return {
+            data: { ok: true, state: structuredClone(room?.state), revision: room?.revision, code },
+            error: null,
+          };
         }
         if (operation === 'leave') {
           const member = findMember(code, userId, playerId);

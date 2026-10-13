@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import ThemeToggle from './ThemeToggle.jsx';
 
 // Hamburger menu rolling up the secondary in-game buttons + game info chips,
 // so the topbar stays uncluttered (especially on mobile).
@@ -43,6 +44,8 @@ export default function GameMenu({
   queueCount = 0,
   onShowClaimQueue,
   onAccessibility,
+  theme = 'dark',
+  onToggleTheme,
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [advancedSection, setAdvancedSection] = useState(null);
@@ -153,6 +156,7 @@ export default function GameMenu({
               )}
               {advancedGameplay && advancedSection === 'personal' && (
                 <div className="game-menu-section">
+                  {onToggleTheme && <ThemeToggle theme={theme} onToggle={onToggleTheme} />}
                   {onAccessibility && (
                     <button className="btn" onClick={() => pick(onAccessibility)}>
                       Accessibility

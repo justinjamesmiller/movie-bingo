@@ -11,7 +11,7 @@ import romance from './romance.js';
 import sciFi from './sci-fi.js';
 import thriller from './thriller.js';
 import { EXPANDED_DESCRIPTIONS } from '../expandedGenres.js';
-import { SHARED_TROPE_DESCRIPTIONS } from '../sharedTropes.js';
+import { LEGACY_TROPE_DESCRIPTION_ALIASES, SHARED_TROPE_DESCRIPTIONS } from '../sharedTropes.js';
 
 export default {
   ...horror,
@@ -25,4 +25,5 @@ export default {
   ...documentary,
   ...EXPANDED_DESCRIPTIONS,
   ...SHARED_TROPE_DESCRIPTIONS,
+  ...LEGACY_TROPE_DESCRIPTION_ALIASES,
 };

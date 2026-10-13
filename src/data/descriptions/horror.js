@@ -202,10 +202,6 @@ export default {
     what: 'The last surviving character, usually a young woman, stops running and faces the killer.',
     example: 'She stops at the top of the stairs, turns around, and picks up the fire poker.',
   },
-  'Killer presumed dead': {
-    what: 'The threat is knocked out, stabbed or shot, and everyone treats it as over. It is not.',
-    example: 'They stand over the body catching their breath, and it is gone when they look back.',
-  },
   'A call from inside': {
     what: 'A threatening phone call turns out to be coming from within the same building.',
     example: 'The operator says the calls are being traced to the upstairs extension.',

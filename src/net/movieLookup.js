@@ -103,7 +103,7 @@ async function omdbFetch(mode, query) {
 }
 
 // Searches by (partial) title across BOTH movies and TV series, returning up
-// to 10 candidates so the user can pick the right one (OMDb's search
+// to 50 candidates so the user can pick the right one (OMDb's search
 // endpoint only returns basic fields -- title/year/poster/id/type -- not
 // genre, hence the separate detail lookup below). `type` ('movie'|'series')
 // is surfaced so the UI can label each result and help the host disambiguate

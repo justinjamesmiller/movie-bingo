@@ -4,6 +4,8 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
+const MAX_SEARCH_PAGES = 5;
+
 function json(body, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -44,6 +46,30 @@ export function createMovieLookupHandler({ authenticate, consumeBudget, apiKey, 
       const data = await response.json();
       if (!data || typeof data !== 'object' || Array.isArray(data) || !['True', 'False'].includes(data.Response)) {
         return json({ error: 'The movie database returned an invalid response.' }, 502);
+      }
+      if (body.mode === 'search' && data.Response === 'True') {
+        const totalResults = Number(data.totalResults);
+        const pages =
+          Number.isInteger(totalResults) && totalResults > 0
+            ? Math.min(MAX_SEARCH_PAGES, Math.ceil(totalResults / 10))
+            : 1;
+        for (let page = 2; page <= pages; page += 1) {
+          if (!(await consumeBudget(user.id))) {
+            return json({ error: 'Movie lookup limit reached. Please try again later.' }, 429);
+          }
+          const pageUrl = new URL(upstream);
+          pageUrl.searchParams.set('page', String(page));
+          const pageResponse = await fetchMovie(pageUrl, { signal: AbortSignal.timeout(8000) });
+          if (!pageResponse.ok) return json({ error: 'Could not reach the movie database.' }, 502);
+          const pageData = await pageResponse.json();
+          if (!pageData || typeof pageData !== 'object' || Array.isArray(pageData) || pageData.Response !== 'True') {
+            return json({ error: 'The movie database returned an invalid response.' }, 502);
+          }
+          data.Search = [
+            ...(Array.isArray(data.Search) ? data.Search : []),
+            ...(Array.isArray(pageData.Search) ? pageData.Search : []),
+          ];
+        }
       }
       return json(data);
     } catch {

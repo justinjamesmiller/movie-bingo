@@ -107,6 +107,24 @@ describe('MovieLookup', () => {
     expect(onMovieSelected).toHaveBeenLastCalledWith({ title: 'Another screening', poster: null });
   });
 
+  it('displays all 50 results returned by IMDb search', async () => {
+    mocks.searchMovies.mockResolvedValue(
+      Array.from({ length: 50 }, (_, index) => ({
+        imdbID: `tt${index}`,
+        title: `Candidate ${index}`,
+        year: '2024',
+        type: 'movie',
+        poster: null,
+      })),
+    );
+    render(<MovieLookup onFound={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText(/Look up a movie/i), { target: { value: 'Candidate' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+
+    expect(await screen.findAllByRole('button', { name: /Candidate \d+/ })).toHaveLength(50);
+  });
+
   it('shows a loader while a search is in flight and hides it afterward', async () => {
     let resolveSearch;
     mocks.searchMovies.mockReturnValue(new Promise((resolve) => (resolveSearch = resolve)));

@@ -58,6 +58,36 @@ describe('authenticated movie lookup proxy', () => {
     expect(dependencies.consumeBudget).toHaveBeenCalledWith('user-id');
   });
 
+  it('returns up to 50 title matches by fetching at most five budgeted pages', async () => {
+    const fetchMovie = vi.fn((url) => {
+      const page = Number(url.searchParams.get('page') || 1);
+      const Search = Array.from({ length: 10 }, (_, index) => ({ imdbID: `tt${page}${index}` }));
+      return Promise.resolve(new Response(JSON.stringify({ Response: 'True', totalResults: '67', Search })));
+    });
+    const { handle, dependencies } = setup({ fetchMovie });
+    const response = await handle(request({ mode: 'search', query: 'Alien' }));
+
+    expect(response.status).toBe(200);
+    expect((await response.json()).Search).toHaveLength(50);
+    expect(fetchMovie).toHaveBeenCalledTimes(5);
+    expect(fetchMovie.mock.calls.map(([url]) => url.searchParams.get('page'))).toEqual([null, '2', '3', '4', '5']);
+    expect(dependencies.consumeBudget).toHaveBeenCalledTimes(5);
+  });
+
+  it('stops pagination when the user budget is exhausted', async () => {
+    const { handle, dependencies } = setup({
+      consumeBudget: vi.fn().mockResolvedValueOnce(true).mockResolvedValueOnce(false),
+      fetchMovie: vi
+        .fn()
+        .mockResolvedValue(new Response(JSON.stringify({ Response: 'True', totalResults: '50', Search: [] }))),
+    });
+    const response = await handle(request({ mode: 'search', query: 'Alien' }));
+
+    expect(response.status).toBe(429);
+    expect(dependencies.fetchMovie).toHaveBeenCalledTimes(1);
+    expect(dependencies.consumeBudget).toHaveBeenCalledTimes(2);
+  });
+
   it('enforces server budget exhaustion without calling the upstream', async () => {
     const { handle, dependencies } = setup({ consumeBudget: vi.fn().mockResolvedValue(false) });
     expect((await handle(request({ mode: 'search', query: 'Alien' }))).status).toBe(429);

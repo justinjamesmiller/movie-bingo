@@ -287,6 +287,7 @@ without it, genres/sub-genres are just picked manually via checkboxes.
 3. Apply migrations (`npx supabase db push`) and deploy `movie-lookup` (`npx supabase functions deploy movie-lookup`).
 
 The browser sends authenticated search requests to the proxy; only the server contacts OMDb with the key.
+Title searches can return up to 50 matches, and each OMDb result page counts against the database-backed request limits.
 The proxy accepts title searches, exact-title lookups, and IMDb details only. Database-backed limits are 30
 requests per authenticated user per minute and 900 across the project per UTC day. If the secret is absent,
 lookup reports that it is not configured and manual genre selection remains available. Keys previously

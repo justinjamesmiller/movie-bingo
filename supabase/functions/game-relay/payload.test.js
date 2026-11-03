@@ -112,6 +112,15 @@ describe('relay payload schemas', () => {
     expect(() => validateRelayPayload(published(action))).toThrow('Invalid relay payload');
   });
 
+  it('accepts the wager index collection limit and rejects an oversized collection', () => {
+    const indices = Array.from({ length: 25 }, (_, index) => index);
+    const body = published({ t: 'setWager', indices });
+    expect(validateRelayPayload(body)).toEqual(body);
+    expect(() => validateRelayPayload(published({ t: 'setWager', indices: [...indices, 0] }))).toThrow(
+      'Invalid relay payload',
+    );
+  });
+
   it('accepts consistent create and state snapshot envelopes', () => {
     const state = sampleState();
     expect(validateRelayPayload({ operation: 'create', code: 'ABCD', playerId: 'p1', state })).toMatchObject({ state });

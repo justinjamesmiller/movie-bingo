@@ -29,6 +29,29 @@ describe('wikidataLookup', () => {
     ]);
   });
 
+  it('uses plot keywords to suggest subgenres missing from Wikidata labels', async () => {
+    mockFetch({
+      results: {
+        bindings: [{ genreLabel: { value: 'Horror film' } }, { genreLabel: { value: 'Science fiction film' } }],
+      },
+    });
+
+    await expect(
+      getSuggestedSubgenres(
+        'tt35538033',
+        'A courier is caught in the middle of an outbreak and must survive the night.',
+      ),
+    ).resolves.toEqual([{ genre: 'horror', subgenre: 'zombie' }]);
+  });
+
+  it('still returns plot-based suggestions when Wikidata is unavailable', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
+
+    await expect(
+      getSuggestedSubgenres('tt35538033', 'Survivors fight their way through a zombie outbreak.'),
+    ).resolves.toEqual([{ genre: 'horror', subgenre: 'zombie' }]);
+  });
+
   it('suggests specific TV subgenres from Wikidata labels', async () => {
     mockFetch({
       results: {

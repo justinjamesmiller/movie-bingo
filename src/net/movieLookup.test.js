@@ -119,6 +119,7 @@ describe('getMovieDetails', () => {
       Genre: 'Horror, Comedy, Romance, Musical',
       Director: 'Caroline Lindy',
       Actors: 'Melissa Barrera, Tommy Dewey',
+      Plot: 'A monster stalks a group of survivors.',
       Poster: 'N/A',
     });
     const details = await getMovieDetails('tt0000000');
@@ -126,6 +127,7 @@ describe('getMovieDetails', () => {
     expect(details.unmapped).toEqual([]);
     expect(details.director).toBe('Caroline Lindy');
     expect(details.poster).toBeNull();
+    expect(details.plot).toBe('A monster stalks a group of survivors.');
   });
 
   it('dedupes genres that map to the same internal id', async () => {
@@ -138,11 +140,13 @@ describe('getMovieDetails', () => {
       Genre: 'Crime, Drama, Mystery, Thriller',
       Director: 'N/A',
       Actors: 'N/A',
+      Plot: 'N/A',
     });
     const details = await getMovieDetails('tt0903747');
     expect(details.genres).toEqual(['thriller', 'drama']);
     expect(details.type).toBe('series');
     expect(details.director).toBeNull();
+    expect(details.plot).toBeNull();
   });
 
   it('maps broader movie and TV genres to internal genre ids', async () => {

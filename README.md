@@ -301,13 +301,15 @@ this app's finer sub-genres — see below for how those get suggested automatica
 ### Sub-genre suggestions via Wikidata (automatic, no setup needed)
 
 [Wikidata](https://www.wikidata.org/) tags films with a "genre" property that's often much more
-specific than OMDb's broad genres (e.g. "slasher film", "zombie film", "heist film"). Whenever you
-pick a movie, its Wikidata genre tags are matched against a hand-picked list to suggest (and
+specific than OMDb's broad genres (e.g. "slasher film", "zombie film", "heist film"). When available,
+the OMDb plot summary is also checked for matching genre keywords. Whenever you pick a movie, those
+signals are matched against a hand-picked list to suggest (and
 pre-check) specific sub-genres, including TV formats such as Cooking, Dating, Game Show, Medical,
 Talk Show, News Magazine, Home Renovation, Talent Competition, Travel, Lifestyle, and Docuseries.
 This is inherently best-effort, since Wikidata's genre labels are free text, not a fixed list, and not
 every film/show has this data. No API key, signup, or configuration is required for this — it just
-works alongside the configured movie lookup proxy (see above).
+works alongside the configured movie lookup proxy (see above). Plot-based suggestions are approximate
+and may need adjustment.
 
 ## Development
 

@@ -54,6 +54,7 @@ describe('MovieIdentityModal', () => {
       year: '2024',
       type: 'series',
       poster: null,
+      plot: 'A zombie outbreak reaches a city.',
       genres: ['drama', 'tv'],
     });
     mocks.getSuggestedSubgenres.mockResolvedValue([
@@ -77,6 +78,7 @@ describe('MovieIdentityModal', () => {
         subgenreSelections: [{ genre: 'drama', subgenre: 'family-drama' }],
       }),
     );
+    expect(mocks.getSuggestedSubgenres).toHaveBeenCalledWith('tt1', 'A zombie outbreak reaches a city.');
   });
 
   it.each([false, true])('shows saved IMDb details without a lookup (read-only: %s)', (readOnly) => {

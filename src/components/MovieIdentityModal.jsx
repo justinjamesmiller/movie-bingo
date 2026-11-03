@@ -36,10 +36,11 @@ export default function MovieIdentityModal({ currentMovie, onConfirm, onCancel, 
     setError('');
     try {
       const details = await getMovieDetails(imdbID);
-      const subgenreSelections = (await getSuggestedSubgenres(imdbID)).filter((selection) =>
-        details.genres.includes(selection.genre),
+      const { plot, ...movieDetails } = details;
+      const subgenreSelections = (await getSuggestedSubgenres(imdbID, plot)).filter((selection) =>
+        movieDetails.genres.includes(selection.genre),
       );
-      onConfirm({ ...details, imdbID, subgenreSelections });
+      onConfirm({ ...movieDetails, imdbID, subgenreSelections });
     } catch (err) {
       setError(err.message || 'Could not load that title.');
     } finally {

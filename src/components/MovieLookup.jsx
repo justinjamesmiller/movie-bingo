@@ -40,14 +40,15 @@ export default function MovieLookup({ onFound, onMovieSelected, allowManualTitle
     setBusy(true);
     try {
       const details = await getMovieDetails(imdbID);
-      const subgenres = (await getSuggestedSubgenres(imdbID)).filter((s) => details.genres.includes(s.genre));
-      setSelected(details);
+      const { plot, ...movieDetails } = details;
+      const subgenres = (await getSuggestedSubgenres(imdbID, plot)).filter((s) => details.genres.includes(s.genre));
+      setSelected(movieDetails);
       setSelectedManualTitle('');
       setManualTitle('');
       setSuggestedSubgenres(subgenres);
       setResults(null);
       onFound(details.genres, subgenres);
-      onMovieSelected?.({ ...details, imdbID, subgenreSelections: subgenres });
+      onMovieSelected?.({ ...movieDetails, imdbID, subgenreSelections: subgenres });
     } catch (err) {
       setError(err.message || 'Could not load that title.');
     } finally {

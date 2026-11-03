@@ -140,6 +140,7 @@ export async function getMovieDetails(imdbID) {
     poster: data.Poster && data.Poster !== 'N/A' ? data.Poster : null,
     director: data.Director && data.Director !== 'N/A' ? data.Director : null,
     actors: data.Actors && data.Actors !== 'N/A' ? data.Actors : null,
+    plot: data.Plot && data.Plot !== 'N/A' ? data.Plot : null,
     genres,
     unmapped,
   };

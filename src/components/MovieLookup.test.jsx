@@ -62,6 +62,7 @@ describe('MovieLookup', () => {
       poster: null,
       director: 'A Director',
       actors: 'An Actor',
+      plot: 'A zombie outbreak reaches a city.',
       genres: ['horror'],
       unmapped: [],
     });
@@ -76,6 +77,9 @@ describe('MovieLookup', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Example Show/ }));
 
     expect(await screen.findByText(/Picked "Example Show"/)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(mocks.getSuggestedSubgenres).toHaveBeenCalledWith('tt1', 'A zombie outbreak reaches a city.'),
+    );
     expect(onFound).toHaveBeenCalledWith(['horror'], [{ genre: 'horror', subgenre: 'slasher' }]);
     expect(onMovieSelected).toHaveBeenCalledWith({
       title: 'Example Show',

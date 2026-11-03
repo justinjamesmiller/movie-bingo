@@ -13,8 +13,8 @@ export function isWikidataLookupAvailable() {
   return true;
 }
 
-// Each entry: if ANY of `match` appears as a substring of ANY Wikidata genre
-// label for the film (already lowercased), suggest that {genre, subgenre}.
+// Each entry: if ANY of `match` appears in a Wikidata genre label or the plot,
+// suggest that {genre, subgenre}.
 const LABEL_SUBGENRE_MAP = [
   { match: ['slasher'], genre: 'horror', subgenre: 'slasher' },
   {
@@ -90,12 +90,11 @@ const LABEL_SUBGENRE_MAP = [
   { match: ['docuseries', 'documentary series'], genre: 'tv', subgenre: 'docuseries' },
 ];
 
-// Returns a list of `{genre, subgenre}` suggestions for an IMDb id, or an
-// empty list if the film isn't found on Wikidata or nothing recognizable
-// matched -- callers should treat this as a bonus, not something to fail
-// loudly on.
-export async function getSuggestedSubgenres(imdbID) {
-  if (!imdbID) return [];
+// Returns best-effort suggestions from Wikidata genre labels and an optional
+// plot summary. Plot matches are approximate and should never block a lookup.
+export async function getSuggestedSubgenres(imdbID, plot = '') {
+  const plotText = typeof plot === 'string' ? plot.toLowerCase() : '';
+  if (!imdbID) return suggestFromLabelsAndPlot([], plotText);
   const query = `
     SELECT ?genreLabel WHERE {
       ?film wdt:P345 "${imdbID}".
@@ -107,22 +106,27 @@ export async function getSuggestedSubgenres(imdbID) {
     const res = await fetch(`${SPARQL_ENDPOINT}?query=${encodeURIComponent(query)}&format=json`, {
       headers: { Accept: 'application/sparql-results+json' },
     });
-    if (!res.ok) return [];
+    if (!res.ok) return suggestFromLabelsAndPlot([], plotText);
     const data = await res.json();
     const labels = (data.results?.bindings || []).map((b) => (b.genreLabel?.value || '').toLowerCase());
-
-    const suggestions = [];
-    const seen = new Set();
-    for (const entry of LABEL_SUBGENRE_MAP) {
-      const hit = entry.match.some((phrase) => labels.some((label) => label.includes(phrase)));
-      if (!hit) continue;
-      const key = `${entry.genre}::${entry.subgenre}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      suggestions.push({ genre: entry.genre, subgenre: entry.subgenre });
-    }
-    return suggestions;
+    return suggestFromLabelsAndPlot(labels, plotText);
   } catch {
-    return [];
+    return suggestFromLabelsAndPlot([], plotText);
   }
+}
+
+function suggestFromLabelsAndPlot(labels, plot) {
+  const suggestions = [];
+  const seen = new Set();
+  for (const entry of LABEL_SUBGENRE_MAP) {
+    const hit = entry.match.some(
+      (phrase) => labels.some((label) => label.includes(phrase)) || (plot && plot.includes(phrase)),
+    );
+    if (!hit) continue;
+    const key = `${entry.genre}::${entry.subgenre}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    suggestions.push({ genre: entry.genre, subgenre: entry.subgenre });
+  }
+  return suggestions;
 }

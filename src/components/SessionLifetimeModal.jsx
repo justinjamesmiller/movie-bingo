@@ -21,7 +21,8 @@ export default function SessionLifetimeModal({ currentExtended, currentHours, on
       <div className="modal-content">
         <h3>Session lifetime</h3>
         <p className="hint">
-          Choose how long this game can remain available while everyone is away. Each update restarts the countdown.
+          Choose how long this game remains available, even while playing. This is a fixed expiry, not an inactivity
+          timer. Each update restarts the countdown from now.
         </p>
         <label className="checkbox-label">
           <input type="checkbox" checked={extended} onChange={(event) => handleExtendedChange(event.target.checked)} />
@@ -43,9 +44,7 @@ export default function SessionLifetimeModal({ currentExtended, currentHours, on
             </option>
           ))}
         </select>
-        {!extended && (
-          <p className="hint">Standard lifetime: 12 hours. Enable extended lifetime to choose a longer window.</p>
-        )}
+        {!extended && <p className="hint">Standard lifetime: 12 hours. Choose another duration above to change it.</p>}
         <div className="claim-vote-buttons cancel-claim-btn">
           <button
             className="btn agree"

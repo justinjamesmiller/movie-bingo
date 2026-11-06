@@ -48,7 +48,6 @@ const HelpModal = lazyTool(() => import('./components/HelpModal.jsx'));
 import GuidedTutorial from './components/GuidedTutorial.jsx';
 import GameMenu from './components/GameMenu.jsx';
 const InviteQrModal = lazyTool(() => import('./components/InviteQrModal.jsx'));
-import WagerIntroModal from './components/WagerIntroModal.jsx';
 import HostTransferModal from './components/HostTransferModal.jsx';
 import PlayerManagementModal from './components/PlayerManagementModal.jsx';
 import BoardRecoveryModal from './components/BoardRecoveryModal.jsx';
@@ -153,8 +152,6 @@ function App() {
   const [allWagersModalOpen, setAllWagersModalOpen] = useState(false);
   const [replaceProposal, setReplaceProposal] = useState(null);
   const [manageWagersOpen, setManageWagersOpen] = useState(false);
-  const [wagerIntroOpen, setWagerIntroOpen] = useState(false);
-  const [wageringEnabled, setWageringEnabled] = useState(false);
   const [advancedGameplay, setAdvancedGameplay] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
   const [savedSession, setSavedSession] = useState(() => GameClient.getSavedSession());
@@ -683,7 +680,6 @@ function App() {
           setMissedCall(null);
           showToast('The host reset the game — new boards have been dealt.');
           setGameOverModalOpen(false);
-          setWageringEnabled(false);
           setAdvancedGameplay(false);
         } else if (evt.type === 'gameRestored') {
           showToast('Nobody else was still connected — your game was restored from where you left off.');
@@ -767,7 +763,6 @@ function App() {
     blurActiveTextField();
     const requestId = ++loadingRequestRef.current;
     setError('');
-    setWageringEnabled(false);
     setAdvancedGameplay(false);
     setLoadingMessage('Creating game...');
     setBusy(true);
@@ -803,7 +798,6 @@ function App() {
 
   async function handleJoin(name, code, hostRecoveryPassword) {
     setError('');
-    setWageringEnabled(false);
     setAdvancedGameplay(false);
     if (code.length !== 4) {
       setError('Enter the 4-character game code.');
@@ -942,14 +936,10 @@ function App() {
       setTropeInfo({
         text: me.board[index],
         marked: false,
-        title: wageringEnabled ? (wagered ? 'Remove this wager?' : 'Wager this trope?') : 'Trope',
-        actionHint: wageringEnabled
-          ? wagered
-            ? 'This removes the space from your wager picks before the game starts.'
-            : `This adds the space to your wager picks before the game starts. You can wager up to ${MAX_WAGERS} spaces.`
-          : 'You can read about this trope or propose swapping it out before the game starts.',
-        confirmLabel: wageringEnabled ? (wagered ? '🎯 Remove wager' : '🎯 Wager this trope') : undefined,
-        onConfirm: wageringEnabled ? () => handleTogglePregameWager(index) : null,
+        title: wagered ? 'Remove this wager?' : 'Wager this trope?',
+        confirmLabel: wagered ? '🎯 Remove wager' : '🎯 Wager this trope',
+        onConfirm: () => handleTogglePregameWager(index),
+        showWagerInfo: true,
         onProposeSwap: accepted ? undefined : () => handleProposeSwapFromInfo(me.board[index]),
       });
       return;
@@ -967,16 +957,6 @@ function App() {
 
   function recordTropeView(text) {
     clientRef.current?.recordTropeView(text);
-  }
-
-  function handleStartWagering() {
-    setWagerIntroOpen(false);
-    setWageringEnabled(true);
-  }
-
-  function handleSkipWagering() {
-    setWagerIntroOpen(false);
-    setWageringEnabled(false);
   }
 
   function handleTogglePregameWager(index) {
@@ -1448,11 +1428,6 @@ function App() {
                   Start Game
                 </button>
               )}
-              {!gameState.started && (
-                <button className="btn" data-tutorial="wagers" onClick={() => setWagerIntroOpen(true)}>
-                  🎯 {wageringEnabled ? 'Choose Wagers' : 'Optional Wagers'}
-                </button>
-              )}
               <GameMenu
                 open={menuOpen}
                 onToggle={() => setMenuOpen((v) => !v)}
@@ -1521,7 +1496,6 @@ function App() {
                 onViewPlayerStats={(player) => setPlayerStatsTargetId(player.id)}
                 callStats={gameState.callStats}
                 onCallScoreClick={setCallInfoPlayer}
-                wageringEnabled={wageringEnabled}
                 latestAwards={latestPlayerAwards}
                 onAwardClick={(player, award) => setSuperlativeInfo({ playerId: player.id, awardId: award.id })}
               />
@@ -1598,8 +1572,6 @@ function App() {
           onClose={() => setClaimQueueOpen(false)}
         />
       )}
-
-      {wagerIntroOpen && <WagerIntroModal onAddWagers={handleStartWagering} onSkip={handleSkipWagering} />}
 
       {resetModalOpen && (
         <ResetModal
@@ -1949,6 +1921,8 @@ function App() {
           title={tropeInfo.title}
           actionHint={tropeInfo.actionHint}
           confirmLabel={tropeInfo.confirmLabel}
+          showWagerInfo={tropeInfo.showWagerInfo}
+          maxWagers={MAX_WAGERS}
           playerCount={activePlayerCount}
           onConfirm={tropeInfo.onConfirm}
           callers={callersByText[tropeInfo.text] || []}
@@ -2006,7 +1980,6 @@ function App() {
             );
             handleCellClick(index === -1 ? 0 : index);
           }}
-          onWagers={() => setWagerIntroOpen(true)}
           onMenu={() => setMenuOpen(true)}
           onAdvanced={() => {
             setAdvancedGameplay(true);

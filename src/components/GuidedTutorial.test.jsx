@@ -9,7 +9,6 @@ function props(overrides = {}) {
     soundMuted: true,
     onEnableSound: vi.fn(),
     onBrowse: vi.fn(),
-    onWagers: vi.fn(),
     onMenu: vi.fn(),
     onAdvanced: vi.fn(),
     onPause: vi.fn(),
@@ -32,8 +31,9 @@ describe('GuidedTutorial', () => {
     expect(callbacks.onBrowse).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole('button', { name: 'Next' }));
     expect(screen.getByRole('heading', { name: 'Add a little friendly suspense' })).toBeInTheDocument();
+    expect(screen.getByText(/Expand About wagering beside the action/)).toHaveTextContent(/Pick up to five/);
     fireEvent.click(screen.getByRole('button', { name: 'Explore optional wagers' }));
-    expect(callbacks.onWagers).toHaveBeenCalledTimes(1);
+    expect(callbacks.onBrowse).toHaveBeenCalledTimes(2);
   });
 
   it('switches to gameplay steps when the watch starts', () => {
@@ -79,6 +79,18 @@ describe('GuidedTutorial', () => {
         /My Tools includes Accessibility, wager management, custom tropes, board swapping, and Board Focus/,
       ),
     ).toBeInTheDocument();
+  });
+
+  it.each([true, false])('describes the visible awards and how to see the full list (host: %s)', (isHost) => {
+    render(<GuidedTutorial {...props({ isHost })} />);
+    while (screen.queryByRole('button', { name: 'Next', exact: true })) {
+      fireEvent.click(screen.getByRole('button', { name: 'Next', exact: true }));
+    }
+
+    expect(screen.getByText(/latest currently-held badge and latest superlative/)).toHaveTextContent(
+      /open either to see all current awards/,
+    );
+    expect(screen.queryByText(/several shared badges and multiple superlatives/)).toBeNull();
   });
 
   it('allows skipping, pausing with Escape, and finishing', () => {
@@ -128,6 +140,9 @@ describe('GuidedTutorial', () => {
     expect(screen.getByText(/Submitting counts as your approval; playing alone/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Next', exact: true }));
     expect(screen.getByText(/The proposer already counts as an approval/)).toBeInTheDocument();
+    expect(screen.getByText(/Close vote hides the prompt; Restore vote reopens it while pending/)).toHaveTextContent(
+      /Closing does not pause the deadline/,
+    );
     expect(screen.getByText(/Advanced options reveals queue controls, then disappears/)).toBeInTheDocument();
   });
 

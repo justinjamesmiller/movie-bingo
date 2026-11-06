@@ -1,4 +1,4 @@
-import { createClient } from 'npm:@supabase/supabase-js@2.117.3';
+import { createClient } from 'npm:@supabase/supabase-js@2.119.0';
 import { SERVER_GAMEPLAY_ACTIONS } from '../../../src/net/relay.js';
 import { executeGameplay } from './gameplay.js';
 import { gateRelayRequest } from './requestGate.js';

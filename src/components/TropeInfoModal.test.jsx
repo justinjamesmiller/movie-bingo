@@ -4,6 +4,67 @@ import TropeInfoModal from './TropeInfoModal.jsx';
 import { loadTropeDescriptions } from '../data/tropeDescriptions.js';
 
 describe('TropeInfoModal', () => {
+  it('toggles wager help beside the wager action without confirming or closing', () => {
+    const onConfirm = vi.fn();
+    const onCancel = vi.fn();
+    render(
+      <TropeInfoModal
+        text="Jump Scare"
+        confirmLabel="Wager this trope"
+        showWagerInfo
+        onConfirm={onConfirm}
+        onCancel={onCancel}
+      />,
+    );
+    const info = screen.getByRole('button', { name: 'About wagering' });
+    expect(screen.getByRole('button', { name: 'Wager this trope' }).nextElementSibling).toBe(info);
+    expect(info).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText(/a fun way to predict/)).toBeNull();
+    fireEvent.click(info);
+    expect(info).toHaveAttribute('aria-expanded', 'true');
+    const help = screen.getByRole('region', { name: 'About wagering' });
+    expect(help).toHaveAttribute('id', info.getAttribute('aria-controls'));
+    expect(help).toHaveTextContent('Pick up to 5 tropes');
+    expect(help).toHaveTextContent('no money involved');
+    expect(help).toHaveTextContent('they lock when play begins');
+    expect(onConfirm).not.toHaveBeenCalled();
+    expect(onCancel).not.toHaveBeenCalled();
+    fireEvent.click(info);
+    expect(info).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText(/a fun way to predict/)).toBeNull();
+  });
+
+  it('does not show wager help for ordinary trope claims', () => {
+    render(<TropeInfoModal text="Jump Scare" onConfirm={vi.fn()} onCancel={vi.fn()} />);
+    expect(screen.queryByRole('button', { name: 'About wagering' })).toBeNull();
+  });
+
+  it('does not show a claim hint when wagering in a solo game', () => {
+    render(<TropeInfoModal text="Jump Scare" showWagerInfo playerCount={1} onConfirm={vi.fn()} onCancel={vi.fn()} />);
+    expect(screen.queryByText('This marks the trope as happened on your board.')).toBeNull();
+    expect(screen.getByRole('button', { name: 'About wagering' })).toBeInTheDocument();
+  });
+
+  it('keeps Cancel in a separate footer after every other action', () => {
+    const onCancel = vi.fn();
+    const { container } = render(
+      <TropeInfoModal
+        text="Jump Scare"
+        showWagerInfo
+        onConfirm={vi.fn()}
+        onProposeSwap={vi.fn()}
+        onCancel={onCancel}
+        callers={[{ id: 'p1', name: 'Alice' }]}
+      />,
+    );
+    const cancel = screen.getByRole('button', { name: 'Cancel' });
+    expect(container.querySelector('.trope-info-modal').lastElementChild).toBe(cancel.parentElement);
+    expect([...container.querySelectorAll('button')].at(-1)).toBe(cancel);
+    expect(cancel).not.toHaveClass('disagree');
+    fireEvent.click(cancel);
+    expect(onCancel).toHaveBeenCalledOnce();
+  });
+
   it('submits optional scene context with a free-form movie timestamp', () => {
     const onConfirm = vi.fn();
     render(<TropeInfoModal text="Jump Scare" allowSceneContext onConfirm={onConfirm} onCancel={vi.fn()} />);
@@ -60,6 +121,9 @@ describe('TropeInfoModal', () => {
     expect(screen.getByText('Jump Scare')).toBeInTheDocument();
     expect(await screen.findByText(/make the audience flinch/i)).toBeInTheDocument();
     expect(screen.getByText(/For example:/)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Jump Scare' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Definition' })).toHaveTextContent(/make the audience flinch/i);
+    expect(screen.getByRole('region', { name: 'Example' })).toHaveTextContent('For example:');
   });
 
   it('falls back gracefully for a trope with no description', async () => {
@@ -206,7 +270,7 @@ describe('TropeInfoModal', () => {
     const actions = screen.getByRole('button', { name: '⋯ Advanced actions' });
     const avatar = screen.getByRole('button', { name: 'Show players calling this trope' });
     expect(actions.compareDocumentPosition(avatar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(container.querySelector('.modal-content').lastElementChild).toHaveClass('trope-callers');
+    expect(container.querySelector('.trope-callers').nextElementSibling).toHaveClass('trope-modal-footer');
     fireEvent.click(avatar);
     expect(screen.getByRole('heading', { name: 'Called to happen next' })).toBeInTheDocument();
     rerender(<TropeInfoModal key="Blood splatter" text="Blood splatter" {...props} />);

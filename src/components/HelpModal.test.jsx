@@ -42,6 +42,35 @@ describe('HelpModal', () => {
     expect(screen.getByRole('button', { name: 'Close' }).closest('details')).toBeNull();
   });
 
+  it('explains wager help, eligibility, limits, and solo changes', () => {
+    render(<HelpModal onClose={vi.fn()} />);
+
+    expect(screen.getByText(/Expand About wagering beside the wager action/)).toHaveTextContent(
+      /free center cannot be wagered/,
+    );
+    expect(screen.getByText(/keeping at most 5 wagers in the final set/)).toHaveTextContent(
+      /New picks must be unmarked, non-free spaces/,
+    );
+    expect(screen.getByText(/keeping at most 5 wagers in the final set/)).toHaveTextContent(
+      /when playing alone, they apply immediately/,
+    );
+    expect(screen.getByText(/group to re-deal your 5x5 board/)).toHaveTextContent(
+      /keeping the free center if enabled.*Some tropes may appear again/,
+    );
+  });
+
+  it('gives actionable host recovery and fixed-expiry instructions', () => {
+    render(<HelpModal onClose={vi.fn()} />);
+
+    expect(screen.getByText(/open Join a Game, select Are you a Host\?/)).toHaveTextContent(
+      /enter the recovery password with the game code/,
+    );
+    expect(
+      screen.getByText(/1 hour, 12 hours \(the default\), 24 hours, 1 week, 30 days, or 90 days/),
+    ).toHaveTextContent(/Restart countdown applies the selected duration from now/);
+    expect(screen.getByText(/fixed expiry, not an inactivity timer/)).toHaveTextContent(/playing does not pause it/);
+  });
+
   it('expands and collapses a section without closing the modal', () => {
     const onClose = vi.fn();
     render(<HelpModal onClose={onClose} />);

@@ -15,7 +15,6 @@ export default function PlayersPanel({
   onViewPlayerStats,
   callStats = {},
   onCallScoreClick,
-  wageringEnabled,
   latestAwards = {},
   onAwardClick,
 }) {
@@ -88,11 +87,11 @@ export default function PlayersPanel({
           );
         })}
       </ul>
-      {!started && wageringEnabled && (
+      {!started && (
         <>
           <p className="hint">
-            Pick 5 spaces to <strong>wager</strong> — you think these tropes are extra likely to happen. Wagers lock
-            once the game starts.
+            Tap a space to <strong>wager</strong> on up to {maxWagers} tropes you think are extra likely to happen.
+            Wagers lock once the game starts.
           </p>
           <p className="hint">
             Wagered: {wagerCount} / {maxWagers}

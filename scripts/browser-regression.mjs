@@ -431,10 +431,67 @@ try {
     await pages[0].screenshot({ path: output + '/desktop-ten-players.png', fullPage: true });
     await pages[1].screenshot({ path: output + '/mobile-ten-players.png', fullPage: true });
   });
+  await check('wagers work by default with inline help on desktop and mobile', async () => {
+    for (const page of pages.slice(0, 2)) {
+      const mobile = page === pages[1];
+      if (mobile) {
+        await menu(page, 'Accessibility', 'My Tools');
+        await closeModal(page);
+        await page.getByRole('button', { name: 'Menu', exact: true }).click();
+        await page.getByRole('checkbox', { name: 'Light mode' }).check();
+        await page.locator('.game-menu-overlay').click({ position: { x: 1, y: 1 } });
+      }
+      assert.equal(await page.getByRole('button', { name: /Optional Wagers|Choose Wagers/ }).count(), 0);
+      const cell = page.locator('.bingo-cell:not(.free-space)').first();
+      await cell.click();
+      await page.getByRole('region', { name: 'Definition', exact: true }).waitFor();
+      await page.getByRole('region', { name: 'Example', exact: true }).waitFor();
+      await page.locator('.trope-info-modal').screenshot({
+        path: output + (mobile ? '/trope-modal-mobile-light.png' : '/trope-modal-desktop-dark.png'),
+      });
+      const info = page.getByRole('button', { name: 'About wagering' });
+      assert.equal(await info.getAttribute('aria-expanded'), 'false');
+      await info.click();
+      assert.equal(await info.getAttribute('aria-expanded'), 'true');
+      await page.getByText('Make your predictions!', { exact: true }).waitFor();
+      await page.locator('.trope-info-modal').screenshot({
+        path: output + (mobile ? '/trope-wager-help-mobile-light.png' : '/trope-wager-help-desktop-dark.png'),
+      });
+      assert.equal(await page.locator('.bingo-cell.wagered').count(), 0);
+      if (mobile) await page.setViewportSize({ width: 320, height: 640 });
+      assert(
+        await page.locator('.modal-content').evaluate((modal) => {
+          const bounds = modal.getBoundingClientRect();
+          return (
+            modal.scrollWidth <= modal.clientWidth &&
+            [...modal.querySelectorAll('button')].every((button) => {
+              const rect = button.getBoundingClientRect();
+              return rect.left >= bounds.left && rect.right <= bounds.right;
+            })
+          );
+        }),
+        'Wager modal controls must fit without horizontal overflow',
+      );
+      assert.equal(await page.locator('.trope-info-modal button').last().innerText(), 'Cancel');
+      await page.getByRole('button', { name: 'Cancel', exact: true }).scrollIntoViewIfNeeded();
+      assert(
+        await page.getByRole('button', { name: 'Cancel', exact: true }).evaluate((button) => {
+          const bounds = button.getBoundingClientRect();
+          return bounds.top >= 0 && bounds.bottom <= innerHeight;
+        }),
+        'The bottom Cancel button must remain reachable by scrolling',
+      );
+      await page.getByRole('button', { name: '🎯 Wager this trope', exact: true }).click();
+      await page.locator('.bingo-cell.wagered').waitFor();
+      await cell.click();
+      await page.getByRole('button', { name: '🎯 Remove wager', exact: true }).click();
+      await page.locator('.bingo-cell.wagered').waitFor({ state: 'hidden' });
+      if (mobile) await page.setViewportSize({ width: 390, height: 900 });
+    }
+  });
   await check('host starts play and all ten pages update', async () => {
     await host.getByRole('button', { name: /Start Game/ }).click();
     for (const page of pages) {
-      await page.getByRole('button', { name: /Optional Wagers/ }).waitFor({ state: 'hidden' });
       await page.locator('.reaction-bar').waitFor({ state: 'visible' });
     }
   });

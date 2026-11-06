@@ -15,6 +15,8 @@ describe('ProposeReplaceModal', () => {
       />,
     );
 
+    expect(screen.getByText(/any available genre\/sub-genre/)).toBeInTheDocument();
+    expect(screen.getByText(/If approved, you choose a replacement/)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("New trope's genre"), { target: { value: 'comedy' } });
     fireEvent.change(screen.getByLabelText("New trope's sub-genre"), { target: { value: 'rom-com' } });
     fireEvent.click(screen.getByRole('button', { name: '👍 Propose it' }));
@@ -50,7 +52,9 @@ describe('ProposeReplaceModal', () => {
       />,
     );
 
-    expect(screen.getByText(/immediately swaps it out/i)).toBeInTheDocument();
+    expect(screen.getByText(/Choose a replacement from the offered tropes/)).toHaveTextContent(
+      /No group vote is needed/,
+    );
     expect(screen.queryByText(/asks the group/i)).toBeNull();
   });
 });

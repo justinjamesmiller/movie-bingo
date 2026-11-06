@@ -11,16 +11,16 @@ export default function HelpModal({ onClose }) {
           <h4>📖 Guided tutorial</h4>
           <p className="hint">
             A guided overlay starts when you enter a game, with different tips for hosts and players. It covers your
-            board, optional wagers, sound notifications, light/dark mode, and live play. The optional advanced branch
-            includes Call it next. Pause it with the close button or Escape, or choose Skip tutorial on this device to
-            turn automatic guidance off. Menu's Start tutorial turns it back on. Guidance pauses for votes, modals,
+            board, optional wagers, sound notifications, and live play. The optional advanced branch includes Call it
+            next and light/dark mode. Pause it with the close button or Escape, or choose Skip tutorial on this device
+            to turn automatic guidance off. Menu's Start tutorial turns it back on. Guidance pauses for votes, modals,
             menus, and celebrations.
           </p>
           <h4>🎯 Objective</h4>
           <p className="hint">
             Everyone gets a 5x5 board of movie/TV tropes. When a trope happens on screen, mark it. Get 5 in a row (any
             direction) for a bingo! Completing a line is detected automatically — you'll get a celebration banner, a
-            sound, and a glowing highlight around the winning line.
+            sound if enabled, and a glowing highlight around the winning line.
           </p>
 
           <h4>🎬 Hosting &amp; Joining</h4>
@@ -36,8 +36,9 @@ export default function HelpModal({ onClose }) {
           </p>
           <p className="hint">
             The original host can set a unique recovery password of at least 2 characters in Advanced Options → Host
-            Settings. On a new device, enter it with the game code to restore that host seat after the old device has
-            disconnected. If it still appears connected, wait up to about a minute and try again.
+            Settings. On a new device, open Join a Game, select Are you a Host?, and enter the recovery password with
+            the game code to restore that host seat after the old device has disconnected. If it still appears
+            connected, wait up to about a minute and try again.
           </p>
           <p className="hint">
             The menu begins with simple details. Tap Genres to view selected sub-genres and their general mix, or use
@@ -52,8 +53,10 @@ export default function HelpModal({ onClose }) {
 
           <h4>💰 Wagering (before the game starts)</h4>
           <p className="hint">
-            Wagers are optional. Before the game starts, choose Optional Wagers to pick up to 5 tropes you feel
-            especially confident will happen. They lock once the host starts the game.
+            Before the game starts, tap a trope on your board and choose Wager this trope to predict it will happen.
+            Pick up to 5, or play without any. Expand About wagering beside the wager action to learn about this fun,
+            money-free way to make predictions. The free center cannot be wagered. Your picks lock once the host starts
+            the game; later changes need approval through Manage Wagers.
           </p>
         </details>
 
@@ -62,10 +65,14 @@ export default function HelpModal({ onClose }) {
           <h4>👆 Tapping a space (once the game has started)</h4>
           <ul className="help-list">
             <li>
-              Tapping a space shows what the trope means, with an example, then lets you{' '}
+              Tapping a space shows its title, a labeled definition, and a separate example, then lets you{' '}
               <strong>claim it just happened</strong>. Everyone votes 👍/👎; majority wins. Submitting a claim
               automatically counts as your approval. With two players, the other player's approval completes the
               majority; playing alone, submitting accepts the trope immediately.
+            </li>
+            <li>
+              The main action comes first, with optional swap or advanced actions below. Cancel or Close is at the
+              bottom of the trope window.
             </li>
             <li>
               Close vote or tap outside the voting window to navigate without voting or cancelling the proposal. Restore
@@ -76,7 +83,9 @@ export default function HelpModal({ onClose }) {
             <li>
               During play, open <strong>⋯ Advanced actions</strong>, then choose{' '}
               <strong>🔁 Propose swapping it out</strong>. Pick the replacement genre/sub-genre; the group votes on the
-              proposal. Before play starts, the trope description offers the swap action directly.
+              proposal, then you choose the replacement from the offered candidates. Any available genre/sub-genre can
+              be used, not just the game's selected genres. Before play starts, the trope description offers the swap
+              action directly.
             </li>
             <li>
               <strong>⋯ Advanced actions</strong> keeps the window tidy while offering a personal{' '}
@@ -142,16 +151,17 @@ export default function HelpModal({ onClose }) {
 
           <h4>🎯 Managing wagers mid-game</h4>
           <p className="hint">
-            Advanced Options → My Tools → Manage Wagers lets you remove existing wagers and/or add new ones — stage as
-            many changes as you like, then submit them all together as a single group vote.
+            Advanced Options → My Tools → Manage Wagers lets you stage removals and additions together, keeping at most
+            5 wagers in the final set. New picks must be unmarked, non-free spaces on your board. Submit the changes as
+            a single group vote; when playing alone, they apply immediately.
           </p>
 
           <h4>🔀 Swapping your whole board</h4>
           <p className="hint">
             Stuck with a board you can't do anything with? Advanced Options → My Tools → Swap My Whole Board asks the
-            group for a completely fresh set of 25 spaces. If the majority agrees, your board is re-dealt from the same
-            trope pool — anything the group has already accepted stays marked, and your wagers are cleared so you can
-            re-place them.
+            group to re-deal your 5x5 board from the same trope pool, keeping the free center if enabled. Some tropes
+            may appear again. If approved, anything the group has already accepted stays marked, and your wagers are
+            cleared. Use Manage Wagers to propose new picks. When playing alone, the re-deal applies immediately.
           </p>
 
           <h4>🎯 All Wagers</h4>
@@ -286,6 +296,11 @@ export default function HelpModal({ onClose }) {
             </li>
             <li>
               <strong>Reset Game</strong> — deals fresh boards, lets you re-pick genres/settings.
+            </li>
+            <li>
+              <strong>Session Lifetime</strong> — in Advanced Options → Host Settings, choose 1 hour, 12 hours (the
+              default), 24 hours, 1 week, 30 days, or 90 days. Restart countdown applies the selected duration from now.
+              This is a fixed expiry, not an inactivity timer; playing does not pause it.
             </li>
             <li>
               <strong>Add Host</strong> — give another connected player host permissions while you remain in the game.

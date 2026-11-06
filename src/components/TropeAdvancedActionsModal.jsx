@@ -4,8 +4,10 @@ export default function TropeAdvancedActionsModal({ text, called, onToggleCall, 
   return (
     <ModalShell onClose={onClose}>
       <div className="modal-content trope-actions-modal">
-        <h3>Advanced Actions</h3>
-        <p className="claim-text">{text}</p>
+        <header className="trope-info-header">
+          <h3 className="trope-info-eyebrow">Advanced Actions</h3>
+          <h4 className="trope-info-title">{text}</h4>
+        </header>
         <div className="trope-actions">
           <button className={`btn${called ? ' disagree' : ' primary'}`} onClick={onToggleCall}>
             {called ? '↩️ Uncall it' : '📣 Call it next'}
@@ -13,10 +15,12 @@ export default function TropeAdvancedActionsModal({ text, called, onToggleCall, 
           <button className="btn secondary-action" onClick={onSwap}>
             🔁 Propose swapping it out
           </button>
-          <button className="btn" onClick={onClose}>
+        </div>
+        <footer className="trope-modal-footer">
+          <button className="btn trope-modal-dismiss" onClick={onClose}>
             Close
           </button>
-        </div>
+        </footer>
       </div>
     </ModalShell>
   );

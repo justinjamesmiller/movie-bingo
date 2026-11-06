@@ -1761,9 +1761,146 @@ body.reduce-motion .bingo-cell.call-hit-flash::before {
   text-align: right;
 }
 
-.trope-description {
-  margin: 0.5rem 0;
-  line-height: 1.45;
+.trope-info-modal,
+.trope-actions-modal {
+  max-width: 480px;
+  overflow-wrap: anywhere;
+}
+
+.trope-info-header {
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 1.25rem;
+}
+
+.trope-info-eyebrow {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.trope-info-title {
+  margin: 0;
+  font-size: 1.5rem;
+  line-height: 1.25;
+}
+
+.trope-info-explanation {
+  display: grid;
+  gap: 1rem;
+}
+
+.trope-info-label {
+  margin: 0 0 0.4rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.trope-info-explanation p,
+.trope-wager-help p {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.trope-info-example {
+  padding: 0.9rem 1rem;
+  border-left: 3px solid var(--accent);
+  border-radius: 0 8px 8px 0;
+  background: var(--bg);
+  font-size: 0.95rem;
+}
+
+.trope-info-actions {
+  margin-top: 1.25rem;
+}
+
+.trope-info-action-hint {
+  margin: 0 0 0.75rem;
+}
+
+.trope-info-primary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0.6rem;
+}
+
+.trope-info-primary-actions > .btn {
+  flex: 1 1 auto;
+  white-space: normal;
+  min-width: 0;
+}
+
+.btn.wager-info-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+}
+
+.btn.wager-info-button:hover,
+.btn.wager-info-button[aria-expanded='true'] {
+  background: var(--bg);
+  border-color: var(--wagered);
+}
+
+.wager-info-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.1rem;
+  height: 1.1rem;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font-size: 0.75rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.wager-info-chevron {
+  font-size: 1rem;
+}
+
+.trope-wager-help {
+  margin-top: 0.75rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--wagered);
+  border-radius: 8px;
+  background: var(--bg);
+  font-size: 0.9rem;
+}
+
+.trope-wager-help ul {
+  padding-left: 1.2rem;
+  margin: 0.75rem 0;
+  line-height: 1.6;
+}
+
+.trope-wager-help li + li {
+  margin-top: 0.35rem;
+}
+
+.trope-modal-footer {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.btn.trope-modal-dismiss {
+  width: 100%;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.btn.trope-modal-dismiss:hover {
+  background: var(--bg);
+  color: var(--text);
 }
 
 .btn.secondary-action {

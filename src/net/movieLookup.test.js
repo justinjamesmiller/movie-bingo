@@ -1,13 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const auth = vi.hoisted(() => ({ getSession: vi.fn(), signInAnonymously: vi.fn() }));
 vi.mock('@supabase/supabase-js', () => ({
   createClient: () => ({
-    auth: {
-      getSession: vi.fn().mockResolvedValue({ data: { session: { access_token: 'test-session' } }, error: null }),
-      signInAnonymously: vi.fn(),
-    },
+    auth,
   }),
 }));
+
+beforeEach(() => {
+  auth.getSession.mockReset().mockResolvedValue({ data: { session: { access_token: 'test-session' } }, error: null });
+  auth.signInAnonymously.mockReset();
+});
 
 async function freshMovieLookup(apiKey) {
   vi.resetModules();
@@ -106,6 +109,57 @@ describe('searchMovies', () => {
   });
 });
 
+describe('movie lookup authentication', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it('shares an anonymous sign-in across concurrent lookups', async () => {
+    const { searchMovies } = await freshMovieLookup('test-key');
+    let finishSignIn;
+    auth.getSession.mockResolvedValue({ data: { session: null }, error: null });
+    auth.signInAnonymously.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishSignIn = resolve;
+        }),
+    );
+    mockFetchOnce({ Response: 'True', Search: [] });
+    const first = searchMovies('Alien');
+    const second = searchMovies('Aliens');
+    await vi.waitFor(() => expect(auth.signInAnonymously).toHaveBeenCalledOnce());
+    finishSignIn({ data: { session: { access_token: 'anonymous-session' } }, error: null });
+    await expect(Promise.all([first, second])).resolves.toEqual([[], []]);
+    expect(auth.getSession).toHaveBeenCalledOnce();
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    for (const [, options] of global.fetch.mock.calls) {
+      expect(options.headers.Authorization).toBe('Bearer anonymous-session');
+    }
+  });
+
+  it.each(['session-error', 'sign-in-error', 'missing-session'])(
+    'reports %s without fetching and allows a later retry',
+    async (failure) => {
+      const { searchMovies } = await freshMovieLookup('test-key');
+      mockFetchOnce({ Response: 'True', Search: [] });
+      auth.getSession.mockResolvedValue({
+        data: { session: null },
+        error: failure === 'session-error' ? new Error('Session unavailable') : null,
+      });
+      auth.signInAnonymously.mockResolvedValue({
+        data: { session: null },
+        error: failure === 'sign-in-error' ? new Error('Sign-in unavailable') : null,
+      });
+      await expect(searchMovies('Alien')).rejects.toThrow(/could not reach the movie database/i);
+      expect(global.fetch).not.toHaveBeenCalled();
+      auth.getSession.mockResolvedValue({ data: { session: { access_token: 'retry-session' } }, error: null });
+      await expect(searchMovies('Alien')).resolves.toEqual([]);
+      expect(global.fetch).toHaveBeenCalledOnce();
+    },
+  );
+});
+
 describe('getMovieDetails', () => {
   afterEach(() => vi.unstubAllEnvs());
 
@@ -122,6 +176,7 @@ describe('getMovieDetails', () => {
       Plot: 'A monster stalks a group of survivors.',
       Poster: 'N/A',
     });
+
     const details = await getMovieDetails('tt0000000');
     expect(details.genres).toEqual(['horror', 'comedy', 'romance', 'musical']);
     expect(details.unmapped).toEqual([]);

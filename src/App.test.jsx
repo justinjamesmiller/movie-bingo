@@ -154,22 +154,25 @@ async function hostTutorialView() {
 }
 
 describe('App', () => {
-  it('keeps wagering optional and forwards a confirmed pregame selection', async () => {
+  it('offers wagers by default and explains them without changing picks', async () => {
     await hostTutorialView();
-    fireEvent.click(screen.getByRole('button', { name: '🎯 Optional Wagers' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Skip for Now' }));
+    expect(screen.queryByRole('button', { name: /Optional Wagers|Choose Wagers/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Board space: Trope 1' }));
+    expect(screen.queryByText(/This adds the space to your wager picks/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'About wagering' }));
+    expect(screen.getByText(/a fun way to predict/)).toBeInTheDocument();
     expect(latestClient.setWager).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: '🎯 Optional Wagers' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Add Wagers' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel', exact: true }));
     fireEvent.click(screen.getByRole('button', { name: 'Board space: Trope 1' }));
     fireEvent.click(screen.getByRole('button', { name: '🎯 Wager this trope' }));
     expect(latestClient.setWager).toHaveBeenCalledWith([0]);
+    fireEvent.click(screen.getByRole('button', { name: 'Board space: Trope 1, wagered' }));
+    fireEvent.click(screen.getByRole('button', { name: '🎯 Remove wager' }));
+    expect(latestClient.setWager).toHaveBeenLastCalledWith([]);
   });
 
   it('shows pregame wagers immediately and accumulates rapid selections before server updates', async () => {
     await hostTutorialView();
-    fireEvent.click(screen.getByRole('button', { name: '🎯 Optional Wagers' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Add Wagers' }));
 
     for (const index of [0, 1, 2]) {
       fireEvent.click(screen.getByRole('button', { name: `Board space: Trope ${index + 1}` }));
@@ -180,10 +183,35 @@ describe('App', () => {
     expect(latestClient.setWager.mock.calls).toEqual([[[0]], [[0, 1]], [[0, 1, 2]]]);
   });
 
+  it('keeps the five-wager limit', async () => {
+    clientState.players.p1.wagered = [0, 1, 2, 3, 4];
+    await hostTutorialView();
+    fireEvent.click(screen.getByRole('button', { name: 'Board space: Trope 6' }));
+    fireEvent.click(screen.getByRole('button', { name: '🎯 Wager this trope' }));
+    expect(screen.getByText('You can only wager 5 spaces.')).toBeInTheDocument();
+    expect(latestClient.setWager).not.toHaveBeenCalled();
+  });
+
+  it('offers wagers after joining and after a game reset', async () => {
+    render(<App />);
+    fireEvent.change(screen.getByPlaceholderText('e.g. Sidney'), { target: { value: 'Alice' } });
+    fireEvent.change(screen.getByPlaceholderText('ABCD'), { target: { value: 'ABCD' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Join Game' }));
+    await screen.findByText('Code: ABCD');
+    fireEvent.click(screen.getByRole('button', { name: 'Board space: Trope 1' }));
+    expect(screen.getByRole('button', { name: '🎯 Wager this trope' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel', exact: true }));
+    act(() => latestClient.onEvent({ type: 'gameReset' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Board space: Trope 1' }));
+    fireEvent.click(screen.getByRole('button', { name: '🎯 Wager this trope' }));
+    expect(latestClient.setWager).toHaveBeenCalledWith([0]);
+  });
+
   it('does not submit a cancelled trope and forwards a confirmed live claim', async () => {
     clientState.started = true;
     await hostTutorialView();
     fireEvent.click(screen.getByRole('button', { name: 'Board space: Trope 1' }));
+    expect(screen.queryByRole('button', { name: 'About wagering' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Cancel', exact: true }));
     expect(latestClient.claim).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Board space: Trope 1' }));
@@ -353,8 +381,8 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Browse a trope' }));
     expect(latestClient.recordTropeView).toHaveBeenCalledWith('Trope 1');
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    expect(screen.getByRole('heading', { name: 'Trope', exact: true })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Close', exact: true }));
+    expect(screen.getByRole('heading', { name: 'Wager this trope?', exact: true })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel', exact: true }));
     expect(await screen.findByRole('dialog')).toHaveAccessibleName('Explore your board');
   });
 

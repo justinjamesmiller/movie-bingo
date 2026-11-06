@@ -15,8 +15,11 @@ and an Edge Function that authenticates and authorizes every state/action relay.
   choices for the next watch.
 - Others **join** with that code. Everyone gets a random 5x5 board of movie/TV tropes, all spaces
   drawn from the same host-configured trope pool.
-- Before starting, each player can optionally enable **wagers** and pick up to 5 spaces they think are extra likely.
-  Tapping a trope always shows its description; opting in also adds an action to add or remove that wager.
+- Before starting, each player can pick up to 5 **wagers** on spaces they think are extra likely, with no opt-in needed.
+  Tapping a trope shows its description and an action to add or remove that wager. Expand **About wagering** beside the action to learn about
+  wagering as a fun, money-free way to predict the movie or show; playing without wagers is still welcome.
+- Trope windows separate the title, definition, and example into clearly labeled sections. The main action and
+  expandable wagering help sit together, with swap/advanced actions below and a quiet Cancel/Close footer at the bottom.
 - During the game, tapping a space shows the trope description, then lets the player claim that trope happened; other players vote to confirm.
 - Voting windows can be closed with Close vote or by tapping outside, without voting or cancelling the proposal.
   Restore vote is available while that vote is still pending and before its deadline; hiding it does not pause time.
@@ -29,7 +32,8 @@ and an Edge Function that authenticates and authorizes every state/action relay.
   submissions, whole-board swaps, and Board Focus. Unaccepted trope list items open the same
   description window and can be used to propose swapping a trope out.
 - Mid-game changes such as custom trope submissions, wager changes, and whole-board swaps go through the same
-  majority-vote flow.
+  majority-vote flow, resolving immediately when playing alone. Wager changes can combine removals and additions,
+  but the final set is still capped at five; new picks must be unmarked, non-free spaces.
 - Bingos are detected automatically. Everyone sees the celebration banner, and the player list/final recap show each player's bingo count.
 - Players subscribe to an authenticated private Realtime channel named after the game code. An Edge
   Function binds every message to its Supabase Auth membership and executes ordinary player actions against
@@ -59,8 +63,8 @@ and an Edge Function that authenticates and authorizes every state/action relay.
   genre tags but are excluded from automatic game
   and replacement draws. Selecting a preset adds it through the existing custom pool and respects its 20-entry cap.
 - **Guided tutorial:** a spotlight overlay starts after hosting, joining, or reconnecting, adapting to host/player
-  role and pre-game/live play. It covers browsing trope explanations, optional wagers, approval votes, sound
-  notifications. Calls are covered in the optional advanced-tools branch.
+  role and pre-game/live play. It covers browsing trope explanations, optional wagers, approval votes, and sound
+  notifications. Calls, appearance, and other advanced tools are covered in the optional advanced-tools branch.
   Its actions open real controls, and it yields to
   votes, modals, menus, and bingo/game-ending celebrations. Pause with the close control or Escape; skip disables
   automatic guidance on that device
@@ -74,8 +78,9 @@ and an Edge Function that authenticates and authorizes every state/action relay.
   that the room and seat are still active; it is hidden after expiry or game end. It is unavailable after a player
   deliberately leaves.
 - **Host recovery password:** the original host can optionally enter a password of at least 2 characters during game
-  setup, or set/replace it later in Menu → Advanced Options → Host Settings. On a new device, join with the game code
-  and password to restore the original host seat, board, and permissions. If the old device still appears connected,
+  setup, or set/replace it later in Menu → Advanced Options → Host Settings. On a new device, open **Join a Game**,
+  select **Are you a Host?**, and enter the game code and recovery password to restore the original host seat, board,
+  and permissions. If the old device still appears connected,
   wait up to about a minute after its last heartbeat and retry.
   Only a PBKDF2 verifier is stored; recovery attempts are rate-limited. A successful recovery replaces the old
   device's Auth membership.
@@ -154,6 +159,9 @@ and an Edge Function that authenticates and authorizes every state/action relay.
 - **Co-hosts:** a host can add other connected players as hosts. Every host has the same host controls, can add more
   hosts, and can resign once another host remains, except that recovery-password configuration is exclusive to the
   original host.
+- **Session lifetime:** Menu → Advanced Options → Host Settings → Session Lifetime offers 1 hour, 12 hours (the default),
+  24 hours, 1 week, 30 days, or 90 days. **Restart countdown** sets the expiry to the selected duration from now.
+  This is a fixed expiry, not an inactivity timer: it continues while playing as well as while disconnected.
 - **PWA support:** the site includes a web app manifest and service worker so it can be installed via "Add to Home Screen" / browser install prompts. The app still needs network access for live multiplayer relay traffic.
 - **Notifications:** sound and vibration can be muted independently from the header. Vibration depends on browser/device
   support; visible vote prompts and a tab-title alert still notify players when an answer is needed.
@@ -163,6 +171,12 @@ and an Edge Function that authenticates and authorizes every state/action relay.
 `npm test` runs unit/component tests, real Edge entrypoint tests with a mocked SDK/Deno boundary, and PGlite
 tests that execute the database migrations. `npm run coverage` includes frontend and Supabase function code;
 untested entrypoint lines stay visible instead of being excluded from the headline percentage.
+
+Prioritize observable behavior and failure recovery over a 100% coverage target. Entrypoint regressions cover room
+creation rollback, join admission and delivery cleanup, host recovery outcomes, and authoritative state conflicts.
+Movie lookup tests cover shared anonymous sign-in and retry after authentication failure; broadcast tests verify
+subscription errors/timeouts release channels without sending later messages. Coverage reports measure automated
+Node/component tests, not the separate browser suite or live deployment smoke tests.
 
 For browser regression, install Chromium once and run:
 
@@ -399,12 +413,10 @@ use minor bumps while the app is still evolving. Moving to `1.0.0` is a delibera
 breaking changes use major bumps. Do not manually bump package versions or create release tags as part of the
 normal managed process, and do not move/reuse published tags.
 
-### First managed release
+### Publishing managed releases
 
-The configuration starts the first official release at `0.1.0`. The empty manifest is intentional: it does not
-pretend that `0.1.0` has already been released. Release Please fills it in through the first release PR, and owns
-its updates thereafter. If a genuine release already exists when setup is pushed, Release Please can use that
-release history instead.
+The initial `0.1.0` release is recorded in `CHANGELOG.md` and `.release-please-manifest.json`.
+Release Please owns subsequent manifest and changelog updates through release PRs.
 
 1. Review/stage the intended app changes and these release files, run `npm run format:check`, `npm run lint`,
    `npm run test`, `npm run test:browser`, and `npm run build`, then commit using a meaningful `feat:` or `fix:` message and push to `main`.
@@ -413,8 +425,8 @@ release history instead.
    and that the repository permits the bot to create PRs. The workflow can also be run manually on `main`.
 3. Review the release PR's package/lock versions, manifest, and changelog. Merge it only after reviewing/testing it.
 4. Watch the subsequent **Release Please** run: its `publish-asset` job checks out the exact new tag, validates the
-   tag/package/lock agreement, checks/tests/builds that code, and attaches `movie-tv-trope-bingo-v0.1.0.zip` to the
-   GitHub Release. Later releases use their own version in the filename.
+   tag/package/lock agreement, checks/tests/builds that code, and attaches `movie-tv-trope-bingo-v<version>.zip` to the
+   GitHub Release.
 5. Review the notes and artifact at <https://github.com/justinjamesmiller/movie-bingo/releases>. To try the ZIP,
    extract it and serve the contents with a local/static web server rather than opening its HTML through `file://`.
 
@@ -433,13 +445,14 @@ created and skip the asset job. The packaged ZIP is also retained as an Actions 
 be attached manually from the release page if needed. Existing release assets are never overwritten.
 
 Pages still deploys pushes to `main` as before; the generated release tag does not drive Pages deployment.
-The displayed version and the downloadable release build both follow the committed package version.
+The downloadable release follows the tagged package version; the app displays build metadata, not a version number.
 
 ## Notes & limitations
 
 - Secondary tools are loaded on demand with a cancellable loading state; board rendering and claim/vote controls
   remain eager. Server-mode explanation views batch for up to 300 ms and piggyback on the next action, with deduped
-  batch IDs preserving shared badge evidence. State/outcome broadcasts share a private acknowledged subscription
+  batch IDs preserving shared browsing state. Explanation views do not earn awards or badge progress.
+  State/outcome broadcasts share a private acknowledged subscription
   within each request. No-op actions retain retry receipts without advancing the room revision or broadcasting.
   Apply `202610090001_noop_action_receipts.sql` after the earlier action-receipt migration before deploying this
   optimized relay. Local bundle/CPU-throttled tests do not establish production latency improvements.

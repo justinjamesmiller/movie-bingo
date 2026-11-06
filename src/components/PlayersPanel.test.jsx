@@ -19,7 +19,6 @@ function renderPanel(overrides = {}) {
       started={false}
       bingoCounts={{ p1: 1, p2: 0 }}
       onKick={vi.fn()}
-      wageringEnabled
       {...overrides}
     />,
   );
@@ -46,11 +45,11 @@ describe('PlayersPanel', () => {
     expect(onKick).toHaveBeenCalledWith('p2', 'Bob');
   });
 
-  it('hides wager copy until the player opts in', () => {
-    renderPanel({ wageringEnabled: false });
+  it('shows wager guidance by default before play', () => {
+    renderPanel();
 
-    expect(screen.queryByText(/Pick 5 spaces/)).toBeNull();
-    expect(screen.queryByText(/Wagered:/)).toBeNull();
+    expect(screen.getByText(/tropes you think are extra likely/)).toBeInTheDocument();
+    expect(screen.getByText(/Wagered:/)).toBeInTheDocument();
   });
 
   it('hides wager-hit stats only for players without wagers', () => {
@@ -101,6 +100,6 @@ describe('PlayersPanel', () => {
     renderPanel({ isHost: false, started: true });
 
     expect(screen.queryByRole('button', { name: 'Remove' })).toBeNull();
-    expect(screen.queryByText(/Pick 5 spaces/)).toBeNull();
+    expect(screen.queryByText(/tropes you think are extra likely/)).toBeNull();
   });
 });

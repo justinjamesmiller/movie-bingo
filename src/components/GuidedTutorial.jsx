@@ -32,16 +32,16 @@ function tutorialSteps(isHost, started) {
             id: 'votes',
             target: 'board',
             title: 'Your vote matters',
-            body: 'When someone proposes a trope or a swap, a prompt asks you to agree or disagree. The proposer already counts as an approval. You can add an anonymous reason when disagreeing. Advanced options reveals queue controls, then disappears until the next proposal.',
+            body: 'When someone proposes a trope or a swap, a prompt asks you to agree or disagree. The proposer already counts as an approval. You can add an anonymous reason when disagreeing. Close vote hides the prompt; Restore vote reopens it while pending. Closing does not pause the deadline. Advanced options reveals queue controls, then disappears until the next proposal.',
           },
         ]
       : [
           {
             id: 'wagers',
-            target: 'wagers',
+            target: 'board',
             title: 'Add a little friendly suspense',
-            body: 'Wagers are optional: pick up to five tropes you think will happen. Choose Optional Wagers, then Add Wagers. Your picks lock when the host starts; skipping wagers is just as valid.',
-            action: 'wagers',
+            body: 'Tap a non-free trope on your board, then choose Wager this trope to predict it will happen. Expand About wagering beside the action to learn more. Pick up to five; your picks lock when the host starts. Playing without wagers is just as valid.',
+            action: 'browse',
             label: 'Explore optional wagers',
           },
           ...(isHost
@@ -75,8 +75,8 @@ function tutorialSteps(isHost, started) {
       target: 'menu',
       title: isHost ? 'Your host essentials' : 'Keep useful tools close',
       body: isHost
-        ? 'Menu keeps sharing and watch controls together. Accepted Tropes and Claim Queue live in Advanced Options → Explore & Stats; Accessibility is in My Tools. Player rows can show several shared badges and multiple superlatives; each superlative has at most one holder at a time. Your name opens badge progress, stats, and profile options. Original hosts can set a recovery password during host setup or change it later in Advanced Options → Host Settings.'
-        : 'Advanced Options → Explore & Stats lets you review accepted tropes and queued proposals. My Tools includes Accessibility. Player rows can show several shared badges and multiple superlatives; each superlative has at most one holder at a time. Your name opens badge progress, stats, and profile options. You can reopen this tutorial from Menu anytime.',
+        ? 'Menu keeps sharing and watch controls together. Accepted Tropes and Claim Queue live in Advanced Options → Explore & Stats; Accessibility is in My Tools. Player rows show the latest currently-held badge and latest superlative; open either to see all current awards. Your name opens badge progress, stats, and profile options. Original hosts can set a recovery password during host setup or change it later in Advanced Options → Host Settings.'
+        : 'Advanced Options → Explore & Stats lets you review accepted tropes and queued proposals. My Tools includes Accessibility. Player rows show the latest currently-held badge and latest superlative; open either to see all current awards. Your name opens badge progress, stats, and profile options. You can reopen this tutorial from Menu anytime.',
       action: 'menu',
       label: 'Open Menu',
     },
@@ -90,7 +90,6 @@ function TutorialFlow({
   suspended = false,
   onEnableSound,
   onBrowse,
-  onWagers,
   onMenu,
   onAdvanced,
   onPause,
@@ -206,7 +205,6 @@ function TutorialFlow({
   const actions = {
     sound: onEnableSound,
     browse: onBrowse,
-    wagers: onWagers,
     menu: onMenu,
     advanced: onAdvanced,
   };

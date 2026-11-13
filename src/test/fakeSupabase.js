@@ -4,6 +4,8 @@
 // tests without any real network. All `createClient()` calls share one
 // module-level bus, mirroring how every real client ultimately talks through
 // the same Supabase project -- call `resetFakeSupabase()` between tests.
+import { HOST_ONLY_ACTIONS, SERVER_GAMEPLAY_ACTIONS } from '../net/gameplayActions.js';
+
 const bus = new Map();
 const rooms = new Map();
 const members = new Map();
@@ -382,27 +384,10 @@ export function createClient() {
           }
 
           if (message?.t === 'action') {
-            const hostActions = [
-              'start',
-              'reset',
-              'gameOver',
-              'resumeGame',
-              'updateSessionLifetime',
-              'updateMovie',
-              'addHost',
-              'resignHost',
-              'kick',
-              'approveJoin',
-              'denyJoin',
-              'proposeProfileChange',
-              'restoreDisconnectedBoard',
-              'requestBoardRecovery',
-              'cancelBoardRecovery',
-            ];
-            if (hostActions.includes(message.action?.t) && !member.isHost) {
+            if (HOST_ONLY_ACTIONS.has(message.action?.t) && !member.isHost) {
               return { data: { error: 'Host authorization required.' }, error: null };
             }
-            const { applyServerGameAction, SERVER_GAMEPLAY_ACTIONS } = await import('../net/relay.js');
+            const { applyServerGameAction } = await import('../net/relay.js');
             if (serverGameplayEnabled && SERVER_GAMEPLAY_ACTIONS.has(message.action?.t)) {
               if (member.status !== 'active') return { data: { error: 'Active membership required.' }, error: null };
               member.lastSeenAt = Date.now();

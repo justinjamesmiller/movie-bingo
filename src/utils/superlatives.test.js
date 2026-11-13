@@ -486,6 +486,12 @@ describe('superlatives', () => {
     });
   });
 
+  it('can select latest awards from an already-computed award set', () => {
+    expect(getLatestPlayerAwards([{ id: 'p1' }], {}, { p1: { badges: [], superlatives: [] } })).toEqual({
+      p1: { badge: undefined, superlative: undefined },
+    });
+  });
+
   it('records newly qualified awards once and keeps their shared timestamps stable', () => {
     const wagerer = { ...player, wagered: [0, 1, 2, 3, 4] };
     const before = { ...gameState, players: { p1: wagerer }, acceptedTropes: [] };

@@ -28,6 +28,22 @@ Events exclude tokens, passwords, room state, names, and authenticated user IDs.
 Configure alert thresholds/destinations in your monitoring provider; the repository does not pretend an external
 alert is active without that configuration. Review global request budgets in the SQL Editor, not through browser roles:
 
+### Discord Critical Alerts
+
+For direct, best-effort notifications without a third-party log-drain account, create a private Discord channel and
+channel webhook, then store its URL as the Supabase Edge Function secret `DISCORD_ALERT_WEBHOOK_URL` (Dashboard
+Project Settings → Edge Functions → Secrets). Never put the webhook URL in `.env`, browser code, source control, or
+chat. Deploy the updated `game-relay` function after setting the secret; no database migration is required.
+
+The relay continues writing every structured event to its logs. Discord delivery is limited to unavailable budgets,
+failed operations, and pending broadcast delivery; rate limits, expected payload/authorization rejections, and sampled
+timing events remain logs-only to reduce noise. Identical event/operation alerts are throttled for five minutes per
+warm function instance. Delivery runs with `EdgeRuntime.waitUntil`, has a three-second timeout, disables Discord
+mentions, and cannot change the relay response. Delivery is best-effort, not a durable queue or global deduplication
+system; use a managed log drain and alert provider if you need durable delivery, cross-instance aggregation,
+escalation, or threshold windows. Verify the setup with a controlled failure in a staging project and confirm the
+alert arrives without exposing the webhook URL.
+
 ```sql
 select subject, requests, window_started_at
 from public.bingo_relay_request_budget

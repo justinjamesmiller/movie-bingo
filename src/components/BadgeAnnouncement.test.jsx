@@ -35,7 +35,10 @@ describe('BadgeAnnouncement', () => {
 
     const preview = screen.getByRole('status', { name: 'New awards' });
     expect(preview.querySelector('.badge-announcement-preview')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Show all new awards' }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Show all new awards' }));
+      await Promise.resolve();
+    });
     const dialog = screen.getByRole('dialog', { name: 'New badges and superlatives' });
     expect(dialog).toHaveTextContent('Ashley, 🍿 Bob earned the badge Team Player');
     expect(dialog).toHaveTextContent('Ashley earned the badge Pattern Hunter');
@@ -43,20 +46,29 @@ describe('BadgeAnnouncement', () => {
     expect(screen.queryByRole('status', { name: 'New awards' })).not.toBeInTheDocument();
     await act(() => vi.advanceTimersByTimeAsync(10_000));
     expect(onDismiss).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+      await Promise.resolve();
+    });
     expect(onDismiss).toHaveBeenCalledOnce();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('focuses the details dialog and dismisses it with Escape', () => {
+  it('focuses the details dialog and dismisses it with Escape', async () => {
     const onDismiss = vi.fn();
     render(<BadgeAnnouncement achievements={achievements} suspended={false} onDismiss={onDismiss} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Show all new awards' }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Show all new awards' }));
+      await Promise.resolve();
+    });
     const close = screen.getByRole('button', { name: 'Close' });
     expect(close).toHaveFocus();
     fireEvent.keyDown(close, { key: 'Tab', shiftKey: true });
     expect(close).toHaveFocus();
-    fireEvent.keyDown(close, { key: 'Escape' });
+    await act(async () => {
+      fireEvent.keyDown(close, { key: 'Escape' });
+      await Promise.resolve();
+    });
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(onDismiss).toHaveBeenCalledOnce();
   });

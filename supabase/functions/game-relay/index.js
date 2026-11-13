@@ -1,5 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.119.0';
-import { SERVER_GAMEPLAY_ACTIONS } from '../../../src/net/relay.js';
+import { HOST_ONLY_ACTIONS, SERVER_GAMEPLAY_ACTIONS } from '../../../src/net/gameplayActions.js';
 import { executeGameplay } from './gameplay.js';
 import { gateRelayRequest } from './requestGate.js';
 import { reportSecurityEvent } from './securityEvents.js';
@@ -15,23 +15,6 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Expose-Headers': 'Retry-After',
 };
-const hostOnlyActions = new Set([
-  'start',
-  'reset',
-  'gameOver',
-  'resumeGame',
-  'updateSessionLifetime',
-  'updateMovie',
-  'proposeProfileChange',
-  'restoreDisconnectedBoard',
-  'requestBoardRecovery',
-  'cancelBoardRecovery',
-  'addHost',
-  'resignHost',
-  'kick',
-  'approveJoin',
-  'denyJoin',
-]);
 const MAX_ROOM_PLAYERS = 32;
 const RECOVERY_PASSWORD_ITERATIONS = 310000;
 const MIN_RECOVERY_PASSWORD_LENGTH = 2;
@@ -426,7 +409,7 @@ async function publish(user, body) {
     if (!message.action || typeof message.action !== 'object' || Array.isArray(message.action)) {
       return json({ error: 'Invalid game action.' }, 400);
     }
-    if (hostOnlyActions.has(message.action.t) && !member.is_host) {
+    if (HOST_ONLY_ACTIONS.has(message.action.t) && !member.is_host) {
       return json({ error: 'Only an authorized host can perform that action.' }, 403);
     }
     if (member.status !== 'active' && message.action.t !== 'join' && message.action.t !== 'rejoin') {

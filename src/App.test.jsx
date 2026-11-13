@@ -144,7 +144,6 @@ import { version as appVersion } from '../package.json';
 import { isSoundMuted, setSoundMuted } from './utils/sound.js';
 
 async function hostTutorialView() {
-  vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
   vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }));
   const view = render(<App />);
   fireEvent.change(screen.getByPlaceholderText('e.g. Ashley'), { target: { value: 'Ashley' } });
@@ -212,10 +211,18 @@ describe('App', () => {
     await hostTutorialView();
     fireEvent.click(screen.getByRole('button', { name: 'Board space: Trope 1' }));
     expect(screen.queryByRole('button', { name: 'About wagering' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel', exact: true }));
+    await screen.findByRole('button', { name: 'Cancel', exact: true });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel', exact: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
     expect(latestClient.claim).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Board space: Trope 1' }));
-    fireEvent.click(screen.getByRole('button', { name: /Submit to the group/ }));
+    await screen.findByRole('button', { name: /Submit to the group/ });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Submit to the group/ }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
     expect(latestClient.claim).toHaveBeenCalledWith(0, undefined);
   });
 
@@ -300,6 +307,7 @@ describe('App', () => {
     await act(async () =>
       fireEvent.click(screen.getByRole('button', { name: isSource ? 'Join Game' : 'Host Game', exact: true })),
     );
+    await act(async () => vi.dynamicImportSettled());
     expect(screen.getByRole('timer', { name: 'Recovery countdown' })).toHaveTextContent('5:00');
     await act(() => vi.advanceTimersByTimeAsync(1000));
     expect(screen.getByRole('timer')).toHaveTextContent('4:59');
@@ -315,8 +323,8 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Host Game', exact: true }));
     await screen.findByRole('button', { name: 'Menu', exact: true });
     fireEvent.click(screen.getByRole('button', { name: 'Your player options' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Badge Progress' }));
-    expect(screen.getByRole('heading', { name: 'Badge Progress' })).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'Badge Progress' }));
+    expect(await screen.findByRole('heading', { name: 'Badge Progress' })).toBeInTheDocument();
     expect(screen.getByRole('progressbar', { name: 'Team Player progress' })).toHaveAttribute('value', '0');
     act(() => {
       clientState.superlativeStats = { p1: { otherApprovalVotes: 2 } };
@@ -479,6 +487,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Advanced Options', exact: true }));
     fireEvent.click(screen.getByRole('button', { name: 'My Tools', exact: true }));
     fireEvent.click(screen.getByRole('button', { name: 'Accessibility', exact: true }));
+    await screen.findByRole('checkbox', { name: 'Larger text' });
     for (const label of ['Larger text', 'Board as a readable list', 'Show space state labels', 'Reduce animations'])
       fireEvent.click(screen.getByRole('checkbox', { name: label }));
     expect(document.body).toHaveClass('large-text', 'reduce-motion');
@@ -552,7 +561,6 @@ describe('App', () => {
   });
 
   it('omits the package version on the home screen and in the game', async () => {
-    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }));
     render(<App />);
     expect(screen.queryByText(`v${appVersion}`, { exact: true })).not.toBeInTheDocument();
@@ -563,7 +571,6 @@ describe('App', () => {
   });
 
   it('shows the UTC Pages build date and commit details on both screens', async () => {
-    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }));
     vi.stubEnv('VITE_BUILD_DATE', '2026-10-13T23:58:00Z');
     vi.stubEnv('VITE_BUILD_SHA', 'abcdef1234567890');
@@ -597,7 +604,6 @@ describe('App', () => {
   it.each([false, true])(
     'automatically shows the appropriate player guide on joining (started: %s)',
     async (started) => {
-      vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
       vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }));
       localStorage.setItem('bingo-tutorial-enabled', 'true');
       clientState.started = started;
@@ -622,7 +628,6 @@ describe('App', () => {
   it.each([false, true])(
     'keeps reconnect UI non-blocking during play (started: %s) and preserves lobby controls',
     async (started) => {
-      vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
       vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }));
       clientState.started = started;
       const { container } = render(<App />);
@@ -662,7 +667,6 @@ describe('App', () => {
   it.each(['missing events', 'local events', 'simultaneous players', 'other player'])(
     'celebrates a single mark completing two lines (%s)',
     async (scenario) => {
-      vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
       vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }));
       clientState.started = true;
       clientState.bingoEvents = [];
@@ -707,7 +711,6 @@ describe('App', () => {
   );
 
   it('restarts confetti when the same two-line bingo is completed again while its banner is visible', async () => {
-    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }));
     clientState.started = true;
     clientState.bingoEvents = [];
@@ -737,7 +740,6 @@ describe('App', () => {
   });
 
   it('does not replay historical bingo celebrations from the first loaded state', async () => {
-    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }));
     clientState.started = true;
     clientState.players.p1.marked = [0, 1, 2, 3, 4, 5, 10, 15, 20];
@@ -753,7 +755,6 @@ describe('App', () => {
   });
 
   it('hosts a game and renders the simple gameplay screen from relay state', async () => {
-    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }));
     render(<App />);
 
@@ -774,7 +775,6 @@ describe('App', () => {
   });
 
   it('passes the optional host recovery password to room creation without persisting it', async () => {
-    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }));
     render(<App />);
     fireEvent.change(screen.getByPlaceholderText('e.g. Ashley'), { target: { value: 'Ashley' } });
@@ -788,7 +788,6 @@ describe('App', () => {
   });
 
   it('returns to host setup and destroys the client when game creation fails', async () => {
-    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }));
     hostError = new Error('Temporary host failure.');
     render(<App />);
@@ -801,7 +800,6 @@ describe('App', () => {
   });
 
   it('returns to join setup and destroys the client when joining fails', async () => {
-    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }));
     joinError = new Error('Temporary join failure.');
     render(<App />);
@@ -815,7 +813,6 @@ describe('App', () => {
   });
 
   it('preserves the reconnect option and reports an error when restoring a saved session fails', async () => {
-    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }));
     savedSession = { code: 'ABCD', myId: 'p1', name: 'Ashley', avatar: '🎬' };
     rejoinError = new Error('The host is unavailable.');
@@ -828,7 +825,6 @@ describe('App', () => {
   });
 
   it('shows Reconnect only after the server confirms the saved game is active', async () => {
-    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }));
     savedSession = { code: 'ABCD', myId: 'p1', name: 'Ashley', avatar: '🎬' };
     savedSessionActive = true;
@@ -838,7 +834,6 @@ describe('App', () => {
   });
 
   it('hides and clears Reconnect when the server reports the saved game expired', async () => {
-    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }));
     savedSession = { code: 'ABCD', myId: 'p1', name: 'Ashley', avatar: '🎬' };
     savedSessionActive = false;
@@ -850,7 +845,6 @@ describe('App', () => {
   });
 
   it('requires a host handoff before leaving a game with connected players', async () => {
-    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }));
     render(<App />);
     fireEvent.change(screen.getByPlaceholderText('e.g. Ashley'), { target: { value: 'Ashley' } });
@@ -860,14 +854,14 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Menu', exact: true }));
     fireEvent.click(screen.getByRole('button', { name: '🚪 Leave Game', exact: true }));
     fireEvent.click(screen.getByRole('button', { name: '🚪 Leave', exact: true }));
-    expect(screen.getByRole('heading', { name: 'Assign a New Host' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Assign a New Host' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Cancel', exact: true }));
     expect(screen.getByText('Code: ABCD')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Menu', exact: true }));
     fireEvent.click(screen.getByRole('button', { name: '🚪 Leave Game', exact: true }));
     fireEvent.click(screen.getByRole('button', { name: '🚪 Leave', exact: true }));
-    const transferModal = screen.getByRole('heading', { name: 'Assign a New Host' }).closest('.modal-content');
+    const transferModal = (await screen.findByRole('heading', { name: 'Assign a New Host' })).closest('.modal-content');
     fireEvent.click(within(transferModal).getByRole('button', { name: '🍿 Bob', exact: true }));
 
     expect(await screen.findByRole('heading', { name: 'Join a Game' })).toBeInTheDocument();
@@ -876,7 +870,6 @@ describe('App', () => {
   });
 
   it('shows a visible notice when the secure relay rejects an update', async () => {
-    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }));
     render(<App />);
     fireEvent.change(screen.getByPlaceholderText('e.g. Ashley'), { target: { value: 'Ashley' } });
@@ -889,7 +882,6 @@ describe('App', () => {
   });
 
   it('shows a retry notice only for the writer of a conflicting update', async () => {
-    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }));
     render(<App />);
     fireEvent.change(screen.getByPlaceholderText('e.g. Ashley'), { target: { value: 'Ashley' } });
@@ -904,7 +896,6 @@ describe('App', () => {
   });
 
   it('lets a host save a recovery password from Host Settings', async () => {
-    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }));
     render(<App />);
     fireEvent.change(screen.getByPlaceholderText('e.g. Ashley'), { target: { value: 'Ashley' } });
@@ -914,6 +905,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Advanced Options' }));
     fireEvent.click(screen.getByRole('button', { name: 'Host Settings' }));
     fireEvent.click(screen.getByRole('button', { name: '🔑 Host recovery password' }));
+    await screen.findByLabelText('New password');
     fireEvent.change(screen.getByLabelText('New password'), { target: { value: 'long secure phrase' } });
     fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: 'long secure phrase' } });
     fireEvent.click(screen.getByRole('button', { name: 'Set recovery password' }));
@@ -923,7 +915,6 @@ describe('App', () => {
   });
 
   it('passes a typed host recovery password through joining without persisting it', async () => {
-    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }));
     render(<App />);
     fireEvent.change(screen.getByPlaceholderText('e.g. Sidney'), { target: { value: 'Alice' } });
@@ -944,7 +935,6 @@ describe('App', () => {
     ['approval', { type: 'joinApproved' }, true],
     ['denial', { type: 'joinDenied', reason: 'The host declined your request to join.' }, false],
   ])('handles mid-game join %s without leaving the player in a stale screen', async (_outcome, event, approved) => {
-    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }));
     joinResult = { needsApproval: true };
     render(<App />);
@@ -965,7 +955,6 @@ describe('App', () => {
   });
 
   it.each(['kicked', 'sessionExpired'])('returns to the landing screen after %s', async (eventType) => {
-    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }));
     render(<App />);
     fireEvent.change(screen.getByPlaceholderText('e.g. Ashley'), { target: { value: 'Ashley' } });
@@ -986,7 +975,6 @@ describe('App', () => {
   });
 
   it('shows only independently earned distinctions, without a first-acceptance gate', async () => {
-    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }));
     const { container } = render(<App />);
 
@@ -1018,7 +1006,6 @@ describe('App', () => {
   it.each([true, false])(
     'opens self options with stats and profile editing for every player (host: %s)',
     async (host) => {
-      vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
       vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }));
       clientState.hostIds = host ? ['p1'] : ['p2'];
       render(<App />);
@@ -1033,14 +1020,13 @@ describe('App', () => {
       expect(screen.queryByRole('heading', { name: 'Options for 🎬 Ashley' })).toBeNull();
       fireEvent.click(screen.getByRole('button', { name: 'Close', exact: true }));
       fireEvent.click(screen.getByRole('button', { name: 'Your player options' }));
-      fireEvent.click(screen.getByRole('button', { name: '✏️ Edit Name & Avatar' }));
-      expect(screen.getByRole('heading', { name: 'Change your name & avatar' })).toBeInTheDocument();
+      fireEvent.click(await screen.findByRole('button', { name: '✏️ Edit Name & Avatar' }));
+      expect(await screen.findByRole('heading', { name: 'Change your name & avatar' })).toBeInTheDocument();
       expect(screen.getByLabelText('New name')).toHaveValue('Ashley');
     },
   );
 
   it('lets a host add another host from the players list and then resign through the menu', async () => {
-    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }));
     render(<App />);
 
@@ -1062,7 +1048,6 @@ describe('App', () => {
   });
 
   it('lets the host choose a disconnected seat when managing a connected player', async () => {
-    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }));
     clientState.started = true;
     clientState.players.p2.name = 'Casey';
@@ -1088,7 +1073,6 @@ describe('App', () => {
   });
 
   it('keeps All Tropes open after proposing a trope from its list', async () => {
-    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }));
     render(<App />);
 
@@ -1101,7 +1085,10 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Explore & Stats' }));
     fireEvent.click(screen.getByRole('button', { name: 'All Tropes (25)' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Trope 1' }));
-    fireEvent.click(screen.getByRole('button', { name: '👍 Propose it happened' }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '👍 Propose it happened' }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
 
     expect(screen.getByRole('heading', { name: 'All Tropes (25)' })).toBeInTheDocument();
   });
@@ -1296,7 +1283,6 @@ describe('App', () => {
   );
 
   it('restores called-hit markings and exposes the successful callers without replaying acceptance animation', async () => {
-    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }));
     clientState.started = true;
     clientState.players.p1.marked = [0];
@@ -1372,7 +1358,7 @@ describe('App', () => {
     const root = recap ? document.querySelector('.recap-list') : document.querySelector('.players-panel');
     expect(within(root).queryByRole('button', { name: '📣 0/0 calls' })).toBeNull();
     fireEvent.click(within(root).getByRole('button', { name: '📣 1/3 calls' }));
-    const explanation = screen.getByRole('heading', { name: 'Call it next', exact: true }).parentElement;
+    const explanation = (await screen.findByRole('heading', { name: 'Call it next', exact: true })).parentElement;
     expect(explanation).toHaveTextContent('🎬 Ashley: 1 correct / 3 calls made');
     expect(explanation).toHaveTextContent('Advanced actions, then Call it next');
     expect(explanation).toHaveTextContent('including changed or withdrawn predictions');

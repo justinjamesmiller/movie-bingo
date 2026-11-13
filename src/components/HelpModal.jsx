@@ -35,7 +35,7 @@ export default function HelpModal({ onClose }) {
             title, enter Manual title and choose Use manual title before hosting. Your selected genres remain unchanged.
           </p>
           <p className="hint">
-            The original host can set a unique recovery password of at least 2 characters in Advanced Options → Host
+            The original host can set a unique recovery password of 2 to 128 characters in Advanced Options → Host
             Settings. On a new device, open Join a Game, select Are you a Host?, and enter the recovery password with
             the game code to restore that host seat after the old device has disconnected. If it still appears
             connected, wait up to about a minute and try again.
@@ -252,10 +252,11 @@ export default function HelpModal({ onClose }) {
           <h4>📝 Custom Trope Submissions</h4>
           <p className="hint">
             When hosting or resetting, you can type in your own custom trope(s) to mix into the pool. Use the optional
-            trope presets in Advanced Host Setup or Reset Game to include subjective judgments, product placement,
-            substance use, or language-sensitive tropes explicitly; they are never drawn automatically. Mid-game, use
-            Advanced Options → My Tools → Submit Custom Trope to propose a brand-new one on the spot — it goes through
-            the same majority vote as any other claim, and joins the pool if approved.
+            trope presets in Advanced Host Setup or Reset Game to include subjective production judgments, continuity or
+            period errors, implausible plot armor, product placement, substance use, or language-sensitive tropes; they
+            are never drawn automatically. Mid-game, use Advanced Options → My Tools → Submit Custom Trope to propose a
+            brand-new one on the spot — it goes through the same majority vote as any other claim, and joins the pool if
+            approved.
           </p>
 
           <h4>🧰 Other buttons</h4>
@@ -334,10 +335,9 @@ export default function HelpModal({ onClose }) {
           <summary>App, Sound &amp; Connection</summary>
           <h4>🔊 Sound &amp; 🔌 Connection</h4>
           <p className="hint">
-            The speaker and vibration icons in the header independently mute/unmute sound and vibration. Vibration
-            depends on browser and device support. A visible prompt and browser-tab alert still appear when the group
-            needs your answer. If your connection drops, a red banner appears at the top of the screen so you know to
-            check your network.
+            Use the speaker button in the header to mute or unmute sound. Haptic feedback is currently disabled. A
+            visible prompt and browser-tab alert still appear when the group needs your answer. If your connection
+            drops, a red banner appears at the top of the screen so you know to check your network.
           </p>
 
           <h4>📲 Install as an app</h4>
@@ -352,11 +352,13 @@ export default function HelpModal({ onClose }) {
             of new mid-game players still require a host. This requires the updated server relay; older deployments
             pause until a host reconnects. Disconnected seats retain a short presence grace period. If you get
             disconnected (including the host), reopening the app offers a "Reconnect" option to resume your same board
-            and progress from its saved player seat. The "Join Game" form always creates a new seat; if play has
-            started, the host must approve that join. The home-page option appears only while the server confirms the
-            saved game and seat are active; it disappears after expiry or game end. Reconnect is unavailable after
-            deliberately leaving a game. If you change devices as a guest, join as a new player and ask the host to
-            restore your old board; original hosts can recover with their recovery password.
+            and progress from its saved player seat. If the game has disconnected seats, the join flow offers them as
+            reclaim options; only the matching authenticated identity can reclaim a seat, restoring its board, marks,
+            and wagers. Otherwise choose to join as a new player, which still needs host approval after play starts. The
+            home-page option appears only while the server confirms the saved game and seat are active; it disappears
+            after expiry or game end. Reconnect is unavailable after deliberately leaving a game. If you change devices
+            as a guest, join as a new player and ask the host to restore your old board; original hosts can recover with
+            their recovery password.
           </p>
         </details>
 

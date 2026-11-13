@@ -66,7 +66,7 @@ function tutorialSteps(isHost, started) {
                   id: 'ready',
                   target: 'players',
                   title: 'Ready for movie night',
-                  body: 'The host starts the game when everyone is ready. Tap your own name for stats or to change your name and avatar. Playing tips will appear when the game starts.',
+                  body: 'The host starts the game when everyone is ready. Tap your own name for stats or to change your name and avatar. If the join flow offers disconnected seats, reclaim your own to restore its board, marks, and wagers, or choose to join as new. New seats need host approval after play starts. Playing tips will appear when the game starts.',
                 },
               ]),
         ]),

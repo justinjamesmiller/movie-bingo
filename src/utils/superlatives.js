@@ -505,8 +505,7 @@ function latestAward(awards, history) {
   )[0];
 }
 
-export function getLatestPlayerAwards(players, gameState) {
-  const awards = getPlayerAwards(players, gameState);
+export function getLatestPlayerAwards(players, gameState, awards = getPlayerAwards(players, gameState)) {
   return Object.fromEntries(
     players.map((player) => {
       const playerAwards = awards[player.id] || { badges: [], superlatives: [] };

@@ -719,6 +719,7 @@ try {
     await closeModal(pages[3]);
     await pages[3].getByRole('button', { name: 'Your player options' }).click();
     await pages[3].getByRole('button', { name: /Edit Name & Avatar/ }).click();
+    await waitForTool(pages[3]);
     assert((await pages[3].locator('.modal input[type="text"]').count()) > 0);
     await closeModal(pages[3]);
     await pages[3].getByRole('button', { name: /Ten-player screening/ }).click();

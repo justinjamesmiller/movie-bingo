@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import GuidedTutorial from './GuidedTutorial.jsx';
 
@@ -62,6 +62,14 @@ describe('GuidedTutorial', () => {
     expect(screen.getByText(/Only the original host can set or replace the recovery password/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Open advanced tools' }));
     expect(callbacks.onAdvanced).toHaveBeenCalledTimes(1);
+  });
+
+  it('explains how to reclaim a disconnected seat or join as new', () => {
+    render(<GuidedTutorial {...props()} />);
+    for (let index = 0; index < 3; index++) fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    expect(screen.getByRole('heading', { name: 'Ready for movie night' })).toBeInTheDocument();
+    expect(screen.getByText(/reclaim your own to restore its board, marks, and wagers/)).toBeInTheDocument();
+    expect(screen.getByText(/New seats need host approval after play starts/)).toBeInTheDocument();
   });
 
   it('lists current menu groups in the optional advanced branch', () => {
@@ -181,7 +189,7 @@ describe('GuidedTutorial', () => {
     rerender(<GuidedTutorial {...callbacks} suspended={false} />);
     expect(await screen.findByRole('dialog')).toHaveAccessibleName('Explore your board');
   });
-  it('keeps a tall mobile tip clear of its highlighted control', () => {
+  it('keeps a tall mobile tip clear of its highlighted control', async () => {
     const originalWidth = window.innerWidth;
     const originalHeight = window.innerHeight;
     let targetTop = 263;
@@ -196,12 +204,15 @@ describe('GuidedTutorial', () => {
       return new DOMRect();
     });
     try {
-      render(
-        <>
-          <button data-tutorial="sound">Sound control</button>
-          <GuidedTutorial {...props()} />
-        </>,
-      );
+      await act(async () => {
+        render(
+          <>
+            <button data-tutorial="sound">Sound control</button>
+            <GuidedTutorial {...props()} />
+          </>,
+        );
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
       const card = screen.getByRole('dialog');
       expect(scroll).toHaveBeenCalledWith({ top: 251, behavior: 'instant' });
       expect(parseFloat(card.style.top)).toBeGreaterThanOrEqual(targetTop + 40 + 12);

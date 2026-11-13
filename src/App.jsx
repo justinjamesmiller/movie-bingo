@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { GameClient } from './net/relay.js';
 import { GENRES, SUBGENRES_BY_GENRE, CENTER_INDEX } from './data/tropes.js';
 import { getCompletedLines, getCompletedLineCells } from './utils/bingoLines.js';
@@ -24,46 +24,46 @@ import FinaleBanner from './components/FinaleBanner.jsx';
 import ReactionBar from './components/ReactionBar.jsx';
 import ReactionOverlay from './components/ReactionOverlay.jsx';
 import { lazyTool } from './components/lazyTool.jsx';
-import CustomTropeModal from './components/CustomTropeModal.jsx';
+const CustomTropeModal = lazyTool(() => import('./components/CustomTropeModal.jsx'));
 import ClaimModal from './components/ClaimModal.jsx';
-import ClaimQueueModal from './components/ClaimQueueModal.jsx';
-import AccessibilityModal from './components/AccessibilityModal.jsx';
+const ClaimQueueModal = lazyTool(() => import('./components/ClaimQueueModal.jsx'));
+const AccessibilityModal = lazyTool(() => import('./components/AccessibilityModal.jsx'));
 const ResetModal = lazyTool(() => import('./components/ResetModal.jsx'));
 const AcceptedTropesModal = lazyTool(() => import('./components/AcceptedTropesModal.jsx'));
 const AllTropesModal = lazyTool(() => import('./components/AllTropesModal.jsx'));
 const AllWagersModal = lazyTool(() => import('./components/AllWagersModal.jsx'));
 const ActivityFeedModal = lazyTool(() => import('./components/ActivityFeedModal.jsx'));
 const GameOverModal = lazyTool(() => import('./components/GameOverModal.jsx'));
-import CallInfoModal from './components/CallInfoModal.jsx';
+const CallInfoModal = lazyTool(() => import('./components/CallInfoModal.jsx'));
 import ConfirmModal from './components/ConfirmModal.jsx';
 import TropeInfoModal from './components/TropeInfoModal.jsx';
-import ProposeReplaceModal from './components/ProposeReplaceModal.jsx';
-import ManageWagersModal from './components/ManageWagersModal.jsx';
-import JoinChoiceModal from './components/JoinChoiceModal.jsx';
-import JoinPendingModal from './components/JoinPendingModal.jsx';
-import JoinRequestModal from './components/JoinRequestModal.jsx';
-import KickConfirmModal from './components/KickConfirmModal.jsx';
-import ChangeNameModal from './components/ChangeNameModal.jsx';
+const ProposeReplaceModal = lazyTool(() => import('./components/ProposeReplaceModal.jsx'));
+const ManageWagersModal = lazyTool(() => import('./components/ManageWagersModal.jsx'));
+const JoinChoiceModal = lazyTool(() => import('./components/JoinChoiceModal.jsx'));
+const JoinPendingModal = lazyTool(() => import('./components/JoinPendingModal.jsx'));
+const JoinRequestModal = lazyTool(() => import('./components/JoinRequestModal.jsx'));
+const KickConfirmModal = lazyTool(() => import('./components/KickConfirmModal.jsx'));
+const ChangeNameModal = lazyTool(() => import('./components/ChangeNameModal.jsx'));
 const HelpModal = lazyTool(() => import('./components/HelpModal.jsx'));
 import GuidedTutorial from './components/GuidedTutorial.jsx';
 import GameMenu from './components/GameMenu.jsx';
 const InviteQrModal = lazyTool(() => import('./components/InviteQrModal.jsx'));
-import HostTransferModal from './components/HostTransferModal.jsx';
-import PlayerManagementModal from './components/PlayerManagementModal.jsx';
-import BoardRecoveryModal from './components/BoardRecoveryModal.jsx';
-import ProfileChangeProposalModal from './components/ProfileChangeProposalModal.jsx';
-import HostPromotionModal from './components/HostPromotionModal.jsx';
-import SessionLifetimeModal from './components/SessionLifetimeModal.jsx';
-import HostRecoveryPasswordModal from './components/HostRecoveryPasswordModal.jsx';
+const HostTransferModal = lazyTool(() => import('./components/HostTransferModal.jsx'));
+const PlayerManagementModal = lazyTool(() => import('./components/PlayerManagementModal.jsx'));
+const BoardRecoveryModal = lazyTool(() => import('./components/BoardRecoveryModal.jsx'));
+const ProfileChangeProposalModal = lazyTool(() => import('./components/ProfileChangeProposalModal.jsx'));
+const HostPromotionModal = lazyTool(() => import('./components/HostPromotionModal.jsx'));
+const SessionLifetimeModal = lazyTool(() => import('./components/SessionLifetimeModal.jsx'));
+const HostRecoveryPasswordModal = lazyTool(() => import('./components/HostRecoveryPasswordModal.jsx'));
 const MovieIdentityModal = lazyTool(() => import('./components/MovieIdentityModal.jsx'));
-import ReplacementPickerModal from './components/ReplacementPickerModal.jsx';
-import SuperlativeModal from './components/SuperlativeModal.jsx';
+const ReplacementPickerModal = lazyTool(() => import('./components/ReplacementPickerModal.jsx'));
+const SuperlativeModal = lazyTool(() => import('./components/SuperlativeModal.jsx'));
 import BadgeAnnouncement from './components/BadgeAnnouncement.jsx';
 import { formatPlayerName } from './utils/playerName.js';
 const MarathonStandingsModal = lazyTool(() => import('./components/MarathonStandingsModal.jsx'));
 const PlayerStatsModal = lazyTool(() => import('./components/PlayerStatsModal.jsx'));
 const StatsDashboardModal = lazyTool(() => import('./components/StatsDashboardModal.jsx'));
-import TropeAdvancedActionsModal from './components/TropeAdvancedActionsModal.jsx';
+const TropeAdvancedActionsModal = lazyTool(() => import('./components/TropeAdvancedActionsModal.jsx'));
 import {
   createBadgeAchievementTracker,
   getBadgeProgress,
@@ -71,6 +71,7 @@ import {
   getPlayerAwards,
 } from './utils/superlatives.js';
 import { getGameTheme } from './utils/gameTheme.js';
+import { useTransientNotifications } from './hooks/useTransientNotifications.js';
 
 const MAX_WAGERS = 5;
 const CONNECTION_LOST_GRACE_MS = 4000;
@@ -139,7 +140,7 @@ function App() {
   const [error, setError] = useState('');
   const [gameState, setGameState] = useState(null);
   const [myId, setMyId] = useState(null);
-  const [toast, setToast] = useState('');
+  const { toast, reactions, showToast, dismissToast, addReaction } = useTransientNotifications();
   const [dismissedClaimId, setDismissedClaimId] = useState(null);
   const [expiredClaimId, setExpiredClaimId] = useState(null);
   const [pendingSubmissions, setPendingSubmissions] = useState(0);
@@ -183,7 +184,6 @@ function App() {
   const [customTropeModalOpen, setCustomTropeModalOpen] = useState(false);
   const [boardSwapConfirmOpen, setBoardSwapConfirmOpen] = useState(false);
   const [tropeInfo, setTropeInfo] = useState(null);
-  const [reactions, setReactions] = useState([]);
   const [connectionStatus, setConnectionStatus] = useState('connected');
   const [connectionLost, setConnectionLost] = useState(false);
   const [reconnectCancelled, setReconnectCancelled] = useState(false);
@@ -211,6 +211,15 @@ function App() {
   const bingoBannerIdRef = useRef(0);
   const finaleBannerTimeoutRef = useRef(null);
   const [theme, setTheme] = useState('dark');
+  const players = useMemo(
+    () => (gameState ? Object.values(gameState.players).sort((a, b) => a.seat - b.seat) : []),
+    [gameState],
+  );
+  const playerAwards = useMemo(() => (gameState ? getPlayerAwards(players, gameState) : {}), [players, gameState]);
+  const latestPlayerAwards = useMemo(
+    () => (gameState ? getLatestPlayerAwards(players, gameState, playerAwards) : {}),
+    [players, gameState, playerAwards],
+  );
 
   function dispatchWithPendingStatus(send) {
     setPendingSubmissions((count) => count + 1);
@@ -357,15 +366,6 @@ function App() {
     if (!me) return;
     setHighlightedCells(getCompletedLineCells(me.marked));
   }, [gameState, myId]);
-
-  useEffect(() => {
-    if (!toast) return;
-    const dismissOutside = (event) => {
-      if (!event.target.closest?.('.toast')) setToast('');
-    };
-    document.addEventListener('pointerdown', dismissOutside);
-    return () => document.removeEventListener('pointerdown', dismissOutside);
-  }, [toast]);
 
   useEffect(() => {
     const pending = gameState?.pendingClaim;
@@ -524,12 +524,6 @@ function App() {
     handleLeaveGame();
   }
 
-  const showToast = useCallback((msg) => {
-    setToast(msg);
-    clearTimeout(showToast._t);
-    showToast._t = setTimeout(() => setToast(''), 3500);
-  }, []);
-
   function makeClient() {
     const badgeTracker = createBadgeAchievementTracker();
     setBadgeAnnouncements([]);
@@ -668,8 +662,7 @@ function App() {
             name: from ? formatPlayerName(from) : 'Someone',
             offset: 10 + Math.random() * 80,
           };
-          setReactions((prev) => [...prev, entry]);
-          setTimeout(() => setReactions((prev) => prev.filter((r) => r.id !== id)), 2600);
+          addReaction(entry);
         } else if (evt.type === 'claimCancelled') {
           showToast(`"${evt.text}" claim was cancelled.`);
         } else if (evt.type === 'promotedToHost') {
@@ -787,6 +780,7 @@ function App() {
     } catch (err) {
       if (loadingRequestRef.current !== requestId) return;
       discardClient();
+      setSavedSession(GameClient.getSavedSession());
       setError(err.message || 'Could not host a game.');
     } finally {
       if (loadingRequestRef.current === requestId) {
@@ -1311,7 +1305,6 @@ function App() {
 
   const me = gameState.players[myId];
   if (!me) return null;
-  const players = Object.values(gameState.players).sort((a, b) => a.seat - b.seat);
   const playerStatsTarget = players.find((player) => player.id === playerStatsTargetId) || null;
   const calledText = gameState.calls?.[myId];
   const calledIndexes = calledText ? [me.board.indexOf(calledText)].filter((index) => index !== -1) : [];
@@ -1345,8 +1338,6 @@ function App() {
     .map((id) => `${GENRES.find((g) => g.id === id)?.label || id} ${gameState.generalPercents[id]}%`)
     .join(', ');
   const inviteUrl = `${window.location.origin}${window.location.pathname}?code=${gameState.code}`;
-  const playerAwards = getPlayerAwards(players, gameState);
-  const latestPlayerAwards = getLatestPlayerAwards(players, gameState);
   const badgePlayer = players.find((player) => player.id === superlativeInfo?.playerId) || me;
   const badgePlayerAwards = playerAwards[badgePlayer.id] || { badges: [], superlatives: [] };
   const focusedAward = superlativeInfo?.awardId
@@ -2011,7 +2002,7 @@ function App() {
 
       {toast && (
         <div className="toast" role="status">
-          <button className="btn notification-close" aria-label="Close notification" onClick={() => setToast('')}>
+          <button className="btn notification-close" aria-label="Close notification" onClick={dismissToast}>
             X
           </button>
           {toast}

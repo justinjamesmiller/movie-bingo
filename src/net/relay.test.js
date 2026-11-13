@@ -127,6 +127,70 @@ describe('GameClient', () => {
     vi.useRealTimers();
   });
 
+  it('retries a transient missing Realtime messages partition while hosting', async () => {
+    const host = makeTrackedClient();
+    const createChannel = host.client.supabase.channel.bind(host.client.supabase);
+    let attempts = 0;
+    vi.spyOn(host.client.supabase, 'channel').mockImplementation((...args) => {
+      const channel = createChannel(...args);
+      const subscribe = channel.subscribe.bind(channel);
+      channel.subscribe = (callback) => {
+        attempts += 1;
+        if (attempts === 1) {
+          queueMicrotask(() =>
+            callback(
+              'CHANNEL_ERROR',
+              new Error('MissingPartition: Realtime was unable to find the expected messages partition'),
+            ),
+          );
+          return channel;
+        }
+        return subscribe(callback);
+      };
+      return channel;
+    });
+
+    try {
+      await host.client.hostGame('Host', ['horror'], [], false, {}, 25);
+
+      expect(attempts).toBe(2);
+      expect(host.client.isHost()).toBe(true);
+    } finally {
+      host.client.destroy();
+    }
+  });
+
+  it('preserves the host reconnect session when Realtime keeps reporting a missing partition', async () => {
+    const host = makeTrackedClient();
+    const createChannel = host.client.supabase.channel.bind(host.client.supabase);
+    let attempts = 0;
+    vi.spyOn(host.client.supabase, 'channel').mockImplementation((...args) => {
+      const channel = createChannel(...args);
+      channel.subscribe = (callback) => {
+        attempts += 1;
+        queueMicrotask(() =>
+          callback(
+            'CHANNEL_ERROR',
+            new Error('MissingPartition: Realtime was unable to find the expected messages partition'),
+          ),
+        );
+        return channel;
+      };
+      return channel;
+    });
+
+    try {
+      await expect(host.client.hostGame('Host', ['horror'], [], false, {}, 25)).rejects.toThrow(
+        /Check your project's Realtime service and logs.*host seat was saved; use Reconnect/,
+      );
+
+      expect(attempts).toBe(3);
+      expect(GameClient.getSavedSession()).toMatchObject({ name: 'Host' });
+    } finally {
+      host.client.destroy();
+    }
+  });
+
   it.each([false, true])(
     'fully recovers an apparently connected seat immediately with server gameplay %s',
     async (serverGameplay) => {
@@ -288,6 +352,15 @@ describe('GameClient', () => {
       await host.client.requestBoardRecovery(target.myId, source.myId, 300);
       await flush();
       const request = host.state.pendingBoardRecovery;
+      host.client.claim(0);
+      await flush();
+      expect(host.state.pendingClaim).toBeFalsy();
+      expect(host.events).toContainEqual(
+        expect.objectContaining({
+          type: 'proposalRejected',
+          message: 'A player recovery is in progress. Try again after it finishes.',
+        }),
+      );
       await host.client.cancelBoardRecovery(request.id);
       await flush();
       expect(host.state.pendingBoardRecovery).toBeNull();
@@ -748,6 +821,32 @@ describe('GameClient', () => {
     expect(() => applyServerGameAction(snapshot, guest.myId, { t: 'reset' })).toThrow();
   });
 
+  it('completes replacement selection through the server action adapter', async () => {
+    const host = makeTrackedClient();
+    await host.client.hostGame('Alice', ['horror'], [], false, { horror: 50 }, 40);
+    const snapshot = structuredClone(host.state);
+    const player = snapshot.players[host.myId];
+    const oldText = player.board[0];
+    const newText = snapshot.tropePool.find((text) => !player.board.includes(text));
+    snapshot.pendingReplacement = {
+      replacementId: 'replacement-1',
+      byId: host.myId,
+      oldText,
+      genre: 'horror',
+      subgenre: 'general',
+      candidates: [newText],
+      index: 0,
+      affectedIds: [host.myId],
+    };
+
+    const result = applyServerGameAction(snapshot, host.myId, { t: 'chooseReplacement', text: newText });
+
+    expect(result.state.pendingReplacement).toBeNull();
+    expect(result.state.players[host.myId].board[0]).toBe(newText);
+    expect(result.messages).toContainEqual({ t: 'replacementResolved', wagerFreedIds: [] });
+    host.client.destroy();
+  });
+
   it('handles ten-player queue saturation, immutable votes, board recovery and code rotation', async () => {
     const players = Array.from({ length: 10 }, () => makeTrackedClient());
     const host = players[0];
@@ -799,7 +898,9 @@ describe('GameClient', () => {
       await host.client._dispatch({ t: 'settleClaim' });
       const replacement = makeTrackedClient();
       players.push(replacement);
-      expect(await replacement.client.joinGame(code, 'New device')).toEqual({ needsApproval: true });
+      const joinChoice = await replacement.client.joinGame(code, 'New device');
+      expect(joinChoice).toMatchObject({ needsChoice: true, allowNew: true });
+      expect(await replacement.client.confirmNewJoin(joinChoice.name)).toEqual({ needsApproval: true });
       await settle();
       host.client.approveJoinRequest();
       await settle();
@@ -2109,6 +2210,30 @@ describe('GameClient', () => {
     expect(latecomer.events.some((e) => e.type === 'joinDenied')).toBe(true);
   });
 
+  it('cleans up a pending join when host approval times out', async () => {
+    const latecomer = makeTrackedClient();
+    vi.useFakeTimers();
+    try {
+      latecomer.client.code = 'BINGO';
+      latecomer.client.myId = 'player-id';
+      latecomer.client.joinLifecycle.options.joinTimeoutMs = 1_000;
+      latecomer.client._pendingJoin = { awaitingApproval: true };
+      const relayRequest = vi.spyOn(latecomer.client, '_relayRequest').mockResolvedValue({ status: 'pending' });
+
+      const watching = latecomer.client._watchJoinApproval('BINGO', 'player-id', 'Eve');
+      await vi.advanceTimersByTimeAsync(1_000);
+      await watching;
+
+      expect(latecomer.events).toContainEqual(
+        expect.objectContaining({ type: 'joinDenied', reason: 'The host did not respond in time.' }),
+      );
+      expect(latecomer.client._destroyed).toBe(true);
+      expect(relayRequest).toHaveBeenCalledWith('cancel-join', { code: 'BINGO', playerId: 'player-id' });
+    } finally {
+      latecomer.client.destroy();
+    }
+  });
+
   it('rejects a second concurrent join request while one is already pending', async () => {
     const host = makeTrackedClient();
     const code = await host.client.hostGame('Alice', ['horror'], [], false, { horror: 50 }, 25);
@@ -2452,6 +2577,16 @@ describe('GameClient connection stability', () => {
     expect(guest.state.players[host.myId].name).toBe('Alice online');
   });
 
+  it('does not replace a healthy channel when the page regains focus', async () => {
+    const { guest } = await twoPlayerGame();
+    const createChannel = vi.spyOn(guest.client.supabase, 'channel');
+    guest.client.supabase.realtime = { isConnected: () => true };
+
+    await guest.client._checkConnection();
+
+    expect(createChannel).not.toHaveBeenCalled();
+  });
+
   it('uses server presence instead of publishing full snapshots for modern reconnect announcements', async () => {
     const { host, guest } = await twoPlayerGame();
     const requests = vi.spyOn(host.client.supabase.functions, 'invoke');
@@ -2493,6 +2628,22 @@ describe('GameClient connection stability', () => {
       guest.client._checkConnection(),
     ]);
     expect(createChannel).toHaveBeenCalledOnce();
+  });
+
+  it('jitters reconnect retries to avoid synchronized recovery requests', async () => {
+    const host = makeTrackedClient();
+    host.client.state = { players: { [host.client.myId]: { id: host.client.myId } } };
+    host.client.code = 'ABCD';
+    host.client._reconnect = vi.fn();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    vi.useFakeTimers();
+
+    host.client._scheduleReconnect();
+    await vi.advanceTimersByTimeAsync(499);
+    expect(host.client._reconnect).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(host.client._reconnect).toHaveBeenCalledOnce();
   });
 
   it('does not resubscribe when destroyed during foreground recovery', async () => {
@@ -2831,6 +2982,73 @@ describe('GameClient connection stability', () => {
     expect(returning.state.players[guestId].connected).toBe(true);
     expect(returning.state.players[guestId].name).toBe('Bob');
     expect(returning.myId).toBe(guestId);
+  });
+
+  it('offers disconnected seats to a returning tab with the same Auth identity', async () => {
+    setFakeServerGameplayEnabled(false);
+    const host = makeTrackedClient();
+    const code = await host.client.hostGame('Alice', ['horror'], [], false, { horror: 50 }, 25);
+    const guest = makeTrackedClient();
+    const returning = makeTrackedClient();
+    try {
+      await guest.client.joinGame(code, 'Bob');
+      guest.client.setWager([0, 1]);
+      await flush();
+      const guestId = guest.myId;
+      const original = structuredClone(host.state.players[guestId]);
+      guest.client.channel.simulateDrop();
+      host.client._markDisconnected(guestId);
+      await flush();
+
+      returning.setAuthUserId(guest.authUserId);
+      const choice = await returning.client.joinGame(code, 'Bob on another tab');
+      expect(choice).toMatchObject({ needsChoice: true, allowNew: true });
+      expect(choice.options).toContainEqual(expect.objectContaining({ id: guestId, name: 'Bob' }));
+
+      await returning.client.claimDisconnectedSeat(guestId, 'Bob restored');
+      await flush();
+      expect(returning.myId).toBe(guestId);
+      expect(host.state.players[guestId]).toMatchObject({
+        name: 'Bob restored',
+        board: original.board,
+        marked: original.marked,
+        wagered: original.wagered,
+        connected: true,
+      });
+    } finally {
+      host.client.destroy();
+      guest.client.destroy();
+      returning.client.destroy();
+    }
+  });
+
+  it('lets a joiner skip disconnected-seat offers and join as a new player', async () => {
+    const host = makeTrackedClient();
+    const code = await host.client.hostGame('Alice', ['horror'], [], false, { horror: 50 }, 25);
+    const guest = makeTrackedClient();
+    const newcomer = makeTrackedClient();
+    try {
+      await guest.client.joinGame(code, 'Bob');
+      await flush();
+      const guestId = guest.myId;
+      guest.client.channel.simulateDrop();
+      host.client._markDisconnected(guestId);
+      await flush();
+
+      const choice = await newcomer.client.joinGame(code, 'Casey');
+      expect(choice).toMatchObject({ needsChoice: true, allowNew: true });
+      const result = await newcomer.client.confirmNewJoin(choice.name);
+      await flush();
+
+      expect(result).toEqual({ needsApproval: false });
+      expect(Object.values(host.state.players).map((player) => player.name)).toEqual(['Alice', 'Bob', 'Casey']);
+      expect(host.state.players[guestId].connected).toBe(false);
+      expect(host.state.players[newcomer.myId].connected).toBe(true);
+    } finally {
+      host.client.destroy();
+      guest.client.destroy();
+      newcomer.client.destroy();
+    }
   });
 
   it('does not let a new Join reuse a fabricated occupied player ID', async () => {

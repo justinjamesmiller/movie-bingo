@@ -58,10 +58,10 @@ and an Edge Function that authenticates and authorizes every state/action relay.
   reduced animations. Board spaces support Enter/Space. These preferences stay on your device in
   `bingo-accessibility` localStorage and do not change other players' views.
 - **Optional trope presets:** Advanced Host Setup and Reset Game include checkboxes in the custom-trope editor for
-  visual-effects judgments, filming marvels, continuity/period errors, implausible explosions, heavy foreshadowing,
-  product placement, substance use, and language-sensitive dialogue including slurs. These documented tropes retain
-  genre tags but are excluded from automatic game
-  and replacement draws. Selecting a preset adds it through the existing custom pool and respects its 20-entry cap.
+  subjective film-making and visual-effects judgments, continuity/period errors, implausible explosions or plot armor,
+  heavy-handed foreshadowing, product placement, substance use, and language-sensitive dialogue. These documented
+  tropes retain genre tags but are excluded from automatic game and replacement draws. Selecting a preset adds it
+  through the existing custom pool and respects its 20-entry cap.
 - **Guided tutorial:** a spotlight overlay starts after hosting, joining, or reconnecting, adapting to host/player
   role and pre-game/live play. It covers browsing trope explanations, optional wagers, approval votes, and sound
   notifications. Calls, appearance, and other advanced tools are covered in the optional advanced-tools branch.
@@ -73,11 +73,12 @@ and an Edge Function that authenticates and authorizes every state/action relay.
   theme shortcut. Menu → Advanced Options → My Tools → Light mode overrides it only for the current app session;
   reloading returns to dark mode.
 - **Reconnect:** use the Reconnect card in the tab that has the saved session to restore that player ID with its
-  authenticated identity. The Join Game form always requests a new seat, even if another tab shares the same browser
-  Auth identity; after play starts, the host must approve it. The home-page card appears only while the server confirms
-  that the room and seat are still active; it is hidden after expiry or game end. It is unavailable after a player
+  authenticated identity. If a game has disconnected seats, Join Game may offer them: only the matching authenticated
+  identity can reclaim its old seat, restoring that board, marks, and wagers. Otherwise choose to join as a new player;
+  new seats require host approval after play starts. The home-page card appears only while the server confirms that
+  the room and seat are still active; it is hidden after expiry or game end. It is unavailable after a player
   deliberately leaves.
-- **Host recovery password:** the original host can optionally enter a password of at least 2 characters during game
+- **Host recovery password:** the original host can optionally enter a password of 2 to 128 characters during game
   setup, or set/replace it later in Menu → Advanced Options → Host Settings. On a new device, open **Join a Game**,
   select **Are you a Host?**, and enter the game code and recovery password to restore the original host seat, board,
   and permissions. If the old device still appears connected,
@@ -163,8 +164,8 @@ and an Edge Function that authenticates and authorizes every state/action relay.
   24 hours, 1 week, 30 days, or 90 days. **Restart countdown** sets the expiry to the selected duration from now.
   This is a fixed expiry, not an inactivity timer: it continues while playing as well as while disconnected.
 - **PWA support:** the site includes a web app manifest and service worker so it can be installed via "Add to Home Screen" / browser install prompts. The app still needs network access for live multiplayer relay traffic.
-- **Notifications:** sound and vibration can be muted independently from the header. Vibration depends on browser/device
-  support; visible vote prompts and a tab-title alert still notify players when an answer is needed.
+- **Notifications:** sound can be muted from the speaker button in the header. Haptic feedback is currently disabled;
+  visible vote prompts and a tab-title alert still notify players when an answer is needed.
 
 ## Testing
 
@@ -197,7 +198,7 @@ a ten-device throttling benchmark or a measurement of production network latency
 
 ## Supabase setup (required)
 
-1. Create a free project at <https://supabase.com/dashboard> (no credit card required).
+1. Create a project at <https://supabase.com/dashboard> on a plan that fits your expected usage; check Supabase's current pricing and resource limits.
 2. In your project's **Settings → API**, copy the **Project URL** and the **anon public key**
    (this key is designed to be public/embedded in client-side code — that's expected here).
 3. In **Authentication → Sign In / Providers**, enable **Anonymous Sign-Ins**. The browser uses anonymous Auth so
@@ -477,10 +478,10 @@ The downloadable release follows the tagged package version; the app displays bu
 - Ending a game clears its reconnect data. Deliberately leaving also clears that player's reconnect data, so a game
   cannot be restored after every player has chosen Leave Game.
 - Mobile browsers and installed web apps can suspend realtime connections when backgrounded. On returning,
-  the app reloads authenticated server state and replaces the subscription, even if the old connection still
-  reports itself joined. Existing players can reconnect from server state without a connected host. Recovery
-  requests have a 20-second network timeout; temporary failures preserve the saved seat for another attempt.
-  A live game still depends on Supabase Realtime being reachable.
+  the app checks both channel membership and the Realtime socket: a healthy connection is kept, while an unhealthy
+  one triggers authenticated server-state recovery and subscription replacement. Existing players can reconnect from
+  server state without a connected host. Recovery requests have a 20-second network timeout; temporary failures
+  preserve the saved seat for another attempt. A live game still depends on Supabase Realtime being reachable.
 - Multiplayer requires a Supabase project (see setup above). Optional movie lookup uses the OMDb proxy, and optional
   sub-genre suggestions query Wikidata.
 - Supabase quotas depend on the current plan and workload. Review Realtime connections/messages, database storage,

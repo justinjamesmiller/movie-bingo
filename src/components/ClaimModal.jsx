@@ -3,6 +3,7 @@ import { GENRES, SUBGENRES_BY_GENRE } from '../data/tropes.js';
 import { getDisagreeRationales } from '../data/disagreeRationales.js';
 import { useTropeDescription } from '../hooks/useTropeDescription.js';
 import { formatPlayerName } from '../utils/playerName.js';
+import { assessClaimVotes } from '../utils/claimVoting.js';
 import ModalShell from './ModalShell.jsx';
 
 export default function ClaimModal({
@@ -38,11 +39,13 @@ export default function ClaimModal({
   const isReroll = pendingClaim.kind === 'reroll';
   const isCustom = pendingClaim.kind === 'mark' && pendingClaim.custom;
   const hasVoted = Object.prototype.hasOwnProperty.call(pendingClaim.votes, myId);
-  const votesIn = Object.keys(pendingClaim.votes).length;
-  const agreeCount = Object.values(pendingClaim.votes).filter(Boolean).length;
-  const majorityNeeded = Math.floor(pendingClaim.totalPlayers / 2) + 1;
-  const majorityReached = agreeCount >= majorityNeeded;
-  const allVoted = votesIn >= pendingClaim.totalPlayers;
+  const {
+    votesIn,
+    agree: agreeCount,
+    needed: majorityNeeded,
+    majorityReached,
+    allVoted,
+  } = assessClaimVotes(pendingClaim);
   const resultIsFinalizing = majorityReached || allVoted;
   const replaceGenreLabel = isReplace
     ? GENRES.find((g) => g.id === pendingClaim.genre)?.label || pendingClaim.genre
